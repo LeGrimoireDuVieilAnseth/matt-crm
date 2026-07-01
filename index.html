@@ -1301,36 +1301,92 @@ function applyData(d){
     if(Array.isArray(d.paiements)) DB.paiements=d.paiements;
     if(Array.isArray(d.taches)) DB.taches=d.taches;
     DB.t=d.t||Date.now();
+    DB.lastPull=Date.now();
     localStorage.setItem(KEY,JSON.stringify(DB));
   } finally { applying=false; }
+}
+
+function repaintActive(){
+  const active=document.querySelector(".view.active");
+  if(!active) return;
+  const id=active.id;
+  if(id==="home") buildHome(); else if(id==="clients") renderClients();
+  else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
+  else if(id==="rappels") renderRappels();
 }
 
 /* --- cloud (fonction Netlify + Blobs, comme le Grimoire) --- */
 async function cloudPull(){
   if(!CLOUD) return;
   try{
-    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"}});
+    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
     if(!res.ok) return;
     const d=await res.json();
     if(d&&(d.clients||d.seances||d.paiements||d.taches)){
       applyData(d);
-      const active=document.querySelector(".view.active");
-      if(active){ const id=active.id;
-        if(id==="home") buildHome(); else if(id==="clients") renderClients();
-        else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
-        else if(id==="rappels") renderRappels();
-      }
+      repaintActive();
       setSyncMsg("A jour.");
     }
   }catch(e){}
 }
+
+/* Fusionne l'etat cloud dans le local sans ecraser :
+   on ajoute les fiches presentes dans le cloud, absentes en local,
+   et arrivees depuis notre derniere synchro (ex. prospects du site). */
+function mergeCloud(cloud){
+  const since=Number(DB.lastPull)||0;
+  let added=0;
+  ["clients","seances","paiements","taches"].forEach(k=>{
+    if(!Array.isArray(cloud[k])) return;
+    const localIds=new Set((DB[k]||[]).map(x=>x&&x.id));
+    cloud[k].forEach(item=>{
+      if(item&&item.id&&!localIds.has(item.id)&&(Number(item.createdAt)||0)>since){
+        DB[k].push(item); added++;
+      }
+    });
+  });
+  return added;
+}
+
 function cloudPush(){
   if(!CLOUD||applying) return;
   clearTimeout(pushTimer);
-  pushTimer=setTimeout(()=>{
+  pushTimer=setTimeout(async ()=>{
+    try{
+      // on relit d'abord le cloud pour recuperer d'eventuels prospects du site
+      const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+      if(res.ok){
+        const cloud=await res.json();
+        const added=mergeCloud(cloud||{});
+        if(added){
+          try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){}
+          repaintActive();
+        }
+      }
+    }catch(e){}
+    // puis on envoie l'etat fusionne
     fetch(ENDPOINT,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(currentData())}).catch(()=>{});
+    DB.lastPull=Date.now();
   },700);
 }
+
+/* verification periodique douce : recupere les nouveaux prospects du site
+   meme si tu ne fais rien dans l'appli (toutes les 45 secondes) */
+setInterval(async ()=>{
+  if(!CLOUD||applying||document.hidden) return;
+  try{
+    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+    if(!res.ok) return;
+    const cloud=await res.json();
+    const added=mergeCloud(cloud||{});
+    if(added){
+      DB.lastPull=Date.now();
+      try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){}
+      repaintActive();
+      toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
+    }
+  }catch(e){}
+},45000);
 function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Recuperation..."); cloudPull(); }
 
 function exportManual(){

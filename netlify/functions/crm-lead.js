@@ -5,7 +5,7 @@
 import { getStore } from "@netlify/blobs";
 
 const cors = {
-  "Access-Control-Allow-Origin": "*",          // tu peux remplacer * par l'URL exacte du site Maison Lumiere
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type"
 };
@@ -19,37 +19,35 @@ export default async (request) => {
   try { lead = await request.json(); }
   catch (e) { return new Response(JSON.stringify({ ok:false, error:"json" }), { status:400, headers:{...cors,"Content-Type":"application/json"} }); }
 
-  const store = getStore("studio-crm");
+  const store = getStore({ name: "studio-crm", consistency: "strong" });
   const KEY = "data";
-  const data = (await store.get(KEY, { type: "json" })) || {};
+  const data = (await store.get(KEY, { type: "json", consistency: "strong" })) || {};
   data.clients   = data.clients   || [];
   data.seances   = data.seances   || [];
   data.paiements = data.paiements || [];
   data.taches    = data.taches    || [];
 
-  // on accepte plusieurs noms de champs possibles cote site
   const nom       = [lead.prenom, lead.nom].filter(Boolean).join(" ").trim() || lead.name || lead.nomComplet || "Prospect";
   const tel       = (lead.tel || lead.telephone || lead.phone || "").trim();
   const email     = (lead.email || lead.mail || "").trim();
-  const eventDate = (lead.eventDate || lead.dateEvenement || lead.dateMariage || lead.date || "").trim(); // format AAAA-MM-JJ
+  const eventDate = (lead.eventDate || lead.dateEvenement || lead.dateMariage || lead.date || "").trim();
   const budget    = (lead.budget || "").toString().trim();
   const message   = (lead.message || lead.notes || "").trim();
 
   const now = Date.now();
-  // eviter les doublons : meme email ou meme tel deja en base pour maison-lumiere
   const dup = data.clients.find(c =>
     c.brand === "maison-lumiere" &&
     ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) || (tel && c.tel && c.tel.replace(/\s/g,"") === tel.replace(/\s/g,"")))
   );
 
   if (dup) {
-    // on complete sans ecraser ce que Matt a pu saisir a la main
     dup.tel       = dup.tel       || tel;
     dup.email     = dup.email     || email;
     dup.eventDate = dup.eventDate || eventDate;
     dup.budget    = dup.budget    || budget;
     dup.notes     = (dup.notes ? dup.notes + "\n" : "") + "Nouveau devis telecharge le " + new Date(now).toLocaleDateString("fr-FR") + (message ? " : " + message : "");
     dup.fromSite  = true;
+    if (!dup.createdAt) dup.createdAt = now;
   } else {
     data.clients.push({
       id: now.toString(36) + Math.random().toString(36).slice(2, 7),
