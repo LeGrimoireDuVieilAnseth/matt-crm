@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Studio, l'atelier de Matt</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a1a1c'/><circle cx='16' cy='16' r='7.5' fill='none' stroke='%23f0f0ee' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%23e8834a'/><rect x='21' y='9' width='4' height='3' rx='1' fill='%23f0f0ee'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f3f3f1;
+    --surface:#ffffff;
+    --surface-2:#fafaf8;
+    --surface-3:#f0f0ed;
+    --ink:#1a1a1c;
+    --ink-2:#57575e;
+    --ink-3:#94949c;
+    --ink-4:#b8b8bd;
+    --line:#e7e7e2;
+    --line-2:#dcdcd6;
+    --white:#ffffff;
+    --danger:#c0392b;
+    --danger-soft:#fbeae8;
+    --ok:#3a7d52;
+    --ok-soft:#e8f2ec;
+    --warn:#b57d1a;
+    --warn-soft:#f9f0dd;
+    /* marques */
+    --baby:#d78aa2;
+    --baby-soft:#fbeef3;
+    --lumiere:#b08d57;
+    --lumiere-soft:#f6efe3;
+    --matt:#e8622a;
+    --matt-soft:#fceee7;
+    --accent:var(--ink);
+    --shadow:0 1px 2px rgba(20,20,24,.05), 0 6px 20px rgba(20,20,24,.04);
+    --shadow-lg:0 4px 12px rgba(20,20,24,.08), 0 18px 44px rgba(20,20,24,.10);
+    --r:16px;
+    --r-sm:11px;
+    --tabh:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,sans-serif;
+    font-size:15px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom));
+    min-height:100vh;
+  }
+  h1,h2,h3{font-family:"Fraunces",Georgia,serif;font-weight:500;letter-spacing:-.01em;margin:0;}
+  a{color:inherit;}
+  input,select,textarea,button{font-family:inherit;font-size:inherit;color:inherit;}
+  ::selection{background:var(--ink);color:#fff;}
+
+  /* ---------- layout ---------- */
+  .view{display:none;max-width:720px;margin:0 auto;padding:0 16px 40px;}
+  .view.active{display:block;animation:fade .28s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){.view.active{animation:none;}*{transition:none!important;}}
+
+  /* ---------- topbar ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:40;
+    background:rgba(243,243,241,.82);
+    backdrop-filter:saturate(140%) blur(14px);
+    -webkit-backdrop-filter:saturate(140%) blur(14px);
+    border-bottom:1px solid var(--line);
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  }
+  .topbar-inner{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px;flex:0 0 auto;
+    background:var(--ink);display:grid;place-items:center;color:#fff;
+  }
+  .brand-mark svg{width:19px;height:19px;}
+  .topbar h1{font-size:18px;line-height:1;font-weight:600;flex:1;}
+  .topbar .sub{font-size:11px;color:var(--ink-3);font-family:"Inter";letter-spacing:.04em;text-transform:uppercase;display:block;margin-top:3px;}
+  .icon-btn{
+    width:38px;height:38px;border-radius:10px;border:1px solid var(--line-2);
+    background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink-2);
+    transition:.15s;flex:0 0 auto;
+  }
+  .icon-btn:hover{border-color:var(--ink-4);color:var(--ink);}
+  .icon-btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .icon-btn.dot{position:relative;}
+  .icon-btn.dot::after{content:"";position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--matt);border:2px solid var(--surface);}
+
+  /* ---------- brand filter ---------- */
+  .brandbar{display:flex;gap:8px;overflow-x:auto;margin:16px 0 4px;padding-bottom:2px;scrollbar-width:none;}
+  .brandbar::-webkit-scrollbar{display:none;}
+  .bchip{
+    flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
+    padding:8px 13px;border-radius:999px;border:1px solid var(--line-2);
+    background:var(--surface);font-size:13px;font-weight:500;color:var(--ink-2);
+    cursor:pointer;transition:.15s;white-space:nowrap;
+  }
+  .bchip .d{width:9px;height:9px;border-radius:50%;background:var(--ink-4);}
+  .bchip[data-b="mybabyshoot"] .d{background:var(--baby);}
+  .bchip[data-b="maison-lumiere"] .d{background:var(--lumiere);}
+  .bchip[data-b="matt-la-photo"] .d{background:var(--matt);}
+  .bchip.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .bchip.on .d{box-shadow:0 0 0 2px rgba(255,255,255,.25);}
+
+  /* ---------- cards ---------- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;}
+  .stat{
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:15px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .stat .lab{font-size:12px;color:var(--ink-3);font-weight:500;letter-spacing:.02em;}
+  .stat .num{font-family:"Fraunces";font-size:30px;font-weight:500;line-height:1.05;margin-top:5px;letter-spacing:-.02em;}
+  .stat .foot{font-size:12px;color:var(--ink-2);margin-top:4px;}
+  .stat .num.euro{font-size:26px;}
+
+  .section-title{
+    display:flex;align-items:baseline;justify-content:space-between;
+    margin:26px 2px 12px;
+  }
+  .section-title h2{font-size:20px;font-weight:600;}
+  .section-title .count{font-size:13px;color:var(--ink-3);font-weight:500;}
+  .eyebrow{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600;font-family:"Inter";}
+
+  /* ---------- list rows ---------- */
+  .row{
+    display:flex;align-items:center;gap:13px;padding:14px 15px;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);
+    box-shadow:var(--shadow);cursor:pointer;transition:.15s;margin-bottom:9px;position:relative;
+  }
+  .row:hover{border-color:var(--line-2);transform:translateY(-1px);box-shadow:var(--shadow-lg);}
+  .row::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:3px;background:var(--ink-4);}
+  .row[data-b="mybabyshoot"]::before{background:var(--baby);}
+  .row[data-b="maison-lumiere"]::before{background:var(--lumiere);}
+  .row[data-b="matt-la-photo"]::before{background:var(--matt);}
+  .avatar{
+    width:44px;height:44px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;
+    font-family:"Fraunces";font-weight:600;font-size:17px;color:#fff;background:var(--ink-3);letter-spacing:-.02em;
+  }
+  .avatar[data-b="mybabyshoot"]{background:var(--baby);}
+  .avatar[data-b="maison-lumiere"]{background:var(--lumiere);}
+  .avatar[data-b="matt-la-photo"]{background:var(--matt);}
+  .row-main{flex:1;min-width:0;}
+  .row-main .t{font-weight:600;font-size:15px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row-main .s{font-size:13px;color:var(--ink-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .row-end{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
+  .chev{color:var(--ink-4);flex:0 0 auto;}
+  .chev svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;}
+
+  /* ---------- badges ---------- */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;letter-spacing:.01em;white-space:nowrap;}
+  .badge.neutral{background:var(--surface-3);color:var(--ink-2);}
+  .badge.ok{background:var(--ok-soft);color:var(--ok);}
+  .badge.warn{background:var(--warn-soft);color:var(--warn);}
+  .badge.danger{background:var(--danger-soft);color:var(--danger);}
+  .badge.info{background:#eaf0f6;color:#3a5a80;}
+  .badge.baby{background:var(--baby-soft);color:#b04d6e;}
+  .badge.lumiere{background:var(--lumiere-soft);color:#8a6a30;}
+  .badge.matt{background:var(--matt-soft);color:#c04a18;}
+  .dotm{width:7px;height:7px;border-radius:50%;background:currentColor;}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:12px 18px;border-radius:12px;border:1px solid var(--ink);background:var(--ink);color:#fff;
+    font-weight:600;font-size:14.5px;cursor:pointer;transition:.15s;text-decoration:none;
+  }
+  .btn:hover{background:#000;}
+  .btn:active{transform:scale(.985);}
+  .btn.ghost{background:var(--surface);color:var(--ink);border-color:var(--line-2);}
+  .btn.ghost:hover{background:var(--surface-2);border-color:var(--ink-4);}
+  .btn.danger{background:var(--surface);color:var(--danger);border-color:var(--danger-soft);}
+  .btn.danger:hover{background:var(--danger-soft);}
+  .btn.wide{width:100%;}
+  .btn svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .btn.sm{padding:9px 13px;font-size:13.5px;border-radius:10px;}
+
+  .fab{
+    position:fixed;right:18px;bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 16px);z-index:35;
+    width:56px;height:56px;border-radius:18px;background:var(--ink);color:#fff;border:none;cursor:pointer;
+    display:grid;place-items:center;box-shadow:0 8px 24px rgba(20,20,24,.28);transition:.18s;
+  }
+  .fab:hover{transform:translateY(-2px) rotate(90deg);}
+  .fab svg{width:26px;height:26px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;}
+
+  /* ---------- forms ---------- */
+  .field{margin-bottom:15px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px;letter-spacing:.01em;}
+  .field input,.field select,.field textarea{
+    width:100%;padding:12px 13px;border:1px solid var(--line-2);border-radius:11px;
+    background:var(--surface);transition:.15s;font-size:15px;
+  }
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(26,26,28,.07);}
+  .field textarea{min-height:88px;resize:vertical;line-height:1.5;}
+  .field.two{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .field.two label{grid-column:1/-1;}
+  .hint{font-size:12px;color:var(--ink-3);margin-top:5px;}
+
+  .seg{display:flex;gap:6px;flex-wrap:wrap;}
+  .seg button{
+    flex:1 1 auto;min-width:0;padding:10px 8px;border-radius:10px;border:1px solid var(--line-2);
+    background:var(--surface);color:var(--ink-2);font-weight:500;font-size:13px;cursor:pointer;transition:.15s;white-space:nowrap;
+  }
+  .seg button.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .seg.brands button[data-b="mybabyshoot"].on{background:var(--baby);border-color:var(--baby);}
+  .seg.brands button[data-b="maison-lumiere"].on{background:var(--lumiere);border-color:var(--lumiere);}
+  .seg.brands button[data-b="matt-la-photo"].on{background:var(--matt);border-color:var(--matt);}
+
+  /* ---------- detail sheet ---------- */
+  .sheet-head{display:flex;align-items:flex-start;gap:14px;margin:18px 0 6px;}
+  .sheet-head .avatar{width:56px;height:56px;border-radius:16px;font-size:22px;}
+  .sheet-head h2{font-size:24px;font-weight:600;line-height:1.1;}
+  .sheet-head .meta{font-size:13.5px;color:var(--ink-2);margin-top:5px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .kv{display:flex;flex-direction:column;gap:2px;padding:13px 15px;border-bottom:1px solid var(--line);}
+  .kv:last-child{border-bottom:none;}
+  .kv .k{font-size:12px;color:var(--ink-3);font-weight:500;}
+  .kv .v{font-size:15px;font-weight:500;}
+  .kv .v a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line-2);}
+  .quick-actions{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;}
+  .quick-actions .btn{flex:1 1 40%;padding:11px;}
+
+  .empty{text-align:center;padding:46px 24px;color:var(--ink-3);}
+  .empty svg{width:46px;height:46px;stroke:var(--ink-4);stroke-width:1.5;fill:none;margin-bottom:14px;}
+  .empty .t{font-family:"Fraunces";font-size:19px;color:var(--ink-2);font-weight:500;}
+  .empty .s{font-size:14px;margin-top:6px;max-width:280px;margin-left:auto;margin-right:auto;line-height:1.5;}
+
+  .backlink{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-weight:500;font-size:14px;cursor:pointer;padding:16px 2px 8px;background:none;border:none;}
+  .backlink svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+
+  .divider{height:1px;background:var(--line);margin:22px 0;}
+  .grouplab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:22px 2px 10px;}
+
+  .search{position:relative;margin:14px 0 4px;}
+  .search input{width:100%;padding:12px 13px 12px 42px;border:1px solid var(--line-2);border-radius:13px;background:var(--surface);font-size:15px;}
+  .search input:focus{outline:none;border-color:var(--ink);}
+  .search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--ink-3);stroke-width:2;fill:none;}
+
+  .pill-row{display:flex;gap:7px;overflow-x:auto;margin:12px 0;scrollbar-width:none;padding-bottom:2px;}
+  .pill-row::-webkit-scrollbar{display:none;}
+  .pill{flex:0 0 auto;padding:7px 13px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font-size:13px;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap;transition:.15s;}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  /* payment bar */
+  .pay-bar{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:9px;}
+  .pay-bar > div{height:100%;background:var(--ok);border-radius:999px;transition:.4s;}
+
+  /* ---------- tabbar ---------- */
+  .tabbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:50;
+    height:calc(var(--tabh) + env(safe-area-inset-bottom));
+    padding-bottom:env(safe-area-inset-bottom);
+    background:rgba(255,255,255,.9);backdrop-filter:saturate(160%) blur(18px);-webkit-backdrop-filter:saturate(160%) blur(18px);
+    border-top:1px solid var(--line);display:flex;
+  }
+  .tab{
+    flex:1;background:none;border:none;cursor:pointer;color:var(--ink-3);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0;transition:.15s;position:relative;
+  }
+  .tab svg{width:23px;height:23px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .tab span{font-size:10.5px;font-weight:500;letter-spacing:.01em;}
+  .tab.on{color:var(--ink);}
+  .tab.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--ink);}
+
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(20,20,24,.4);z-index:60;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px);}
+  .modal-bg.on{display:flex;}
+  .modal{background:var(--surface);border-radius:22px 22px 0 0;width:100%;max-width:720px;max-height:88vh;overflow-y:auto;padding:8px 18px calc(28px + env(safe-area-inset-bottom));animation:slideup .3s cubic-bezier(.2,.8,.2,1);}
+  @keyframes slideup{from{transform:translateY(100%);}to{transform:none;}}
+  .modal-grip{width:38px;height:4px;border-radius:99px;background:var(--line-2);margin:8px auto 14px;}
+  .modal h2{font-size:21px;font-weight:600;margin-bottom:16px;}
+  @media(min-width:560px){.modal-bg{align-items:center;}.modal{border-radius:22px;max-height:86vh;}}
+
+  .toast{position:fixed;left:50%;bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 20px);transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;font-weight:500;z-index:80;opacity:0;pointer-events:none;transition:.3s;box-shadow:0 8px 30px rgba(0,0,0,.3);}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .relation{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer;transition:.15s;}
+  .relation:hover{border-color:var(--line-2);}
+  .relation .ri{width:34px;height:34px;border-radius:9px;background:var(--surface-3);display:grid;place-items:center;flex:0 0 auto;color:var(--ink-2);}
+  .relation .ri svg{width:17px;height:17px;stroke:currentColor;stroke-width:1.9;fill:none;}
+  .relation .rt{flex:1;min-width:0;}
+  .relation .rt .a{font-weight:600;font-size:14px;}
+  .relation .rt .b{font-size:12.5px;color:var(--ink-2);}
+
+  .synccode{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:12px;padding:12px;border:1px solid var(--line-2);border-radius:12px;background:var(--surface-2);resize:vertical;color:var(--ink-2);line-height:1.5;}
+</style>
+</head>
+<body>
+
+<!-- ===================== TOPBAR ===================== -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="13" r="5.4" stroke="#fff" stroke-width="1.9"/><circle cx="12" cy="13" r="2.2" fill="#e8834a"/><path d="M5 8h3l1.4-2h5.2L16 8h3v1" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <div style="flex:1;min-width:0;">
+      <h1 id="topTitle">Aujourd'hui</h1>
+    </div>
+    <button class="icon-btn" onclick="openReglages()" aria-label="Reglages">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ===================== ACCUEIL ===================== -->
+<section id="home" class="view active">
+  <div class="brandbar" id="brandbar"></div>
+  <div id="homeBody"></div>
+</section>
+
+<!-- ===================== CLIENTS ===================== -->
+<section id="clients" class="view">
+  <div class="brandbar" id="clientBrandTabs" style="margin-top:14px"></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="clientSearch" type="text" placeholder="Chercher un client, un tel, un insta..." oninput="renderClients()">
+  </div>
+  <div class="pill-row" id="clientStatusPills"></div>
+  <div class="section-title"><h2>Clients</h2><span class="count" id="clientCount"></span></div>
+  <div id="clientsList"></div>
+</section>
+
+<!-- ===================== AGENDA ===================== -->
+<section id="agenda" class="view">
+  <div class="pill-row" id="agendaPills"></div>
+  <div id="agendaBody"></div>
+</section>
+
+<!-- ===================== PAIEMENTS ===================== -->
+<section id="paiements" class="view">
+  <div class="stat-grid" id="payStats"></div>
+  <div class="pill-row" id="payPills"></div>
+  <div class="section-title"><h2>Paiements</h2><span class="count" id="payCount"></span></div>
+  <div id="payList"></div>
+</section>
+
+<!-- ===================== RAPPELS ===================== -->
+<section id="rappels" class="view">
+  <div class="section-title"><h2>Rappels</h2><span class="count" id="taskCount"></span></div>
+  <div id="taskList"></div>
+</section>
+
+<!-- ===================== FICHE CLIENT ===================== -->
+<section id="fiche" class="view">
+  <button class="backlink" onclick="openClients()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Clients</button>
+  <div id="ficheBody"></div>
+</section>
+
+<!-- ===================== REGLAGES / SYNC ===================== -->
+<section id="reglages" class="view">
+  <button class="backlink" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Accueil</button>
+  <div class="section-title" style="margin-top:6px;"><h2>Reglages</h2></div>
+  <div id="reglagesBody"></div>
+</section>
+
+<!-- ===================== TABBAR ===================== -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab" data-view="home" onclick="goHome()">
+    <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Accueil</span>
+  </button>
+  <button class="tab" data-view="clients" onclick="openClients()">
+    <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/><path d="M16 5.5a3 3 0 0 1 0 5.6"/><path d="M18 20c-.3-1.6-1-3-2-4"/></svg><span>Clients</span>
+  </button>
+  <button class="tab" data-view="agenda" onclick="openAgenda()">
+    <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg><span>Agenda</span>
+  </button>
+  <button class="tab" data-view="paiements" onclick="openPaiements()">
+    <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span>Paiements</span>
+  </button>
+  <button class="tab" data-view="rappels" onclick="openRappels()">
+    <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span>Rappels</span>
+  </button>
+</nav>
+
+<!-- FAB -->
+<button class="fab" id="fab" onclick="openAddMenu()" aria-label="Ajouter">
+  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal"><div class="modal-grip"></div><div id="modalContent"></div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   STUDIO, l'atelier de Matt
+   CRM photographe - fichier unique, memes rouages que le Grimoire
+   Sauvegarde locale + synchro auto via Netlify (fonction store)
+   ============================================================ */
+
+/* ---------- marques ---------- */
+const BRANDS = {
+  "mybabyshoot":   { name:"Mybabyshoot",    short:"Baby",    color:"var(--baby)",    badge:"baby",    tag:"Grossesse & naissance" },
+  "maison-lumiere":{ name:"Maison Lumiere",  short:"Lumiere", color:"var(--lumiere)", badge:"lumiere", tag:"Mariage" },
+  "matt-la-photo": { name:"Matt la photo",   short:"Matt",    color:"var(--matt)",    badge:"matt",    tag:"Contenu & street" }
+};
+const BRAND_ORDER = ["mybabyshoot","maison-lumiere","matt-la-photo"];
+
+const CLIENT_STATUS = ["Prospect","Devis envoye","Confirme","Seance faite","Livre","Archive"];
+const STATUS_STYLE = {
+  "Prospect":"info","Devis envoye":"warn","Confirme":"ok","Seance faite":"neutral","Livre":"ok","Archive":"neutral"
+};
+const SEANCE_STATUS = ["A venir","Confirmee","Faite","Annulee"];
+const SEANCE_STYLE = {"A venir":"info","Confirmee":"ok","Faite":"neutral","Annulee":"danger"};
+const PAY_STATUS = ["En attente","Acompte recu","Solde"];
+const PAY_STYLE = {"En attente":"warn","Acompte recu":"info","Solde":"ok"};
+
+const TYPES = {
+  "mybabyshoot":["Seance grossesse","Naissance / nouveau-ne","Famille","Smash cake","Suivi bebe"],
+  "maison-lumiere":["Mariage complet","Ceremonie seule","Engagement","Elopement","Video mariage"],
+  "matt-la-photo":["Collab marque","Contenu reseaux","Portrait street","Shooting perso","Prestation video"]
+};
+
+/* ---------- storage ---------- */
+const KEY = "studio_matt_v1";
+const ENDPOINT = "/.netlify/functions/store-crm";
+const CLOUD = (location.protocol==="http:"||location.protocol==="https:");
+let applying=false, pushTimer=null;
+
+let DB = { clients:[], seances:[], paiements:[], taches:[], v:1, t:0 };
+
+function loadDB(){
+  try{ const r=localStorage.getItem(KEY); if(r){ DB=Object.assign(DB,JSON.parse(r)); } }catch(e){}
+  DB.clients = DB.clients||[]; DB.seances=DB.seances||[]; DB.paiements=DB.paiements||[]; DB.taches=DB.taches||[];
+}
+function saveDB(){
+  DB.t=Date.now();
+  try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){}
+  cloudPush();
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* ---------- helpers ---------- */
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function initials(name){
+  if(!name) return "?";
+  const p=name.trim().split(/\s+/);
+  return ((p[0]?.[0]||"")+(p[1]?.[0]||"")).toUpperCase()||name[0].toUpperCase();
+}
+function euros(n){
+  n=Number(n)||0;
+  return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" \u20ac";
+}
+const MOIS=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
+const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
+function parseDate(s){ if(!s) return null; const d=new Date(s+"T00:00:00"); return isNaN(d)?null:d; }
+function fmtDate(s){ const d=parseDate(s); if(!d) return ""; return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]}`; }
+function fmtDateShort(s){ const d=parseDate(s); if(!d) return ""; return `${d.getDate()} ${MOIS[d.getMonth()].slice(0,4)}.`; }
+function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function daysBetween(a,b){ return Math.round((parseDate(a)-parseDate(b))/86400000); }
+function isPast(s){ return s && s<todayStr(); }
+function isToday(s){ return s===todayStr(); }
+function relDay(s){
+  if(!s) return "";
+  const d=daysBetween(s,todayStr());
+  if(d===0) return "aujourd'hui";
+  if(d===1) return "demain";
+  if(d===-1) return "hier";
+  if(d>1&&d<7) return "dans "+d+" j";
+  if(d<-1&&d>-7) return "il y a "+(-d)+" j";
+  return fmtDate(s);
+}
+
+/* ---------- lookups ---------- */
+function clientById(id){ return DB.clients.find(c=>c.id===id); }
+function seancesOfClient(id){ return DB.seances.filter(s=>s.clientId===id); }
+function paysOfClient(id){ return DB.paiements.filter(p=>p.clientId===id); }
+function brandBadge(b){ const br=BRANDS[b]; return br?`<span class="badge ${br.badge}"><span class="dotm"></span>${br.name}</span>`:""; }
+
+/* ---------- filtre marque global ---------- */
+let FILTER="all";
+function passFilter(b){ return FILTER==="all"||b===FILTER; }
+
+/* ---------- navigation ---------- */
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",fiche:"Fiche client",reglages:"Reglages"};
+function setView(id){
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
+  document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.view===id));
+  const showFab=["home","clients","agenda","paiements","rappels"].includes(id);
+  document.getElementById("fab").style.display=showFab?"grid":"none";
+  window.scrollTo(0,0);
+}
+function goHome(){ buildHome(); setView("home"); }
+function openClients(){ renderClients(); setView("clients"); }
+function openAgenda(){ renderAgenda(); setView("agenda"); }
+function openPaiements(){ renderPaiements(); setView("paiements"); }
+function openRappels(){ renderRappels(); setView("rappels"); }
+function openReglages(){ renderReglages(); setView("reglages"); }
+
+function toast(msg){
+  const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on");
+  clearTimeout(t._to); t._to=setTimeout(()=>t.classList.remove("on"),2200);
+}
+
+/* ---------- modal ---------- */
+function openModal(html){
+  document.getElementById("modalContent").innerHTML=html;
+  document.getElementById("modalBg").classList.add("on");
+  document.body.style.overflow="hidden";
+}
+function closeModal(){
+  document.getElementById("modalBg").classList.remove("on");
+  document.body.style.overflow="";
+}
+
+/* ============================================================
+   FILTRE MARQUE (bande du haut de l'accueil)
+   ============================================================ */
+function buildBrandbar(){
+  const bar=document.getElementById("brandbar");
+  let h=`<button class="bchip ${FILTER==="all"?"on":""}" onclick="setFilter('all')"><span class="d"></span>Tout</button>`;
+  BRAND_ORDER.forEach(b=>{
+    h+=`<button class="bchip ${FILTER===b?"on":""}" data-b="${b}" onclick="setFilter('${b}')"><span class="d"></span>${BRANDS[b].name}</button>`;
+  });
+  bar.innerHTML=h;
+}
+function setFilter(b){ FILTER=b; buildHome(); }
+
+/* ============================================================
+   ACCUEIL - tableau de bord "Aujourd'hui"
+   ============================================================ */
+function buildHome(){
+  buildBrandbar();
+  const body=document.getElementById("homeBody");
+  const clients=DB.clients.filter(c=>passFilter(c.brand)&&c.status!=="Archive");
+  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee");
+  const pays=DB.paiements.filter(p=>passFilter(p.brand));
+  const taches=DB.taches.filter(t=>!t.done);
+
+  // seances a venir
+  const upcoming=seances.filter(s=>s.date>=todayStr()).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const todaySeances=upcoming.filter(s=>isToday(s.date));
+
+  // argent en attente
+  let due=0, encaisse=0;
+  pays.forEach(p=>{ const t=Number(p.total)||0, a=Number(p.acompte)||0; if(p.statut==="Solde"){encaisse+=t;} else {encaisse+=a; due+=(t-a);} });
+
+  // CA du mois en cours (paiements dont la date est ce mois)
+  const ym=todayStr().slice(0,7);
+  const caMois=pays.filter(p=>(p.date||"").slice(0,7)===ym).reduce((s,p)=>s+(p.statut==="Solde"?(Number(p.total)||0):(Number(p.acompte)||0)),0);
+
+  // rappels en retard / du jour
+  const rappelsChauds=taches.filter(t=>t.dueDate&&t.dueDate<=todayStr()).sort((a,b)=>(a.dueDate||"").localeCompare(b.dueDate||""));
+
+  let h="";
+
+  // hero
+  const now=new Date();
+  const hello = now.getHours()<12?"Bonjour Matt":now.getHours()<18?"Bon aprem Matt":"Bonsoir Matt";
+  h+=`<div style="margin:18px 2px 4px;">
+    <div class="eyebrow">${JOURS[now.getDay()]} ${now.getDate()} ${MOIS[now.getMonth()]}</div>
+    <h1 style="font-size:30px;font-weight:500;margin-top:4px;letter-spacing:-.02em;">${hello}.</h1>
+  </div>`;
+
+  // stats
+  h+=`<div class="stat-grid">
+    <div class="stat"><div class="lab">Seances a venir</div><div class="num">${upcoming.length}</div><div class="foot">${todaySeances.length? todaySeances.length+" aujourd'hui":"rien aujourd'hui"}</div></div>
+    <div class="stat"><div class="lab">En attente de paiement</div><div class="num euro">${euros(due)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} dossier(s)</div></div>
+    <div class="stat"><div class="lab">Encaisse ce mois</div><div class="num euro">${euros(caMois)}</div><div class="foot">${MOIS[now.getMonth()]}</div></div>
+    <div class="stat"><div class="lab">Clients actifs</div><div class="num">${clients.length}</div><div class="foot">${DB.clients.filter(c=>passFilter(c.brand)&&c.status==="Prospect").length} prospect(s)</div></div>
+  </div>`;
+
+  // aujourd'hui
+  if(todaySeances.length){
+    h+=`<div class="section-title"><h2>Le jour meme</h2></div>`;
+    todaySeances.forEach(s=>h+=seanceRow(s,true));
+  }
+
+  // rappels chauds
+  if(rappelsChauds.length){
+    h+=`<div class="section-title"><h2>A traiter</h2><span class="count">${rappelsChauds.length}</span></div>`;
+    rappelsChauds.slice(0,4).forEach(t=>h+=taskRow(t));
+    if(rappelsChauds.length>4) h+=`<button class="btn ghost wide sm" onclick="openRappels()">Voir tous les rappels</button>`;
+  }
+
+  // prochaines seances
+  const next=upcoming.filter(s=>!isToday(s.date)).slice(0,5);
+  if(next.length){
+    h+=`<div class="section-title"><h2>Prochaines seances</h2><span class="count" onclick="openAgenda()" style="cursor:pointer">tout voir</span></div>`;
+    next.forEach(s=>h+=seanceRow(s));
+  }
+
+  // prochains mariages (Maison Lumiere)
+  if(passFilter("maison-lumiere")){
+    const mariages=DB.clients
+      .filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=todayStr()&&c.status!=="Archive")
+      .sort((a,b)=>a.eventDate.localeCompare(b.eventDate)).slice(0,4);
+    if(mariages.length){
+      h+=`<div class="section-title"><h2>Prochains mariages</h2></div>`;
+      mariages.forEach(c=>{
+        h+=`<div class="row" data-b="maison-lumiere" onclick="openFiche('${c.id}')">
+          <div class="avatar" data-b="maison-lumiere">${esc(initials(c.name))}</div>
+          <div class="row-main"><div class="t">${esc(c.name)}</div><div class="s">${fmtDate(c.eventDate)}</div></div>
+          <div class="row-end"><span style="font-family:'Fraunces';font-size:20px;font-weight:600;color:var(--lumiere)">${countdown(c.eventDate)}</span></div>
+        </div>`;
+      });
+    }
+  }
+
+  if(!upcoming.length && !rappelsChauds.length && !DB.clients.length){
+    h+=`<div class="empty" style="margin-top:30px;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="6"/><circle cx="12" cy="13" r="2.4"/><path d="M5 8h3l1.4-2h5.2L16 8h3"/></svg>
+      <div class="t">Ton atelier est pret</div>
+      <div class="s">Ajoute ton premier client avec le bouton plus en bas a droite. Fiches, seances, paiements et rappels vivront ici.</div>
+    </div>`;
+  } else if(!upcoming.length && !rappelsChauds.length){
+    h+=`<div class="empty" style="margin-top:24px;">
+      <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>
+      <div class="t">Rien de chaud pour l'instant</div>
+      <div class="s">Aucune seance ni rappel a venir. Profite, ou planifie la suite.</div>
+    </div>`;
+  }
+
+  body.innerHTML=h;
+}
+
+/* ---------- fabrique de lignes reutilisables ---------- */
+function seanceRow(s,big){
+  const c=clientById(s.clientId);
+  const name=c?c.name:"Sans client";
+  const time=s.time?s.time.replace(":","h"):"";
+  const when=big?time:`${relDay(s.date)}${time?" \u00b7 "+time:""}`;
+  return `<div class="row" data-b="${s.brand}" onclick="openSeance('${s.id}')">
+    <div class="avatar" data-b="${s.brand}">${esc(initials(name))}</div>
+    <div class="row-main">
+      <div class="t">${esc(name)}</div>
+      <div class="s">${esc(s.type||BRANDS[s.brand]?.tag||"")}${s.place?" \u00b7 "+esc(s.place):""}</div>
+    </div>
+    <div class="row-end">
+      <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span>
+      <span style="font-size:12.5px;color:var(--ink-2);font-weight:600">${esc(when)}</span>
+    </div>
+  </div>`;
+}
+function taskRow(t){
+  const c=t.clientId?clientById(t.clientId):null;
+  const late=t.dueDate&&isPast(t.dueDate);
+  return `<div class="row" onclick="openTask('${t.id}')" style="cursor:pointer">
+    <div class="avatar" style="background:${late?"var(--danger)":"var(--ink-3)"}">
+      <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>
+    </div>
+    <div class="row-main">
+      <div class="t">${esc(t.title)}</div>
+      <div class="s">${c?esc(c.name)+" \u00b7 ":""}${t.dueDate?relDay(t.dueDate):"sans echeance"}</div>
+    </div>
+    <div class="row-end">
+      ${late?'<span class="badge danger">en retard</span>':(t.dueDate&&isToday(t.dueDate)?'<span class="badge warn">aujourd\'hui</span>':'')}
+      <button class="btn sm ghost" style="padding:6px 10px" onclick="event.stopPropagation();completeTask('${t.id}')">Fait</button>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   CLIENTS
+   ============================================================ */
+let clientStatusFilter="all";
+let clientBrand="all";   // categorie de marque propre a la vue Clients
+
+/* libelle de la date d'evenement selon la marque */
+function eventLabel(brand){
+  if(brand==="maison-lumiere") return "Date du mariage";
+  if(brand==="mybabyshoot") return "Date prevue (naissance)";
+  return "Date de l'evenement";
+}
+/* compte a rebours joli : "J-45", "aujourd'hui", "passe" */
+function countdown(dateStr){
+  if(!dateStr) return "";
+  const d=daysBetween(dateStr,todayStr());
+  if(d===0) return "aujourd'hui";
+  if(d>0) return "J-"+d;
+  return "il y a "+(-d)+" j";
+}
+
+function renderClients(){
+  // onglets de marque (les 3 categories)
+  const tabs=document.getElementById("clientBrandTabs");
+  let th=`<button class="bchip ${clientBrand==="all"?"on":""}" onclick="setClientBrand('all')"><span class="d"></span>Tous</button>`;
+  BRAND_ORDER.forEach(b=>{
+    th+=`<button class="bchip ${clientBrand===b?"on":""}" data-b="${b}" onclick="setClientBrand('${b}')"><span class="d"></span>${BRANDS[b].name}</button>`;
+  });
+  tabs.innerHTML=th;
+
+  // pills statut
+  const pills=document.getElementById("clientStatusPills");
+  let ph=`<button class="pill ${clientStatusFilter==="all"?"on":""}" onclick="setClientStatus('all')">Tous</button>`;
+  CLIENT_STATUS.forEach(s=>{ ph+=`<button class="pill ${clientStatusFilter===s?"on":""}" onclick="setClientStatus('${s}')">${s}</button>`; });
+  pills.innerHTML=ph;
+
+  // titre = nom de la categorie active
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent = clientBrand==="all"?"Clients":("Clients "+BRANDS[clientBrand].name);
+
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  let list=DB.clients.filter(c=>clientBrand==="all"||c.brand===clientBrand);
+  if(clientStatusFilter!=="all") list=list.filter(c=>c.status===clientStatusFilter);
+  if(q) list=list.filter(c=>{
+    const blob=[c.name,c.tel,c.email,c.insta,c.notes,c.type].join(" ").toLowerCase();
+    return blob.includes(q);
+  });
+
+  // tri : mariages tries par date d'evenement, sinon par nom
+  if(clientBrand==="maison-lumiere"){
+    list.sort((a,b)=>{
+      const ea=a.eventDate||"9999", eb=b.eventDate||"9999";
+      if(ea!==eb) return ea.localeCompare(eb);
+      return a.name.localeCompare(b.name,"fr");
+    });
+  } else {
+    list.sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  }
+
+  document.getElementById("clientCount").textContent=list.length+(list.length>1?" fiches":" fiche");
+  const box=document.getElementById("clientsList");
+  if(!list.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>
+      <div class="t">${DB.clients.length?"Aucun client ici":"Pas encore de client"}</div>
+      <div class="s">${DB.clients.length?"Change de categorie, de filtre, ou vide la recherche.":"Touche le plus en bas a droite pour creer ta premiere fiche."}</div>
+    </div>`;
+    return;
+  }
+  box.innerHTML=list.map(c=>{
+    let sub, end;
+    if(c.brand==="maison-lumiere" && c.eventDate){
+      // pour les mariages : on montre la date du mariage
+      sub=`Mariage ${fmtDate(c.eventDate)}`;
+      const cd=countdown(c.eventDate);
+      end=`<span style="font-size:12.5px;font-weight:700;color:${isPast(c.eventDate)?"var(--ink-4)":"var(--lumiere)"}">${cd}</span>`;
+    } else {
+      const seances=seancesOfClient(c.id);
+      const nextS=seances.filter(s=>s.date>=todayStr()&&s.status!=="Annulee").sort((a,b)=>a.date.localeCompare(b.date))[0];
+      sub=nextS?`Seance ${relDay(nextS.date)}`:(c.type||BRANDS[c.brand]?.tag||"");
+      end="";
+    }
+    return `<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
+      <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
+      <div class="row-main">
+        <div class="t">${esc(c.name)}</div>
+        <div class="s">${esc(sub)}</div>
+      </div>
+      <div class="row-end">
+        <span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status)}</span>
+        ${end}
+      </div>
+      <div class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+    </div>`;
+  }).join("");
+}
+function setClientBrand(b){ clientBrand=b; clientStatusFilter="all"; renderClients(); }
+function setClientStatus(s){ clientStatusFilter=s; renderClients(); }
+
+/* ---------- fiche client (detail) ---------- */
+function openFiche(id){
+  const c=clientById(id); if(!c) return;
+  const seances=seancesOfClient(id).sort((a,b)=>b.date.localeCompare(a.date));
+  const pays=paysOfClient(id);
+  const totalDu=pays.reduce((s,p)=>s+((Number(p.total)||0)-(p.statut==="Solde"?(Number(p.total)||0):(Number(p.acompte)||0))),0);
+
+  let h=`<div class="sheet-head">
+    <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
+    <div style="flex:1;min-width:0;">
+      <h2>${esc(c.name)}</h2>
+      <div class="meta">${brandBadge(c.brand)}<span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status)}</span>${c.fromSite?'<span class="badge info"><span class="dotm"></span>Devis site</span>':''}</div>
+    </div>
+  </div>`;
+
+  // actions rapides contact
+  h+=`<div class="quick-actions">`;
+  if(c.tel) h+=`<a class="btn ghost" href="tel:${esc(c.tel.replace(/\s/g,''))}"><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg>Appeler</a>`;
+  if(c.tel) h+=`<a class="btn ghost" href="sms:${esc(c.tel.replace(/\s/g,''))}"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2Z"/></svg>SMS</a>`;
+  if(c.email) h+=`<a class="btn ghost" href="mailto:${esc(c.email)}"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Mail</a>`;
+  if(c.insta) h+=`<a class="btn ghost" href="https://instagram.com/${esc(c.insta.replace('@',''))}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>Insta</a>`;
+  h+=`</div>`;
+
+  // bandeau date d'evenement (mariage en avant pour Maison Lumiere)
+  if(c.eventDate){
+    const past=isPast(c.eventDate);
+    const col = c.brand==="maison-lumiere"?"var(--lumiere)":(c.brand==="mybabyshoot"?"var(--baby)":"var(--matt)");
+    const soft= c.brand==="maison-lumiere"?"var(--lumiere-soft)":(c.brand==="mybabyshoot"?"var(--baby-soft)":"var(--matt-soft)");
+    h+=`<div class="card" style="margin:12px 0;padding:15px 17px;background:${soft};border-color:transparent;display:flex;align-items:center;gap:14px">
+      <div style="width:46px;height:46px;border-radius:13px;background:${col};display:grid;place-items:center;flex:0 0 auto;color:#fff">
+        <svg viewBox="0 0 24 24" style="width:23px;height:23px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;color:var(--ink-2);font-weight:600">${eventLabel(c.brand)}</div>
+        <div style="font-family:'Fraunces';font-size:19px;font-weight:600;line-height:1.1;margin-top:2px">${fmtDate(c.eventDate)}</div>
+      </div>
+      <div style="text-align:right"><div style="font-family:'Fraunces';font-size:24px;font-weight:600;color:${past?"var(--ink-4)":col};line-height:1">${countdown(c.eventDate)}</div></div>
+    </div>`;
+  }
+
+  // infos
+  h+=`<div class="card" style="margin:12px 0;">`;
+  if(c.type) h+=kv("Prestation",esc(c.type));
+  if(c.source) h+=kv("Vient de",esc(c.source));
+  if(c.tel) h+=kv("Telephone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
+  if(c.email) h+=kv("Email",`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`);
+  if(c.insta) h+=kv("Instagram",esc(c.insta));
+  if(c.budget) h+=kv("Budget evoque",euros(c.budget));
+  if(!c.type&&!c.tel&&!c.email&&!c.insta&&!c.source) h+=`<div class="kv"><div class="v" style="color:var(--ink-3)">Aucun contact enregistre. Touche Modifier pour completer.</div></div>`;
+  h+=`</div>`;
+
+  if(c.notes){
+    h+=`<div class="grouplab">Notes</div><div class="card" style="padding:15px 16px;font-size:14.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink-2)">${esc(c.notes)}</div>`;
+  }
+
+  // seances liees
+  h+=`<div class="section-title"><h2 style="font-size:18px">Seances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
+  if(seances.length){
+    seances.forEach(s=>{
+      h+=`<div class="relation" onclick="openSeance('${s.id}')">
+        <div class="ri"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg></div>
+        <div class="rt"><div class="a">${esc(s.type||"Seance")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
+        <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span>
+      </div>`;
+    });
+  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucune seance pour ce client.</div>`;
+
+  // paiements lies
+  h+=`<div class="section-title"><h2 style="font-size:18px">Paiements</h2><button class="btn sm ghost" onclick="openPayEdit(null,'${c.id}')">Ajouter</button></div>`;
+  if(pays.length){
+    pays.forEach(p=>{
+      const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0);
+      h+=`<div class="relation" onclick="openPayEdit('${p.id}')">
+        <div class="ri"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div>
+        <div class="rt"><div class="a">${esc(p.label||"Prestation")}</div><div class="b">${euros(a)} sur ${euros(t)}</div></div>
+        <span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(p.statut)}</span>
+      </div>`;
+    });
+    if(totalDu>0) h+=`<div style="text-align:right;font-weight:600;font-size:14px;margin-top:4px;color:var(--warn)">Reste du : ${euros(totalDu)}</div>`;
+  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucun paiement enregistre.</div>`;
+
+  h+=`<div class="divider"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn ghost" style="flex:1" onclick="openClientEdit('${c.id}')"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Modifier</button>
+      <button class="btn ghost" style="flex:1" onclick="openTaskEdit(null,'${c.id}')"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Rappel</button>
+    </div>`;
+
+  document.getElementById("ficheBody").innerHTML=h;
+  setView("fiche");
+}
+function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+
+/* ============================================================
+   EDITION CLIENT (modal)
+   ============================================================ */
+let editBrandTmp="mybabyshoot";
+function brandSeg(sel){
+  return `<div class="seg brands" id="brandSeg">`+BRAND_ORDER.map(b=>
+    `<button type="button" data-b="${b}" class="${sel===b?"on":""}" onclick="pickBrand('${b}')">${BRANDS[b].name}</button>`
+  ).join("")+`</div>`;
+}
+function pickBrand(b){
+  editBrandTmp=b;
+  document.querySelectorAll("#brandSeg button").forEach(x=>x.classList.toggle("on",x.dataset.b===b));
+  const ts=document.getElementById("typeSelect");
+  if(ts) fillTypeOptions(ts,b,ts.value);
+  const el=document.getElementById("eventDateLabel");
+  if(el) el.textContent=eventLabel(b);
+}
+function fillTypeOptions(sel,brand,current){
+  const list=TYPES[brand]||[];
+  sel.innerHTML=`<option value="">Type de prestation...</option>`+list.map(t=>`<option ${current===t?"selected":""}>${t}</option>`).join("")+`<option value="__autre" ${current&&!list.includes(current)?"selected":""}>Autre...</option>`;
+}
+
+function openClientEdit(id){
+  const c=id?clientById(id):null;
+  editBrandTmp=c?c.brand:(FILTER!=="all"?FILTER:"mybabyshoot");
+  let h=`<h2>${c?"Modifier la fiche":"Nouveau client"}</h2>
+    <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
+    <div class="field"><label>Nom du client *</label><input id="fName" value="${c?esc(c.name):""}" placeholder="Ex. Sophie et Julien"></div>
+    <div class="field"><label>Statut</label>
+      <select id="fStatus">${CLIENT_STATUS.map(s=>`<option ${c&&c.status===s?"selected":""}>${s}</option>`).join("")}</select>
+    </div>
+    <div class="field"><label>Prestation</label>
+      <select id="typeSelect" onchange="if(this.value==='__autre'){document.getElementById('typeOther').style.display='block'}else{document.getElementById('typeOther').style.display='none'}"></select>
+      <input id="typeOther" style="display:none;margin-top:8px" placeholder="Precise le type" value="${c&&!(TYPES[editBrandTmp]||[]).includes(c.type||'')?esc(c.type||''):''}">
+    </div>
+    <div class="field two"><label>Contact</label>
+      <input id="fTel" value="${c?esc(c.tel||''):''}" placeholder="Telephone" inputmode="tel">
+      <input id="fEmail" value="${c?esc(c.email||''):''}" placeholder="Email" inputmode="email">
+    </div>
+    <div class="field two"><label>Reseaux & budget</label>
+      <input id="fInsta" value="${c?esc(c.insta||''):''}" placeholder="@instagram">
+      <input id="fBudget" value="${c?esc(c.budget||''):''}" placeholder="Budget (euros)" inputmode="numeric">
+    </div>
+    <div class="field"><label>Vient de</label>
+      <select id="fSource">
+        ${["","Instagram","TikTok","Bouche a oreille","Google","Site web","Ancien client","Salon / evenement","Autre"].map(s=>`<option ${c&&c.source===s?"selected":""} value="${s}">${s||"Source du contact..."}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field"><label id="eventDateLabel">${eventLabel(editBrandTmp)}</label>
+      <input id="fEvent" type="date" value="${c?esc(c.eventDate||''):''}">
+      <div class="hint">Pour un mariage : la date du grand jour. Laisse vide si pas encore fixe.</div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Attentes, contexte, details a retenir...">${c?esc(c.notes||''):''}</textarea></div>
+    <button class="btn wide" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
+  if(c) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteClient('${id}')">Supprimer ce client</button>`;
+  openModal(h);
+  const ts=document.getElementById("typeSelect");
+  fillTypeOptions(ts,editBrandTmp,c?c.type:"");
+  if(c&&!(TYPES[editBrandTmp]||[]).includes(c.type||"")&&c.type){ ts.value="__autre"; document.getElementById("typeOther").style.display="block"; }
+}
+function saveClient(id){
+  const name=document.getElementById("fName").value.trim();
+  if(!name){ toast("Il faut au moins un nom"); return; }
+  let type=document.getElementById("typeSelect").value;
+  if(type==="__autre") type=document.getElementById("typeOther").value.trim();
+  const data={
+    brand:editBrandTmp, name, status:document.getElementById("fStatus").value, type,
+    tel:document.getElementById("fTel").value.trim(), email:document.getElementById("fEmail").value.trim(),
+    insta:document.getElementById("fInsta").value.trim(), budget:document.getElementById("fBudget").value.trim(),
+    source:document.getElementById("fSource").value, notes:document.getElementById("fNotes").value.trim(),
+    eventDate:document.getElementById("fEvent").value
+  };
+  if(id){ Object.assign(clientById(id),data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise a jour"); }
+  else { const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc); saveDB(); closeModal(); openFiche(nc.id); toast("Client cree"); }
+}
+function deleteClient(id){
+  const c=clientById(id);
+  if(!confirm(`Supprimer ${c.name} ? Ses seances et paiements lies seront aussi effaces.`)) return;
+  DB.clients=DB.clients.filter(x=>x.id!==id);
+  DB.seances=DB.seances.filter(s=>s.clientId!==id);
+  DB.paiements=DB.paiements.filter(p=>p.clientId!==id);
+  DB.taches=DB.taches.filter(t=>t.clientId!==id);
+  saveDB(); closeModal(); openClients(); toast("Client supprime");
+}
+
+/* ============================================================
+   SEANCES
+   ============================================================ */
+function clientPicker(id,sel,brandForFilter){
+  const list=DB.clients.filter(c=>c.status!=="Archive").sort((a,b)=>a.name.localeCompare(b.name,"fr"));
+  return `<select id="${id}">${sel?"":'<option value="">Sans client...</option>'}${list.map(c=>`<option value="${c.id}" data-b="${c.brand}" ${sel===c.id?"selected":""}>${esc(c.name)} (${BRANDS[c.brand].short})</option>`).join("")}</select>`;
+}
+function openSeanceEdit(id,clientId){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  const preClient=clientId||(s?s.clientId:"");
+  const preC=preClient?clientById(preClient):null;
+  editBrandTmp=s?s.brand:(preC?preC.brand:(FILTER!=="all"?FILTER:"mybabyshoot"));
+  let h=`<h2>${s?"Modifier la seance":"Nouvelle seance"}</h2>
+    <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
+    <div class="field"><label>Client</label>${clientPicker("sClient",preClient)}</div>
+    <div class="field"><label>Type de seance</label><select id="sType"></select></div>
+    <div class="field two"><label>Date & heure</label>
+      <input id="sDate" type="date" value="${s?s.date:todayStr()}">
+      <input id="sTime" type="time" value="${s?s.time||"":""}">
+    </div>
+    <div class="field"><label>Lieu</label><input id="sPlace" value="${s?esc(s.place||""):""}" placeholder="Studio, domicile, exterieur..."></div>
+    <div class="field"><label>Statut</label>
+      <select id="sStatus">${SEANCE_STATUS.map(x=>`<option ${s&&s.status===x?"selected":(!s&&x==="A venir"?"selected":"")}>${x}</option>`).join("")}</select>
+    </div>
+    <div class="field"><label>Notes de seance</label><textarea id="sNotes" placeholder="Deroule, materiel, consignes...">${s?esc(s.notes||""):""}</textarea></div>
+    <button class="btn wide" onclick="saveSeance('${id||""}')">${s?"Enregistrer":"Creer la seance"}</button>`;
+  if(s) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer</button>`;
+  openModal(h);
+  const st=document.getElementById("sType");
+  fillTypeOptions(st,editBrandTmp,s?s.type:"");
+  document.getElementById("sClient").addEventListener("change",e=>{
+    const opt=e.target.selectedOptions[0]; const b=opt?opt.dataset.b:null;
+    if(b){ pickBrand(b); }
+  });
+}
+function saveSeance(id){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  let type=document.getElementById("sType").value; if(type==="__autre") type="";
+  const data={
+    brand:editBrandTmp, clientId:document.getElementById("sClient").value,
+    type, date:document.getElementById("sDate").value, time:document.getElementById("sTime").value,
+    place:document.getElementById("sPlace").value.trim(), status:document.getElementById("sStatus").value,
+    notes:document.getElementById("sNotes").value.trim()
+  };
+  if(!data.date){ toast("Choisis une date"); return; }
+  if(s){ Object.assign(s,data); saveDB(); closeModal(); openSeance(id); toast("Seance mise a jour"); }
+  else { const ns=Object.assign({id:uid()},data); DB.seances.push(ns); saveDB(); closeModal();
+    if(data.clientId) openFiche(data.clientId); else openAgenda(); toast("Seance ajoutee"); }
+}
+function deleteSeance(id){
+  const s=DB.seances.find(x=>x.id===id); const cid=s?s.clientId:null;
+  DB.seances=DB.seances.filter(x=>x.id!==id); saveDB(); closeModal();
+  if(cid) openFiche(cid); else openAgenda(); toast("Seance supprimee");
+}
+function openSeance(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  let h=`<h2>${esc(s.type||"Seance")}</h2>
+    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge(s.brand)}<span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span></div>
+    <div class="card">`;
+  h+=kv("Quand",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
+  if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
+  if(s.place) h+=kv("Lieu",esc(s.place));
+  if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
+  h+=`</div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier</button>
+      ${c&&c.tel?`<a class="btn" style="flex:1" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
+    </div>`;
+  openModal(h);
+}
+
+/* ============================================================
+   AGENDA (vue liste par date)
+   ============================================================ */
+let agendaFilter="upcoming";
+function renderAgenda(){
+  const pills=document.getElementById("agendaPills");
+  const opts=[["upcoming","A venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passees"],["all","Tout"]];
+  pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
+
+  let list=DB.seances.filter(s=>passFilter(s.brand));
+  const t=todayStr();
+  if(agendaFilter==="upcoming") list=list.filter(s=>s.date>=t&&s.status!=="Annulee");
+  else if(agendaFilter==="today") list=list.filter(s=>s.date===t);
+  else if(agendaFilter==="week") list=list.filter(s=>s.date>=t&&s.date<=addDays(t,7));
+  else if(agendaFilter==="past") list=list.filter(s=>s.date<t);
+
+  const asc=(agendaFilter==="past");
+  list.sort((a,b)=>{ const r=(a.date+a.time).localeCompare(b.date+b.time); return asc?-r:r; });
+
+  const box=document.getElementById("agendaBody");
+  if(!list.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>
+      <div class="t">Agenda vide</div>
+      <div class="s">Aucune seance dans ce filtre. Cree une seance depuis une fiche client ou le bouton plus.</div>
+    </div>`;
+    return;
+  }
+  // groupage par date
+  let h="",lastDate=null;
+  list.forEach(s=>{
+    if(s.date!==lastDate){
+      lastDate=s.date;
+      const lab=isToday(s.date)?"Aujourd'hui":(s.date===addDays(t,1)?"Demain":fmtDate(s.date));
+      h+=`<div class="grouplab">${lab}</div>`;
+    }
+    h+=seanceRow(s);
+  });
+  box.innerHTML=h;
+}
+function setAgenda(k){ agendaFilter=k; renderAgenda(); }
+function addDays(s,n){ const d=parseDate(s); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+
+/* ============================================================
+   PAIEMENTS
+   ============================================================ */
+let payFilter="all";
+function renderPaiements(){
+  const pays=DB.paiements.filter(p=>passFilter(p.brand));
+  // stats
+  let du=0,recu=0,total=0;
+  pays.forEach(p=>{ const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0); total+=t; recu+=a; du+=(t-a); });
+  document.getElementById("payStats").innerHTML=`
+    <div class="stat"><div class="lab">Encaisse</div><div class="num euro">${euros(recu)}</div><div class="foot">sur ${euros(total)} facture</div></div>
+    <div class="stat"><div class="lab">Reste a encaisser</div><div class="num euro">${euros(du)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} en cours</div></div>`;
+
+  const pills=document.getElementById("payPills");
+  const opts=[["all","Tous"],["En attente","En attente"],["Acompte recu","Acompte recu"],["Solde","Solde"]];
+  pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${payFilter===k?"on":""}" onclick="setPay('${k}')">${l}</button>`).join("");
+
+  let list=pays.slice();
+  if(payFilter!=="all") list=list.filter(p=>p.statut===payFilter);
+  list.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  document.getElementById("payCount").textContent=list.length+" dossier"+(list.length>1?"s":"");
+
+  const box=document.getElementById("payList");
+  if(!list.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>
+      <div class="t">Pas de paiement</div>
+      <div class="s">Ajoute un devis ou un acompte depuis une fiche client, ou avec le bouton plus.</div>
+    </div>`;
+    return;
+  }
+  box.innerHTML=list.map(p=>{
+    const c=clientById(p.clientId);
+    const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0);
+    const pct=t?Math.min(100,Math.round(a/t*100)):0;
+    return `<div class="row" data-b="${p.brand}" onclick="openPayEdit('${p.id}')" style="align-items:flex-start;flex-direction:column;gap:0;padding-bottom:15px">
+      <div style="display:flex;align-items:center;gap:13px;width:100%">
+        <div class="avatar" data-b="${p.brand}">${esc(initials(c?c.name:p.label||"?"))}</div>
+        <div class="row-main">
+          <div class="t">${esc(c?c.name:p.label||"Prestation")}</div>
+          <div class="s">${esc(p.label||(c?"":"Sans client"))}${p.date?" \u00b7 "+fmtDateShort(p.date):""}</div>
+        </div>
+        <div class="row-end"><span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(p.statut)}</span><span style="font-weight:600;font-size:13px">${euros(a)} / ${euros(t)}</span></div>
+      </div>
+      <div class="pay-bar" style="width:100%;margin-left:57px;max-width:calc(100% - 57px)"><div style="width:${pct}%;background:${p.statut==="Solde"?"var(--ok)":"var(--warn)"}"></div></div>
+    </div>`;
+  }).join("");
+}
+function setPay(k){ payFilter=k; renderPaiements(); }
+
+function openPayEdit(id,clientId){
+  const p=id?DB.paiements.find(x=>x.id===id):null;
+  const preClient=clientId||(p?p.clientId:"");
+  const preC=preClient?clientById(preClient):null;
+  editBrandTmp=p?p.brand:(preC?preC.brand:(FILTER!=="all"?FILTER:"mybabyshoot"));
+  let h=`<h2>${p?"Modifier le paiement":"Nouveau paiement"}</h2>
+    <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
+    <div class="field"><label>Client</label>${clientPicker("pClient",preClient)}</div>
+    <div class="field"><label>Libelle</label><input id="pLabel" value="${p?esc(p.label||""):""}" placeholder="Ex. Forfait mariage, seance grossesse..."></div>
+    <div class="field two"><label>Montants (euros)</label>
+      <input id="pTotal" inputmode="numeric" value="${p?esc(p.total||""):""}" placeholder="Total">
+      <input id="pAcompte" inputmode="numeric" value="${p?esc(p.acompte||""):""}" placeholder="Acompte recu">
+    </div>
+    <div class="field"><label>Statut</label>
+      <select id="pStatus">${PAY_STATUS.map(x=>`<option ${p&&p.statut===x?"selected":(!p&&x==="En attente"?"selected":"")}>${x}</option>`).join("")}</select>
+    </div>
+    <div class="field two"><label>Dates</label>
+      <input id="pDate" type="date" value="${p?(p.date||todayStr()):todayStr()}">
+      <input id="pDue" type="date" value="${p?(p.dueDate||""):""}" title="Echeance du solde">
+    </div>
+    <div class="hint">Date : quand le dossier a ete engage. Deuxieme date : echeance du solde (optionnel).</div>
+    <div class="field" style="margin-top:15px"><label>Notes</label><textarea id="pNotes" placeholder="Mode de reglement, conditions...">${p?esc(p.notes||""):""}</textarea></div>
+    <button class="btn wide" onclick="savePay('${id||""}')">${p?"Enregistrer":"Ajouter"}</button>`;
+  if(p) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deletePay('${id}')">Supprimer</button>`;
+  openModal(h);
+  document.getElementById("pClient").addEventListener("change",e=>{
+    const opt=e.target.selectedOptions[0]; if(opt&&opt.dataset.b) pickBrand(opt.dataset.b);
+  });
+}
+function savePay(id){
+  const p=id?DB.paiements.find(x=>x.id===id):null;
+  const data={
+    brand:editBrandTmp, clientId:document.getElementById("pClient").value,
+    label:document.getElementById("pLabel").value.trim(),
+    total:document.getElementById("pTotal").value.trim(), acompte:document.getElementById("pAcompte").value.trim(),
+    statut:document.getElementById("pStatus").value, date:document.getElementById("pDate").value,
+    dueDate:document.getElementById("pDue").value, notes:document.getElementById("pNotes").value.trim()
+  };
+  if(!data.total){ toast("Indique au moins un montant total"); return; }
+  if(p){ Object.assign(p,data); saveDB(); closeModal(); openPaiements(); toast("Paiement mis a jour"); }
+  else { DB.paiements.push(Object.assign({id:uid()},data)); saveDB(); closeModal();
+    if(data.clientId) openFiche(data.clientId); else openPaiements(); toast("Paiement ajoute"); }
+}
+function deletePay(id){
+  const p=DB.paiements.find(x=>x.id===id); const cid=p?p.clientId:null;
+  DB.paiements=DB.paiements.filter(x=>x.id!==id); saveDB(); closeModal();
+  if(cid) openFiche(cid); else openPaiements(); toast("Paiement supprime");
+}
+
+/* ============================================================
+   RAPPELS / TACHES
+   ============================================================ */
+function renderRappels(){
+  const list=DB.taches.filter(t=>!t.clientId||passFilter((clientById(t.clientId)||{}).brand)||FILTER==="all");
+  const open=list.filter(t=>!t.done).sort((a,b)=>(a.dueDate||"9999").localeCompare(b.dueDate||"9999"));
+  const done=list.filter(t=>t.done).sort((a,b)=>(b.dueDate||"").localeCompare(a.dueDate||""));
+  document.getElementById("taskCount").textContent=open.length+" a faire";
+  const box=document.getElementById("taskList");
+  let h="";
+  if(!open.length&&!done.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <div class="t">Aucun rappel</div>
+      <div class="s">Note ici ce qu'il ne faut pas oublier : relancer un devis, livrer une galerie, poster un contenu.</div>
+    </div>`;
+    return;
+  }
+  const late=open.filter(t=>t.dueDate&&isPast(t.dueDate));
+  const rest=open.filter(t=>!(t.dueDate&&isPast(t.dueDate)));
+  if(late.length){ h+=`<div class="grouplab" style="color:var(--danger)">En retard</div>`; late.forEach(t=>h+=taskRow(t)); }
+  if(rest.length){ h+=`<div class="grouplab">A venir</div>`; rest.forEach(t=>h+=taskRow(t)); }
+  if(done.length){ h+=`<div class="grouplab">Termines</div>`; done.slice(0,20).forEach(t=>{
+    const c=t.clientId?clientById(t.clientId):null;
+    h+=`<div class="row" style="opacity:.55" onclick="openTask('${t.id}')">
+      <div class="avatar" style="background:var(--ok)"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:2.4;fill:none"><path d="M5 13l4 4L19 7"/></svg></div>
+      <div class="row-main"><div class="t" style="text-decoration:line-through">${esc(t.title)}</div><div class="s">${c?esc(c.name):"termine"}</div></div>
+    </div>`;
+  }); }
+  box.innerHTML=h;
+}
+function openTaskEdit(id,clientId){
+  const t=id?DB.taches.find(x=>x.id===id):null;
+  let h=`<h2>${t?"Modifier le rappel":"Nouveau rappel"}</h2>
+    <div class="field"><label>Quoi *</label><input id="tTitle" value="${t?esc(t.title):""}" placeholder="Relancer le devis, livrer la galerie..."></div>
+    <div class="field two"><label>Echeance & priorite</label>
+      <input id="tDue" type="date" value="${t?(t.dueDate||""):""}">
+      <select id="tPrio">${["Normale","Haute","Basse"].map(p=>`<option ${t&&t.priority===p?"selected":""}>${p}</option>`).join("")}</select>
+    </div>
+    <div class="field"><label>Client lie (optionnel)</label>${clientPicker("tClient",t?t.clientId:(clientId||""),true)}</div>
+    <div class="field"><label>Details</label><textarea id="tNotes" placeholder="Precisions...">${t?esc(t.notes||""):""}</textarea></div>
+    <button class="btn wide" onclick="saveTask('${id||""}')">${t?"Enregistrer":"Ajouter le rappel"}</button>`;
+  if(t) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteTask('${id}')">Supprimer</button>`;
+  openModal(h);
+}
+function saveTask(id){
+  const title=document.getElementById("tTitle").value.trim();
+  if(!title){ toast("Ecris ce qu'il faut faire"); return; }
+  const data={ title, dueDate:document.getElementById("tDue").value, priority:document.getElementById("tPrio").value,
+    clientId:document.getElementById("tClient").value, notes:document.getElementById("tNotes").value.trim() };
+  const t=id?DB.taches.find(x=>x.id===id):null;
+  if(t){ Object.assign(t,data); } else { DB.taches.push(Object.assign({id:uid(),done:false},data)); }
+  saveDB(); closeModal(); openRappels(); toast(t?"Rappel mis a jour":"Rappel ajoute");
+}
+function openTask(id){
+  const t=DB.taches.find(x=>x.id===id); if(!t) return;
+  const c=t.clientId?clientById(t.clientId):null;
+  let h=`<h2>${esc(t.title)}</h2><div class="card">`;
+  if(t.dueDate) h+=kv("Echeance",fmtDate(t.dueDate)+(isPast(t.dueDate)&&!t.done?" (en retard)":""));
+  h+=kv("Priorite",esc(t.priority||"Normale"));
+  if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
+  if(t.notes) h+=kv("Details",esc(t.notes).replace(/\n/g,"<br>"));
+  h+=`</div><div style="display:flex;gap:9px;margin-top:16px">
+    <button class="btn" style="flex:1" onclick="completeTask('${id}')">${t.done?"Rouvrir":"Marquer fait"}</button>
+    <button class="btn ghost" style="flex:1" onclick="openTaskEdit('${id}')">Modifier</button></div>`;
+  openModal(h);
+}
+function completeTask(id){
+  const t=DB.taches.find(x=>x.id===id); if(!t) return;
+  t.done=!t.done; saveDB(); closeModal();
+  const active=document.querySelector(".view.active").id;
+  if(active==="home") buildHome(); else if(active==="rappels") renderRappels(); else if(active==="fiche") { /* noop */ }
+  toast(t.done?"Bien joue":"Rappel rouvert");
+}
+function deleteTask(id){
+  DB.taches=DB.taches.filter(x=>x.id!==id); saveDB(); closeModal(); openRappels(); toast("Rappel supprime");
+}
+
+/* ============================================================
+   MENU AJOUT (FAB)
+   ============================================================ */
+function openAddMenu(){
+  openModal(`<h2>Ajouter</h2>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openClientEdit(null)"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>Nouveau client</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openSeanceEdit(null)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Nouvelle seance</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openPayEdit(null)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Nouveau paiement</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
+    </div>`);
+}
+
+/* ============================================================
+   REGLAGES + SYNCHRO
+   ============================================================ */
+function renderReglages(){
+  const nbC=DB.clients.length,nbS=DB.seances.length,nbP=DB.paiements.length,nbT=DB.taches.length;
+  const box=document.getElementById("reglagesBody");
+  box.innerHTML=`
+    <div class="stat-grid">
+      <div class="stat"><div class="lab">Clients</div><div class="num">${nbC}</div></div>
+      <div class="stat"><div class="lab">Seances</div><div class="num">${nbS}</div></div>
+      <div class="stat"><div class="lab">Paiements</div><div class="num">${nbP}</div></div>
+      <div class="stat"><div class="lab">Rappels</div><div class="num">${nbT}</div></div>
+    </div>
+
+    <div class="grouplab">Synchronisation</div>
+    <div class="card" style="padding:16px">
+      <div style="font-weight:600;margin-bottom:6px">${CLOUD?"Synchro auto active":"Mode local"}</div>
+      <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">${CLOUD
+        ?"Tes donnees sont sauvegardees automatiquement sur ton site. Ouvre la meme adresse sur ton telephone et ton ordi, tout reste a jour."
+        :"Tu as ouvert le fichier en local, donc la synchro auto ne tourne pas. Une fois le site en ligne (Netlify), elle s'active toute seule. En attendant, utilise la sauvegarde manuelle ci dessous."}</div>
+      ${CLOUD?`<button class="btn ghost sm" style="margin-top:12px" onclick="syncNow()">Rafraichir depuis le cloud</button>`:""}
+      <div id="syncMsg" style="font-size:13px;color:var(--ok);margin-top:10px"></div>
+    </div>
+
+    <div class="grouplab">Sauvegarde manuelle</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
+      <textarea id="syncBox" class="synccode" placeholder="Le code de sauvegarde apparait ici..."></textarea>
+      <div style="display:flex;gap:9px;margin-top:10px">
+        <button class="btn ghost sm" style="flex:1" onclick="exportManual()">Copier ma sauvegarde</button>
+        <button class="btn ghost sm" style="flex:1" onclick="importManual()">Importer un code</button>
+      </div>
+      <div id="syncMsg2" style="font-size:13px;color:var(--ink-2);margin-top:9px"></div>
+    </div>
+
+    <div class="grouplab">Donnees</div>
+    <div class="card" style="padding:16px">
+      <button class="btn danger sm wide" onclick="wipeAll()">Tout effacer sur cet appareil</button>
+      <div class="hint" style="margin-top:8px">Efface uniquement les donnees locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
+    </div>
+
+    <div class="grouplab">A propos</div>
+    <div class="card" style="padding:16px;font-size:13px;color:var(--ink-3);line-height:1.6">
+      Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
+    </div>`;
+  setSyncMsg("");
+  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); }
+  else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
+}
+function setSyncMsg(t){ const e=document.getElementById("syncMsg"); if(e) e.textContent=t||""; }
+function setSyncMsg2(t){ const e=document.getElementById("syncMsg2"); if(e) e.textContent=t||""; }
+
+function currentData(){ return {clients:DB.clients,seances:DB.seances,paiements:DB.paiements,taches:DB.taches,v:1,t:DB.t||Date.now()}; }
+function applyData(d){
+  if(!d) return;
+  applying=true;
+  try{
+    if(Array.isArray(d.clients)) DB.clients=d.clients;
+    if(Array.isArray(d.seances)) DB.seances=d.seances;
+    if(Array.isArray(d.paiements)) DB.paiements=d.paiements;
+    if(Array.isArray(d.taches)) DB.taches=d.taches;
+    DB.t=d.t||Date.now();
+    localStorage.setItem(KEY,JSON.stringify(DB));
+  } finally { applying=false; }
+}
+
+/* --- cloud (fonction Netlify + Blobs, comme le Grimoire) --- */
+async function cloudPull(){
+  if(!CLOUD) return;
+  try{
+    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"}});
+    if(!res.ok) return;
+    const d=await res.json();
+    if(d&&(d.clients||d.seances||d.paiements||d.taches)){
+      applyData(d);
+      const active=document.querySelector(".view.active");
+      if(active){ const id=active.id;
+        if(id==="home") buildHome(); else if(id==="clients") renderClients();
+        else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
+        else if(id==="rappels") renderRappels();
+      }
+      setSyncMsg("A jour.");
+    }
+  }catch(e){}
+}
+function cloudPush(){
+  if(!CLOUD||applying) return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>{
+    fetch(ENDPOINT,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(currentData())}).catch(()=>{});
+  },700);
+}
+function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Recuperation..."); cloudPull(); }
+
+function exportManual(){
+  const ta=document.getElementById("syncBox"); ta.value=JSON.stringify(currentData());
+  ta.focus(); ta.select();
+  try{ document.execCommand("copy"); setSyncMsg2("Code copie. Colle le sur ton autre appareil puis touche Importer."); }
+  catch(e){ setSyncMsg2("Selectionne tout le texte et copie le a la main."); }
+}
+function importManual(){
+  const ta=document.getElementById("syncBox");
+  try{
+    const d=JSON.parse(ta.value.trim());
+    if(!d||(!Array.isArray(d.clients)&&!Array.isArray(d.seances)&&!Array.isArray(d.paiements)&&!Array.isArray(d.taches))) throw 0;
+    applyData(d); saveDB(); setSyncMsg2("Donnees importees sur cet appareil."); toast("Sauvegarde restauree");
+  }catch(e){ setSyncMsg2("Code invalide. Recolle le code complet (il commence par une accolade)."); }
+}
+function wipeAll(){
+  if(!confirm("Effacer toutes les donnees locales ? Pense a copier ta sauvegarde avant.")) return;
+  DB={clients:[],seances:[],paiements:[],taches:[],v:1,t:Date.now()};
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  renderReglages(); toast("Donnees effacees");
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+loadDB();
+buildHome();
+setView("home");
+if(CLOUD){ cloudPull(); }
+
+/* raccourci clavier Echap pour fermer le modal */
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+</script>
+</body>
+</html>

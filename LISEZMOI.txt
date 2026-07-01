@@ -1,0 +1,10 @@
+STUDIO, l'atelier de Matt - CRM photographe
+
+Contenu du dossier :
+  index.html                        -> l'application (a ouvrir dans le navigateur)
+  netlify.toml                      -> reglages de deploiement Netlify
+  package.json                      -> dependance pour la synchro cloud
+  netlify/functions/store-crm.js    -> synchro automatique de tes donnees
+  netlify/functions/crm-lead.js     -> reception des devis du site Maison Lumiere
+
+Tout ce dossier part tel quel sur GitHub, puis Netlify le met en ligne.
