@@ -150,6 +150,12 @@
   .row-main .s{font-size:13px;color:var(--ink-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .row-end{flex:0 0 auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
   .chev{color:var(--ink-4);flex:0 0 auto;}
+  .row-del{flex:0 0 auto;width:36px;height:36px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--ink-4);display:grid;place-items:center;cursor:pointer;transition:.15s;}
+  .row-del:hover{background:var(--danger-soft);color:var(--danger);border-color:var(--danger-soft);}
+  .row-del svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .subtabs{display:flex;gap:6px;margin:14px 0 2px;}
+  .subtabs button{flex:1;padding:10px;border-radius:11px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-weight:500;font-size:13.5px;cursor:pointer;transition:.15s;}
+  .subtabs button.on{background:var(--lumiere);border-color:var(--lumiere);color:#fff;}
   .chev svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;}
 
   /* ---------- badges ---------- */
@@ -315,6 +321,7 @@
 <!-- ===================== CLIENTS ===================== -->
 <section id="clients" class="view">
   <div class="brandbar" id="clientBrandTabs" style="margin-top:14px"></div>
+  <div class="subtabs" id="mlSubtabs" style="display:none"></div>
   <div class="search">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
     <input id="clientSearch" type="text" placeholder="Chercher un client, un tel, un insta..." oninput="renderClients()">
@@ -424,11 +431,11 @@ const ENDPOINT = "/.netlify/functions/store-crm";
 const CLOUD = (location.protocol==="http:"||location.protocol==="https:");
 let applying=false, pushTimer=null;
 
-let DB = { clients:[], seances:[], paiements:[], taches:[], v:1, t:0 };
+let DB = { clients:[], seances:[], paiements:[], taches:[], deleted:[], v:1, t:0 };
 
 function loadDB(){
   try{ const r=localStorage.getItem(KEY); if(r){ DB=Object.assign(DB,JSON.parse(r)); } }catch(e){}
-  DB.clients = DB.clients||[]; DB.seances=DB.seances||[]; DB.paiements=DB.paiements||[]; DB.taches=DB.taches||[];
+  DB.clients = DB.clients||[]; DB.seances=DB.seances||[]; DB.paiements=DB.paiements||[]; DB.taches=DB.taches||[]; DB.deleted=DB.deleted||[];
 }
 function saveDB(){
   DB.t=Date.now();
@@ -588,10 +595,11 @@ function buildHome(){
     next.forEach(s=>h+=seanceRow(s));
   }
 
-  // prochains mariages (Maison Lumiere)
+  // prochains mariages (Maison Lumiere) : seulement clients confirmes, pas les prospects
   if(passFilter("maison-lumiere")){
+    const signes=["Confirme","Seance faite","Livre"];
     const mariages=DB.clients
-      .filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=todayStr()&&c.status!=="Archive")
+      .filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=todayStr()&&signes.includes(c.status))
       .sort((a,b)=>a.eventDate.localeCompare(b.eventDate)).slice(0,4);
     if(mariages.length){
       h+=`<div class="section-title"><h2>Prochains mariages</h2></div>`;
@@ -663,6 +671,7 @@ function taskRow(t){
    ============================================================ */
 let clientStatusFilter="all";
 let clientBrand="all";   // categorie de marque propre a la vue Clients
+let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
 
 /* libelle de la date d'evenement selon la marque */
 function eventLabel(brand){
@@ -688,8 +697,27 @@ function renderClients(){
   });
   tabs.innerHTML=th;
 
+  // sous-rubrique Maison Lumiere : Clients / RDV telephonique
+  const subWrap=document.getElementById("mlSubtabs");
+  if(clientBrand==="maison-lumiere"){
+    const nbRdv=DB.seances.filter(s=>s.type==="RDV telephonique").length;
+    subWrap.style.display="flex";
+    subWrap.innerHTML=`
+      <button class="${mlView==='clients'?'on':''}" onclick="setMlView('clients')">Fiches clients</button>
+      <button class="${mlView==='rdv'?'on':''}" onclick="setMlView('rdv')">RDV telephonique${nbRdv?" ("+nbRdv+")":""}</button>`;
+  } else {
+    subWrap.style.display="none";
+  }
+
+  // vue RDV telephonique (rubrique dediee)
+  if(clientBrand==="maison-lumiere" && mlView==="rdv"){
+    renderRdvList();
+    return;
+  }
+
   // pills statut
   const pills=document.getElementById("clientStatusPills");
+  pills.style.display="flex";
   let ph=`<button class="pill ${clientStatusFilter==="all"?"on":""}" onclick="setClientStatus('all')">Tous</button>`;
   CLIENT_STATUS.forEach(s=>{ ph+=`<button class="pill ${clientStatusFilter===s?"on":""}" onclick="setClientStatus('${s}')">${s}</button>`; });
   pills.innerHTML=ph;
@@ -735,7 +763,7 @@ function renderClients(){
       const cd=countdown(c.eventDate);
       end=`<span style="font-size:12.5px;font-weight:700;color:${isPast(c.eventDate)?"var(--ink-4)":"var(--lumiere)"}">${cd}</span>`;
     } else {
-      const seances=seancesOfClient(c.id);
+      const seances=seancesOfClient(c.id).filter(s=>s.type!=="RDV telephonique");
       const nextS=seances.filter(s=>s.date>=todayStr()&&s.status!=="Annulee").sort((a,b)=>a.date.localeCompare(b.date))[0];
       sub=nextS?`Seance ${relDay(nextS.date)}`:(c.type||BRANDS[c.brand]?.tag||"");
       end="";
@@ -750,12 +778,83 @@ function renderClients(){
         <span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status)}</span>
         ${end}
       </div>
-      <div class="chev"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+      <button class="row-del" onclick="event.stopPropagation();deleteClient('${c.id}')" aria-label="Supprimer ${esc(c.name)}">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
     </div>`;
   }).join("");
 }
-function setClientBrand(b){ clientBrand=b; clientStatusFilter="all"; renderClients(); }
+
+/* liste des RDV telephoniques (rubrique Maison Lumiere) */
+function renderRdvList(){
+  document.getElementById("clientStatusPills").style.display="none";
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent="RDV telephonique";
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  let list=DB.seances.filter(s=>s.type==="RDV telephonique");
+  if(q) list=list.filter(s=>{
+    const c=clientById(s.clientId)||{};
+    return [c.name,c.tel,c.email,s.notes].join(" ").toLowerCase().includes(q);
+  });
+  list.sort((a,b)=>(a.date+ (a.time||"")).localeCompare(b.date+(b.time||"")));
+  const upcoming=list.filter(s=>s.date>=todayStr());
+  const past=list.filter(s=>s.date<todayStr()).reverse();
+
+  document.getElementById("clientCount").textContent=upcoming.length+" a venir";
+  const box=document.getElementById("clientsList");
+  if(!list.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg>
+      <div class="t">Aucun RDV telephonique</div>
+      <div class="s">Les demandes d'appel faites depuis le site Maison Lumiere arriveront ici automatiquement.</div>
+    </div>`;
+    return;
+  }
+  const rowRdv=s=>{
+    const c=clientById(s.clientId);
+    const name=c?c.name:"Contact";
+    const when=`${relDay(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`;
+    return `<div class="row" data-b="maison-lumiere" onclick="openRdv('${s.id}')">
+      <div class="avatar" data-b="maison-lumiere"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg></div>
+      <div class="row-main"><div class="t">${esc(name)}</div><div class="s">${esc(s.objet||"Appel")}</div></div>
+      <div class="row-end"><span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(s.status)}</span><span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
+    </div>`;
+  };
+  let h="";
+  if(upcoming.length){ h+=`<div class="grouplab">A venir</div>`; upcoming.forEach(s=>h+=rowRdv(s)); }
+  if(past.length){ h+=`<div class="grouplab">Passes</div>`; past.forEach(s=>h+=rowRdv(s)); }
+  box.innerHTML=h;
+}
+function openRdv(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  let h=`<h2>RDV telephonique</h2>
+    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("maison-lumiere")}<span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(s.status)}</span></div>
+    <div class="card">`;
+  h+=kv("Quand rappeler",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
+  if(s.creneau) h+=kv("Creneau demande",esc(s.creneau));
+  if(s.objet) h+=kv("Objet",esc(s.objet));
+  if(c){
+    h+=kv("Contact",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
+    if(c.tel) h+=kv("Telephone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
+  }
+  if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
+  h+=`</div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      ${c&&c.tel?`<a class="btn" style="flex:1" href="tel:${esc(c.tel.replace(/\s/g,''))}">Appeler</a>`:""}
+      <button class="btn ghost" style="flex:1" onclick="markRdvDone('${id}')">${s.status==="Faite"?"Rouvrir":"Marquer fait"}</button>
+    </div>
+    <button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer ce RDV</button>`;
+  openModal(h);
+}
+function markRdvDone(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  s.status = s.status==="Faite" ? "A venir" : "Faite";
+  saveDB(); closeModal(); renderClients(); toast(s.status==="Faite"?"RDV fait":"RDV rouvert");
+}
+function setClientBrand(b){ clientBrand=b; clientStatusFilter="all"; mlView="clients"; renderClients(); }
 function setClientStatus(s){ clientStatusFilter=s; renderClients(); }
+function setMlView(v){ mlView=v; renderClients(); }
 
 /* ---------- fiche client (detail) ---------- */
 function openFiche(id){
@@ -795,6 +894,19 @@ function openFiche(id){
       </div>
       <div style="text-align:right"><div style="font-family:'Fraunces';font-size:24px;font-weight:600;color:${past?"var(--ink-4)":col};line-height:1">${countdown(c.eventDate)}</div></div>
     </div>`;
+    // bouton : placer le mariage dans l'agenda
+    if(c.brand==="maison-lumiere"){
+      const dejaAgenda=DB.seances.some(s=>s.clientId===c.id&&s.type==="Mariage"&&s.date===c.eventDate);
+      if(dejaAgenda){
+        h+=`<div style="display:flex;align-items:center;gap:8px;color:var(--ok);font-size:13.5px;font-weight:600;margin:0 2px 4px">
+          <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
+          Mariage place dans l'agenda</div>`;
+      } else {
+        h+=`<button class="btn ghost wide sm" style="margin-bottom:4px" onclick="addWeddingToAgenda('${c.id}')">
+          <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M12 12v4M10 14h4"/></svg>
+          Ajouter le mariage a l'agenda</button>`;
+      }
+    }
   }
 
   // infos
@@ -848,6 +960,18 @@ function openFiche(id){
   setView("fiche");
 }
 function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+
+/* place la date du mariage dans l'agenda (cree une seance de type Mariage) */
+function addWeddingToAgenda(id){
+  const c=clientById(id); if(!c||!c.eventDate) return;
+  if(DB.seances.some(s=>s.clientId===id&&s.type==="Mariage"&&s.date===c.eventDate)){ toast("Deja dans l'agenda"); openFiche(id); return; }
+  DB.seances.push({
+    id:uid(), clientId:id, brand:"maison-lumiere", type:"Mariage",
+    date:c.eventDate, time:"", place:"", status:"A venir",
+    notes:"Jour du mariage", createdAt:Date.now()
+  });
+  saveDB(); openFiche(id); toast("Mariage ajoute a l'agenda");
+}
 
 /* ============================================================
    EDITION CLIENT (modal)
@@ -927,6 +1051,11 @@ function saveClient(id){
 function deleteClient(id){
   const c=clientById(id);
   if(!confirm(`Supprimer ${c.name} ? Ses seances et paiements lies seront aussi effaces.`)) return;
+  const gone=[id]
+    .concat(DB.seances.filter(s=>s.clientId===id).map(s=>s.id))
+    .concat(DB.paiements.filter(p=>p.clientId===id).map(p=>p.id))
+    .concat(DB.taches.filter(t=>t.clientId===id).map(t=>t.id));
+  DB.deleted=(DB.deleted||[]).concat(gone);
   DB.clients=DB.clients.filter(x=>x.id!==id);
   DB.seances=DB.seances.filter(s=>s.clientId!==id);
   DB.paiements=DB.paiements.filter(p=>p.clientId!==id);
@@ -985,6 +1114,7 @@ function saveSeance(id){
 }
 function deleteSeance(id){
   const s=DB.seances.find(x=>x.id===id); const cid=s?s.clientId:null;
+  DB.deleted=(DB.deleted||[]).concat([id]);
   DB.seances=DB.seances.filter(x=>x.id!==id); saveDB(); closeModal();
   if(cid) openFiche(cid); else openAgenda(); toast("Seance supprimee");
 }
@@ -1144,6 +1274,7 @@ function savePay(id){
 }
 function deletePay(id){
   const p=DB.paiements.find(x=>x.id===id); const cid=p?p.clientId:null;
+  DB.deleted=(DB.deleted||[]).concat([id]);
   DB.paiements=DB.paiements.filter(x=>x.id!==id); saveDB(); closeModal();
   if(cid) openFiche(cid); else openPaiements(); toast("Paiement supprime");
 }
@@ -1223,6 +1354,7 @@ function completeTask(id){
   toast(t.done?"Bien joue":"Rappel rouvert");
 }
 function deleteTask(id){
+  DB.deleted=(DB.deleted||[]).concat([id]);
   DB.taches=DB.taches.filter(x=>x.id!==id); saveDB(); closeModal(); openRappels(); toast("Rappel supprime");
 }
 
@@ -1291,15 +1423,20 @@ function renderReglages(){
 function setSyncMsg(t){ const e=document.getElementById("syncMsg"); if(e) e.textContent=t||""; }
 function setSyncMsg2(t){ const e=document.getElementById("syncMsg2"); if(e) e.textContent=t||""; }
 
-function currentData(){ return {clients:DB.clients,seances:DB.seances,paiements:DB.paiements,taches:DB.taches,v:1,t:DB.t||Date.now()}; }
+function currentData(){ return {clients:DB.clients,seances:DB.seances,paiements:DB.paiements,taches:DB.taches,deleted:DB.deleted||[],v:1,t:DB.t||Date.now()}; }
+
 function applyData(d){
   if(!d) return;
   applying=true;
   try{
-    if(Array.isArray(d.clients)) DB.clients=d.clients;
-    if(Array.isArray(d.seances)) DB.seances=d.seances;
-    if(Array.isArray(d.paiements)) DB.paiements=d.paiements;
-    if(Array.isArray(d.taches)) DB.taches=d.taches;
+    if(Array.isArray(d.deleted)){
+      const dset=new Set(DB.deleted||[]); d.deleted.forEach(id=>dset.add(id)); DB.deleted=[...dset];
+    }
+    const del=new Set(DB.deleted||[]);
+    if(Array.isArray(d.clients)) DB.clients=d.clients.filter(x=>x&&!del.has(x.id));
+    if(Array.isArray(d.seances)) DB.seances=d.seances.filter(x=>x&&!del.has(x.id));
+    if(Array.isArray(d.paiements)) DB.paiements=d.paiements.filter(x=>x&&!del.has(x.id));
+    if(Array.isArray(d.taches)) DB.taches=d.taches.filter(x=>x&&!del.has(x.id));
     DB.t=d.t||Date.now();
     DB.lastPull=Date.now();
     localStorage.setItem(KEY,JSON.stringify(DB));
@@ -1313,6 +1450,27 @@ function repaintActive(){
   if(id==="home") buildHome(); else if(id==="clients") renderClients();
   else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
   else if(id==="rappels") renderRappels();
+}
+
+/* Fusionne le cloud dans le local :
+   - on retire ce qui a ete supprime (ici ou ailleurs)
+   - on ajoute tout ce que le cloud a en plus (ex. prospects du site)
+   Les suppressions sont memorisees pour ne jamais faire "revenir" une fiche effacee. */
+function mergeCloud(cloud){
+  if(Array.isArray(cloud.deleted)){
+    const dset=new Set(DB.deleted||[]); cloud.deleted.forEach(id=>dset.add(id)); DB.deleted=[...dset];
+  }
+  const del=new Set(DB.deleted||[]);
+  ["clients","seances","paiements","taches"].forEach(k=>{ DB[k]=(DB[k]||[]).filter(x=>x&&!del.has(x.id)); });
+  let added=0;
+  ["clients","seances","paiements","taches"].forEach(k=>{
+    if(!Array.isArray(cloud[k])) return;
+    const localIds=new Set((DB[k]||[]).map(x=>x&&x.id));
+    cloud[k].forEach(item=>{
+      if(item&&item.id&&!localIds.has(item.id)&&!del.has(item.id)){ DB[k].push(item); added++; }
+    });
+  });
+  return added;
 }
 
 /* --- cloud (fonction Netlify + Blobs, comme le Grimoire) --- */
@@ -1330,22 +1488,17 @@ async function cloudPull(){
   }catch(e){}
 }
 
-/* Fusionne l'etat cloud dans le local sans ecraser :
-   on ajoute les fiches presentes dans le cloud, absentes en local,
-   et arrivees depuis notre derniere synchro (ex. prospects du site). */
-function mergeCloud(cloud){
-  const since=Number(DB.lastPull)||0;
-  let added=0;
-  ["clients","seances","paiements","taches"].forEach(k=>{
-    if(!Array.isArray(cloud[k])) return;
-    const localIds=new Set((DB[k]||[]).map(x=>x&&x.id));
-    cloud[k].forEach(item=>{
-      if(item&&item.id&&!localIds.has(item.id)&&(Number(item.createdAt)||0)>since){
-        DB[k].push(item); added++;
-      }
-    });
-  });
-  return added;
+/* Recupere en douceur les nouveautes du cloud sans ecraser le travail local. */
+async function pullMerge(){
+  if(!CLOUD||applying) return 0;
+  try{
+    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+    if(!res.ok) return 0;
+    const cloud=await res.json();
+    const added=mergeCloud(cloud||{});
+    if(added){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
+    return added;
+  }catch(e){ return 0; }
 }
 
 function cloudPush(){
@@ -1353,40 +1506,27 @@ function cloudPush(){
   clearTimeout(pushTimer);
   pushTimer=setTimeout(async ()=>{
     try{
-      // on relit d'abord le cloud pour recuperer d'eventuels prospects du site
       const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
       if(res.ok){
         const cloud=await res.json();
         const added=mergeCloud(cloud||{});
-        if(added){
-          try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){}
-          repaintActive();
-        }
+        if(added){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
       }
     }catch(e){}
-    // puis on envoie l'etat fusionne
     fetch(ENDPOINT,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(currentData())}).catch(()=>{});
     DB.lastPull=Date.now();
   },700);
 }
 
-/* verification periodique douce : recupere les nouveaux prospects du site
-   meme si tu ne fais rien dans l'appli (toutes les 45 secondes) */
+/* Recuperation automatique des prospects du site :
+   a chaque retour sur l'appli, et regulierement quand elle est ouverte. */
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) pullMerge(); });
+window.addEventListener("focus",()=>{ pullMerge(); });
 setInterval(async ()=>{
   if(!CLOUD||applying||document.hidden) return;
-  try{
-    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
-    if(!res.ok) return;
-    const cloud=await res.json();
-    const added=mergeCloud(cloud||{});
-    if(added){
-      DB.lastPull=Date.now();
-      try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){}
-      repaintActive();
-      toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
-    }
-  }catch(e){}
-},45000);
+  const added=await pullMerge();
+  if(added) toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
+},30000);
 function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Recuperation..."); cloudPull(); }
 
 function exportManual(){
@@ -1405,7 +1545,7 @@ function importManual(){
 }
 function wipeAll(){
   if(!confirm("Effacer toutes les donnees locales ? Pense a copier ta sauvegarde avant.")) return;
-  DB={clients:[],seances:[],paiements:[],taches:[],v:1,t:Date.now()};
+  DB={clients:[],seances:[],paiements:[],taches:[],deleted:[],v:1,t:Date.now()};
   try{ localStorage.removeItem(KEY); }catch(e){}
   renderReglages(); toast("Donnees effacees");
 }
