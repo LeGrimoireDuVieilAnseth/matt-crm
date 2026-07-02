@@ -508,9 +508,15 @@ function initials(name){
   const p=name.trim().split(/\s+/);
   return ((p[0]?.[0]||"")+(p[1]?.[0]||"")).toUpperCase()||name[0].toUpperCase();
 }
+/* lecture d'un montant : accepte la virgule OU le point, ignore les espaces */
+function num(v){
+  if(v==null) return 0;
+  const n=parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+  return isNaN(n)?0:n;
+}
 function euros(n){
-  n=Number(n)||0;
-  return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" \u20ac";
+  n=num(n);
+  return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2})+" \u20ac";
 }
 const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
@@ -520,6 +526,26 @@ function fmtDateShort(s){ const d=parseDate(s); if(!d) return ""; return `${d.ge
 function todayStr(){ const d=new Date(); return d.toISOString().slice(0,10); }
 function daysBetween(a,b){ return Math.round((parseDate(a)-parseDate(b))/86400000); }
 function isPast(s){ return s && s<todayStr(); }
+function daysSince(ts){ if(!ts) return 999; return Math.floor((Date.now()-Number(ts))/86400000); }
+/* prospects sans nouvelle depuis 7 jours (jamais confirmes) */
+function staleProspects(){
+  const SEUIL=7;
+  return DB.clients.filter(c=>
+    (c.status==="Prospect"||c.status==="Devis envoye") &&
+    daysSince(c.relancedAt||c.createdAt) >= SEUIL
+  ).sort((a,b)=> (a.relancedAt||a.createdAt||0) - (b.relancedAt||b.createdAt||0));
+}
+/* paiements dont l'echeance de solde est passee et non regles */
+function overduePayments(){
+  const t=todayStr();
+  return DB.paiements.filter(p=>
+    p.statut!=="Solde" && p.dueDate && p.dueDate<t && (num(p.total)-num(p.acompte))>0
+  ).sort((a,b)=>(a.dueDate||"").localeCompare(b.dueDate||""));
+}
+function markRelance(id){
+  const c=clientById(id); if(!c) return;
+  c.relancedAt=Date.now(); saveDB(); buildHome(); toast("Marqué comme relancé");
+}
 function isToday(s){ return s===todayStr(); }
 function relDay(s){
   if(!s) return "";
@@ -605,11 +631,11 @@ function buildHome(){
 
   // argent en attente
   let due=0, encaisse=0;
-  pays.forEach(p=>{ const t=Number(p.total)||0, a=Number(p.acompte)||0; if(p.statut==="Solde"){encaisse+=t;} else {encaisse+=a; due+=(t-a);} });
+  pays.forEach(p=>{ const t=num(p.total), a=num(p.acompte); if(p.statut==="Solde"){encaisse+=t;} else {encaisse+=a; due+=(t-a);} });
 
   // CA du mois en cours (paiements dont la date est ce mois)
   const ym=todayStr().slice(0,7);
-  const caMois=pays.filter(p=>(p.date||"").slice(0,7)===ym).reduce((s,p)=>s+(p.statut==="Solde"?(Number(p.total)||0):(Number(p.acompte)||0)),0);
+  const caMois=pays.filter(p=>(p.date||"").slice(0,7)===ym).reduce((s,p)=>s+(p.statut==="Solde"?(num(p.total)):(num(p.acompte))),0);
 
   // rappels en retard / du jour
   const rappelsChauds=taches.filter(t=>t.dueDate&&t.dueDate<=todayStr()).sort((a,b)=>(a.dueDate||"").localeCompare(b.dueDate||""));
@@ -640,9 +666,41 @@ function buildHome(){
 
   // rappels chauds
   if(rappelsChauds.length){
-    h+=`<div class="section-title"><h2>A traiter</h2><span class="count">${rappelsChauds.length}</span></div>`;
+    h+=`<div class="section-title"><h2>À traiter</h2><span class="count">${rappelsChauds.length}</span></div>`;
     rappelsChauds.slice(0,4).forEach(t=>h+=taskRow(t));
     if(rappelsChauds.length>4) h+=`<button class="btn ghost wide sm" onclick="openRappels()">Voir tous les rappels</button>`;
+  }
+
+  // prospects a relancer (sans nouvelle depuis 7 jours)
+  const relances=staleProspects().filter(c=>passFilter(c.brand));
+  if(relances.length){
+    h+=`<div class="section-title"><h2>À relancer</h2><span class="count">${relances.length}</span></div>`;
+    relances.slice(0,5).forEach(c=>{
+      const depuis=daysSince(c.relancedAt||c.createdAt);
+      h+=`<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
+        <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
+        <div class="row-main"><div class="t">${esc(c.name)}</div><div class="s">${esc(acc(c.status))} . sans nouvelle depuis ${depuis} j</div></div>
+        <div class="row-end">
+          ${c.tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(c.tel.replace(/\s/g,''))}" onclick="event.stopPropagation()">Appeler</a>`:""}
+          <button class="btn sm ghost" style="padding:6px 10px" onclick="event.stopPropagation();markRelance('${c.id}')">Relancé</button>
+        </div>
+      </div>`;
+    });
+  }
+
+  // soldes en retard (echeance passee, pas soldes)
+  const retards=overduePayments().filter(p=>passFilter(p.brand));
+  if(retards.length){
+    h+=`<div class="section-title"><h2>Soldes en retard</h2><span class="count">${retards.length}</span></div>`;
+    retards.slice(0,5).forEach(p=>{
+      const c=clientById(p.clientId);
+      const reste=num(p.total)-num(p.acompte);
+      h+=`<div class="row" data-b="${p.brand}" onclick="openPayEdit('${p.id}')">
+        <div class="avatar" data-b="${p.brand}">${esc(initials(c?c.name:p.label||"?"))}</div>
+        <div class="row-main"><div class="t">${esc(c?c.name:p.label||"Prestation")}</div><div class="s">échéance ${relDay(p.dueDate)}</div></div>
+        <div class="row-end"><span class="badge danger">${euros(reste)} dû</span></div>
+      </div>`;
+    });
   }
 
   // prochaines seances
@@ -935,7 +993,7 @@ function openFiche(id){
   const c=clientById(id); if(!c) return;
   const seances=seancesOfClient(id).sort((a,b)=>b.date.localeCompare(a.date));
   const pays=paysOfClient(id);
-  const totalDu=pays.reduce((s,p)=>s+((Number(p.total)||0)-(p.statut==="Solde"?(Number(p.total)||0):(Number(p.acompte)||0))),0);
+  const totalDu=pays.reduce((s,p)=>s+((num(p.total))-(p.statut==="Solde"?(num(p.total)):(num(p.acompte)))),0);
 
   let h=`<div class="sheet-head">
     <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
@@ -974,12 +1032,18 @@ function openFiche(id){
       if(dejaAgenda){
         h+=`<div style="display:flex;align-items:center;gap:8px;color:var(--ok);font-size:13.5px;font-weight:600;margin:0 2px 4px">
           <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
-          Mariage place dans l'agenda</div>`;
+          Mariage placé dans l'agenda</div>`;
       } else {
         h+=`<button class="btn ghost wide sm" style="margin-bottom:4px" onclick="addWeddingToAgenda('${c.id}')">
           <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M12 12v4M10 14h4"/></svg>
-          Ajouter le mariage a l'agenda</button>`;
+          Ajouter le mariage à l'agenda</button>`;
       }
+      h+=gcalButton({
+        title:"Mariage "+c.name,
+        dateISO:c.eventDate,
+        location:(c.logistics&&c.logistics.domaine)||"",
+        details:[c.tel?"Tel : "+c.tel:"",c.email||""].filter(Boolean).join(" . ")
+      },"Ajouter à Google Agenda");
     }
   }
 
@@ -1044,7 +1108,7 @@ function openFiche(id){
   h+=`<div class="section-title"><h2 style="font-size:18px">Paiements</h2><button class="btn sm ghost" onclick="openPayEdit(null,'${c.id}')">Ajouter</button></div>`;
   if(pays.length){
     pays.forEach(p=>{
-      const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0);
+      const t=num(p.total),a=p.statut==="Solde"?t:(num(p.acompte));
       h+=`<div class="relation" onclick="openPayEdit('${p.id}')">
         <div class="ri"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div>
         <div class="rt"><div class="a">${esc(p.label||"Prestation")}</div><div class="b">${euros(a)} sur ${euros(t)}</div></div>
@@ -1156,10 +1220,41 @@ function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v
 function mapsLink(addr){
   if(!addr) return "";
   const u="https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(addr);
-  return ` <a href="${u}" target="_blank" rel="noopener" class="itin"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>Itinéraire</a>`;
+  return ` <a href="${u}" target="_blank" rel="noopener" class="itin"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>Y aller</a>`;
 }
 /* valeur avec lien itineraire */
 function kvAddr(k,addr){ return `<div class="kv"><div class="k">${k}</div><div class="v">${esc(addr)}${mapsLink(addr)}</div></div>`; }
+
+/* lien "Ajouter a Google Agenda" (evenement pre-rempli) */
+function gcalLink(opts){
+  const {title,dateISO,time,durationMin,location,details}=opts;
+  if(!dateISO) return "";
+  let dates;
+  if(time){
+    const start=dateISO.replace(/-/g,"")+"T"+time.replace(":","")+"00";
+    const d=parseDate(dateISO); d.setHours(parseInt(time.slice(0,2)||"0"),parseInt(time.slice(3,5)||"0"));
+    const end=new Date(d.getTime()+(durationMin||120)*60000);
+    const pad=n=>String(n).padStart(2,"0");
+    const endStr=end.getFullYear()+pad(end.getMonth()+1)+pad(end.getDate())+"T"+pad(end.getHours())+pad(end.getMinutes())+"00";
+    dates=start+"/"+endStr;
+  } else {
+    const d=parseDate(dateISO); const next=new Date(d.getTime()+86400000);
+    const pad=n=>String(n).padStart(2,"0");
+    const ymd=x=>x.getFullYear()+pad(x.getMonth()+1)+pad(x.getDate());
+    dates=ymd(d)+"/"+ymd(next);
+  }
+  const u="https://calendar.google.com/calendar/render?action=TEMPLATE"
+    +"&text="+encodeURIComponent(title||"Rendez-vous")
+    +"&dates="+dates
+    +(location?"&location="+encodeURIComponent(location):"")
+    +(details?"&details="+encodeURIComponent(details):"");
+  return u;
+}
+function gcalButton(opts,label){
+  const u=gcalLink(opts); if(!u) return "";
+  return `<a href="${u}" target="_blank" rel="noopener" class="btn ghost sm wide" style="margin-bottom:4px">
+    <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/><path d="M12 12v4M10 14h4"/></svg>${label||"Ajouter a Google Agenda"}</a>`;
+}
 
 /* place la date du mariage dans l'agenda (cree une seance de type Mariage) */
 function addWeddingToAgenda(id){
@@ -1218,7 +1313,7 @@ function openClientEdit(id){
     </div>
     <div class="field two"><label>Réseaux & budget</label>
       <input id="fInsta" value="${c?esc(c.insta||''):''}" placeholder="@instagram">
-      <input id="fBudget" value="${c?esc(c.budget||''):''}" placeholder="Budget (euros)" inputmode="numeric">
+      <input id="fBudget" value="${c?esc(c.budget||''):''}" placeholder="Budget (euros)" inputmode="decimal">
     </div>
     <div class="field"><label>Vient de</label>
       <select id="fSource">
@@ -1342,12 +1437,17 @@ function openSeance(id){
   let h=`<h2>${esc(acc(s.type)||"Séance")}</h2>
     <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge(s.brand)}<span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span></div>
     <div class="card">`;
-  h+=kv("Quand",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
+  h+=kv("Quand",`${fmtDate(s.date)}${s.time?" à "+s.time.replace(":","h"):""}`);
   if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
   if(s.place) h+=kvAddr("Lieu",s.place);
   if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
   h+=`</div>
-    <div style="display:flex;gap:9px;margin-top:16px">
+    <div style="margin-top:14px">${gcalButton({
+      title:(acc(s.type)||"Séance")+(c?" "+c.name:""),
+      dateISO:s.date, time:s.time||"", durationMin:120,
+      location:s.place||"", details:c&&c.tel?"Tel : "+c.tel:""
+    },"Ajouter à Google Agenda")}</div>
+    <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier</button>
       ${c&&c.tel?`<a class="btn" style="flex:1" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
     </div>`;
@@ -1405,7 +1505,7 @@ function renderPaiements(){
   const pays=DB.paiements.filter(p=>passFilter(p.brand));
   // stats
   let du=0,recu=0,total=0;
-  pays.forEach(p=>{ const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0); total+=t; recu+=a; du+=(t-a); });
+  pays.forEach(p=>{ const t=num(p.total),a=p.statut==="Solde"?t:(num(p.acompte)); total+=t; recu+=a; du+=(t-a); });
   document.getElementById("payStats").innerHTML=`
     <div class="stat"><div class="lab">Encaisse</div><div class="num euro">${euros(recu)}</div><div class="foot">sur ${euros(total)} facture</div></div>
     <div class="stat"><div class="lab">Reste à encaisser</div><div class="num euro">${euros(du)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} en cours</div></div>`;
@@ -1430,7 +1530,7 @@ function renderPaiements(){
   }
   box.innerHTML=list.map(p=>{
     const c=clientById(p.clientId);
-    const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0);
+    const t=num(p.total),a=p.statut==="Solde"?t:(num(p.acompte));
     const pct=t?Math.min(100,Math.round(a/t*100)):0;
     return `<div class="row" data-b="${p.brand}" onclick="openPayEdit('${p.id}')" style="align-items:flex-start;flex-direction:column;gap:0;padding-bottom:15px">
       <div style="display:flex;align-items:center;gap:13px;width:100%">
@@ -1457,8 +1557,8 @@ function openPayEdit(id,clientId){
     <div class="field"><label>Client</label>${clientPicker("pClient",preClient)}</div>
     <div class="field"><label>Libellé</label><input id="pLabel" value="${p?esc(p.label||""):""}" placeholder="Ex. Forfait mariage, séance grossesse..."></div>
     <div class="field two"><label>Montants (euros)</label>
-      <input id="pTotal" inputmode="numeric" value="${p?esc(p.total||""):""}" placeholder="Total">
-      <input id="pAcompte" inputmode="numeric" value="${p?esc(p.acompte||""):""}" placeholder="Acompte recu">
+      <input id="pTotal" inputmode="decimal" value="${p?esc(p.total||""):""}" placeholder="Total">
+      <input id="pAcompte" inputmode="decimal" value="${p?esc(p.acompte||""):""}" placeholder="Acompte reçu">
     </div>
     <div class="field"><label>Statut</label>
       <select id="pStatus">${PAY_STATUS.map(x=>`<option value="${x}" ${p&&p.statut===x?"selected":(!p&&x==="En attente"?"selected":"")}>${acc(x)}</option>`).join("")}</select>
@@ -1603,6 +1703,9 @@ function renderReglages(){
       <div class="stat"><div class="lab">Rappels</div><div class="num">${nbT}</div></div>
     </div>
 
+    <div class="grouplab">Chiffre d'affaires</div>
+    <div class="card" style="padding:16px" id="caCard"></div>
+
     <div class="grouplab">Synchronisation</div>
     <div class="card" style="padding:16px">
       <div style="font-weight:600;margin-bottom:6px">${CLOUD?"Synchro auto active":"Mode local"}</div>
@@ -1648,9 +1751,58 @@ function renderReglages(){
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
   renderNotifs();
+  renderCA();
   renderContacts(contactsBrand);
 }
-let contactsBrand="all";
+let caYearOffset=0;
+function encaisseOf(p){ return p.statut==="Solde"?num(p.total):num(p.acompte); }
+function renderCA(){
+  const box=document.getElementById("caCard");
+  if(!box) return;
+  const year=new Date().getFullYear()+caYearOffset;
+  const ys=String(year);
+  const pays=DB.paiements.filter(p=>(p.date||"").slice(0,4)===ys);
+  const total=pays.reduce((s,p)=>s+encaisseOf(p),0);
+  // par mois
+  const parMois=new Array(12).fill(0);
+  pays.forEach(p=>{ const m=parseInt((p.date||"").slice(5,7))-1; if(m>=0&&m<12) parMois[m]+=encaisseOf(p); });
+  const maxM=Math.max(1,...parMois);
+  // par marque
+  const parMarque={};
+  BRAND_ORDER.forEach(b=>parMarque[b]=0);
+  pays.forEach(p=>{ if(parMarque[p.brand]!=null) parMarque[p.brand]+=encaisseOf(p); });
+
+  let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <button class="icon-btn" style="width:30px;height:30px" onclick="caYearOffset--;renderCA()"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <div style="text-align:center"><div style="font-size:12px;color:var(--ink-3)">Encaissé en ${year}</div><div style="font-family:'Fraunces';font-size:26px;font-weight:600">${euros(total)}</div></div>
+    <button class="icon-btn" style="width:30px;height:30px;${caYearOffset>=0?'opacity:.35;pointer-events:none':''}" onclick="caYearOffset++;renderCA()"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none"><path d="M9 6l6 6-6 6"/></svg></button>
+  </div>`;
+  // graphe mensuel
+  const moisAbbr=["J","F","M","A","M","J","J","A","S","O","N","D"];
+  h+=`<div style="display:flex;align-items:flex-end;gap:4px;height:90px;margin:6px 0 4px">`;
+  for(let i=0;i<12;i++){
+    const hp=Math.round(parMois[i]/maxM*100);
+    h+=`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">
+      <div title="${euros(parMois[i])}" style="width:100%;height:${Math.max(2,hp)}%;background:${parMois[i]?'var(--ink)':'var(--surface-3)'};border-radius:4px 4px 0 0"></div>
+      <div style="font-size:9px;color:var(--ink-3)">${moisAbbr[i]}</div>
+    </div>`;
+  }
+  h+=`</div>`;
+  // repartition par marque
+  h+=`<div style="margin-top:14px;display:flex;flex-direction:column;gap:7px">`;
+  BRAND_ORDER.forEach(b=>{
+    const v=parMarque[b]; const pct=total?Math.round(v/total*100):0;
+    h+=`<div style="display:flex;align-items:center;gap:9px">
+      <div style="width:9px;height:9px;border-radius:50%;background:${BRANDS[b].color};flex:0 0 auto"></div>
+      <div style="flex:1;font-size:13px">${BRANDS[b].name}</div>
+      <div style="font-size:13px;font-weight:600">${euros(v)}</div>
+      <div style="font-size:12px;color:var(--ink-3);width:34px;text-align:right">${pct}%</div>
+    </div>`;
+  });
+  h+=`</div>
+    <div class="hint" style="margin-top:10px">Calculé sur les paiements encaissés : solde complet, ou acompte reçu si le dossier n'est pas soldé.</div>`;
+  box.innerHTML=h;
+}
 function collectContacts(brand){
   const emails=new Map(), phones=new Map();
   DB.clients.forEach(c=>{
