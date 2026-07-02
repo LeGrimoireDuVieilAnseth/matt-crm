@@ -331,7 +331,7 @@
     <div style="flex:1;min-width:0;">
       <h1 id="topTitle">Aujourd'hui</h1>
     </div>
-    <button class="icon-btn" onclick="openReglages()" aria-label="Reglages">
+    <button class="icon-btn" onclick="openReglages()" aria-label="Réglages">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
@@ -385,7 +385,7 @@
 <!-- ===================== REGLAGES / SYNC ===================== -->
 <section id="reglages" class="view">
   <button class="backlink" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Accueil</button>
-  <div class="section-title" style="margin-top:6px;"><h2>Reglages</h2></div>
+  <div class="section-title" style="margin-top:6px;"><h2>Réglages</h2></div>
   <div id="reglagesBody"></div>
 </section>
 
@@ -425,7 +425,7 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="5.4" stroke="#fff" stroke-width="1.9" fill="none"/><circle cx="12" cy="13" r="2.2" fill="#e8834a"/><path d="M5 8h3l1.4-2h5.2L16 8h3v1" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
     </div>
     <h2>Studio</h2>
-    <div class="lock-sub" id="lockSub">Espace protege.</div>
+    <div class="lock-sub" id="lockSub">Espace protégé.</div>
 
     <!-- zone empreinte (mise en avant si activee) -->
     <div id="bioZone" style="display:none">
@@ -509,7 +509,7 @@ function euros(n){
   n=Number(n)||0;
   return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" \u20ac";
 }
-const MOIS=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
+const MOIS=["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
 const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
 function parseDate(s){ if(!s) return null; const d=new Date(s+"T00:00:00"); return isNaN(d)?null:d; }
 function fmtDate(s){ const d=parseDate(s); if(!d) return ""; return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]}`; }
@@ -540,7 +540,7 @@ let FILTER="all";
 function passFilter(b){ return FILTER==="all"||b===FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",fiche:"Fiche client",reglages:"Reglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",fiche:"Fiche client",reglages:"Réglages"};
 function setView(id){
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
   document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
@@ -623,7 +623,7 @@ function buildHome(){
 
   // stats
   h+=`<div class="stat-grid">
-    <div class="stat"><div class="lab">Seances a venir</div><div class="num">${upcoming.length}</div><div class="foot">${todaySeances.length? todaySeances.length+" aujourd'hui":"rien aujourd'hui"}</div></div>
+    <div class="stat"><div class="lab">Séances à venir</div><div class="num">${upcoming.length}</div><div class="foot">${todaySeances.length? todaySeances.length+" aujourd'hui":"rien aujourd'hui"}</div></div>
     <div class="stat"><div class="lab">En attente de paiement</div><div class="num euro">${euros(due)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} dossier(s)</div></div>
     <div class="stat"><div class="lab">Encaisse ce mois</div><div class="num euro">${euros(caMois)}</div><div class="foot">${MOIS[now.getMonth()]}</div></div>
     <div class="stat"><div class="lab">Clients actifs</div><div class="num">${clients.length}</div><div class="foot">${DB.clients.filter(c=>passFilter(c.brand)&&c.status==="Prospect").length} prospect(s)</div></div>
@@ -631,7 +631,7 @@ function buildHome(){
 
   // aujourd'hui
   if(todaySeances.length){
-    h+=`<div class="section-title"><h2>Le jour meme</h2></div>`;
+    h+=`<div class="section-title"><h2>Le jour même</h2></div>`;
     todaySeances.forEach(s=>h+=seanceRow(s,true));
   }
 
@@ -645,7 +645,7 @@ function buildHome(){
   // prochaines seances
   const next=upcoming.filter(s=>!isToday(s.date)).slice(0,5);
   if(next.length){
-    h+=`<div class="section-title"><h2>Prochaines seances</h2><span class="count" onclick="openAgenda()" style="cursor:pointer">tout voir</span></div>`;
+    h+=`<div class="section-title"><h2>Prochaines séances</h2><span class="count" onclick="openAgenda()" style="cursor:pointer">tout voir</span></div>`;
     next.forEach(s=>h+=seanceRow(s));
   }
 
@@ -670,14 +670,14 @@ function buildHome(){
   if(!upcoming.length && !rappelsChauds.length && !DB.clients.length){
     h+=`<div class="empty" style="margin-top:30px;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="6"/><circle cx="12" cy="13" r="2.4"/><path d="M5 8h3l1.4-2h5.2L16 8h3"/></svg>
-      <div class="t">Ton atelier est pret</div>
-      <div class="s">Ajoute ton premier client avec le bouton plus en bas a droite. Fiches, seances, paiements et rappels vivront ici.</div>
+      <div class="t">Ton atelier est prêt</div>
+      <div class="s">Ajoute ton premier client avec le bouton plus en bas a droite. Fiches, séances, paiements et rappels vivront ici.</div>
     </div>`;
   } else if(!upcoming.length && !rappelsChauds.length){
     h+=`<div class="empty" style="margin-top:24px;">
       <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>
       <div class="t">Rien de chaud pour l'instant</div>
-      <div class="s">Aucune seance ni rappel a venir. Profite, ou planifie la suite.</div>
+      <div class="s">Aucune séance ni rappel a venir. Profite, ou planifie la suite.</div>
     </div>`;
   }
 
@@ -694,10 +694,10 @@ function seanceRow(s,big){
     <div class="avatar" data-b="${s.brand}">${esc(initials(name))}</div>
     <div class="row-main">
       <div class="t">${esc(name)}</div>
-      <div class="s">${esc(s.type||BRANDS[s.brand]?.tag||"")}${s.place?" \u00b7 "+esc(s.place):""}</div>
+      <div class="s">${esc(acc(s.type)||BRANDS[s.brand]?.tag||"")}${s.place?" \u00b7 "+esc(s.place):""}</div>
     </div>
     <div class="row-end">
-      <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span>
+      <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span>
       <span style="font-size:12.5px;color:var(--ink-2);font-weight:600">${esc(when)}</span>
     </div>
   </div>`;
@@ -711,7 +711,7 @@ function taskRow(t){
     </div>
     <div class="row-main">
       <div class="t">${esc(t.title)}</div>
-      <div class="s">${c?esc(c.name)+" \u00b7 ":""}${t.dueDate?relDay(t.dueDate):"sans echeance"}</div>
+      <div class="s">${c?esc(c.name)+" \u00b7 ":""}${t.dueDate?relDay(t.dueDate):"sans échéance"}</div>
     </div>
     <div class="row-end">
       ${late?'<span class="badge danger">en retard</span>':(t.dueDate&&isToday(t.dueDate)?'<span class="badge warn">aujourd\'hui</span>':'')}
@@ -730,14 +730,26 @@ let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
 /* libelle de la date d'evenement selon la marque */
 function eventLabel(brand){
   if(brand==="maison-lumiere") return "Date du mariage";
-  if(brand==="mybabyshoot") return "Date prevue (naissance)";
-  return "Date de l'evenement";
+  if(brand==="mybabyshoot") return "Date prévue (naissance)";
+  return "Date de l'événement";
 }
 function inspirationLabel(brand){
-  if(brand==="maison-lumiere") return "Inspiration souhaitee par les maries";
-  if(brand==="mybabyshoot") return "Inspiration souhaitee par les parents";
-  return "Inspiration souhaitee";
+  if(brand==="maison-lumiere") return "Inspiration souhaitée par les mariés";
+  if(brand==="mybabyshoot") return "Inspiration souhaitée par les parents";
+  return "Inspiration souhaitée";
 }
+
+/* affichage accentue des statuts et types (les valeurs stockees restent inchangees) */
+const ACCENTS={
+  "Devis envoye":"Devis envoyé","Confirme":"Confirmé","Seance faite":"Séance faite","Livre":"Livré","Archive":"Archivé",
+  "A venir":"À venir","Confirmee":"Confirmée","Annulee":"Annulée",
+  "Acompte recu":"Acompte reçu","Solde":"Soldé",
+  "RDV telephonique":"RDV téléphonique",
+  "Seance grossesse":"Séance grossesse","Naissance / nouveau-ne":"Naissance / nouveau-né","Suivi bebe":"Suivi bébé",
+  "Ceremonie seule":"Cérémonie seule","Video mariage":"Vidéo mariage","Prestation video":"Prestation vidéo","Contenu reseaux":"Contenu réseaux"
+};
+function acc(v){ return v ? (ACCENTS[v]||v) : v; }
+
 /* compte a rebours joli : "J-45", "aujourd'hui", "passe" */
 function countdown(dateStr){
   if(!dateStr) return "";
@@ -763,7 +775,7 @@ function renderClients(){
     subWrap.style.display="flex";
     subWrap.innerHTML=`
       <button class="${mlView==='clients'?'on':''}" onclick="setMlView('clients')">Fiches clients</button>
-      <button class="${mlView==='rdv'?'on':''}" onclick="setMlView('rdv')">RDV telephonique${nbRdv?" ("+nbRdv+")":""}</button>`;
+      <button class="${mlView==='rdv'?'on':''}" onclick="setMlView('rdv')">RDV téléphonique${nbRdv?" ("+nbRdv+")":""}</button>`;
   } else {
     subWrap.style.display="none";
   }
@@ -778,7 +790,7 @@ function renderClients(){
   const pills=document.getElementById("clientStatusPills");
   pills.style.display="flex";
   let ph=`<button class="pill ${clientStatusFilter==="all"?"on":""}" onclick="setClientStatus('all')">Tous</button>`;
-  CLIENT_STATUS.forEach(s=>{ ph+=`<button class="pill ${clientStatusFilter===s?"on":""}" onclick="setClientStatus('${s}')">${s}</button>`; });
+  CLIENT_STATUS.forEach(s=>{ ph+=`<button class="pill ${clientStatusFilter===s?"on":""}" onclick="setClientStatus('${s}')">${acc(s)}</button>`; });
   pills.innerHTML=ph;
 
   // titre = nom de la categorie active
@@ -810,7 +822,7 @@ function renderClients(){
     box.innerHTML=`<div class="empty">
       <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>
       <div class="t">${DB.clients.length?"Aucun client ici":"Pas encore de client"}</div>
-      <div class="s">${DB.clients.length?"Change de categorie, de filtre, ou vide la recherche.":"Touche le plus en bas a droite pour creer ta premiere fiche."}</div>
+      <div class="s">${DB.clients.length?"Change de categorie, de filtre, ou vide la recherche.":"Touche le plus en bas à droite pour créer ta première fiche."}</div>
     </div>`;
     return;
   }
@@ -824,7 +836,7 @@ function renderClients(){
     } else {
       const seances=seancesOfClient(c.id).filter(s=>s.type!=="RDV telephonique");
       const nextS=seances.filter(s=>s.date>=todayStr()&&s.status!=="Annulee").sort((a,b)=>a.date.localeCompare(b.date))[0];
-      sub=nextS?`Seance ${relDay(nextS.date)}`:(c.type||BRANDS[c.brand]?.tag||"");
+      sub=nextS?`Seance ${relDay(nextS.date)}`:(acc(c.type)||BRANDS[c.brand]?.tag||"");
       end="";
     }
     return `<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
@@ -834,7 +846,7 @@ function renderClients(){
         <div class="s">${esc(sub)}</div>
       </div>
       <div class="row-end">
-        <span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status)}</span>
+        <span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(acc(c.status))}</span>
         ${end}
       </div>
       <button class="row-del" onclick="event.stopPropagation();deleteClient('${c.id}')" aria-label="Supprimer ${esc(c.name)}">
@@ -876,7 +888,7 @@ function renderRdvList(){
     return `<div class="row" data-b="maison-lumiere" onclick="openRdv('${s.id}')">
       <div class="avatar" data-b="maison-lumiere"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg></div>
       <div class="row-main"><div class="t">${esc(name)}</div><div class="s">${esc(s.objet||"Appel")}</div></div>
-      <div class="row-end"><span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(s.status)}</span><span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
+      <div class="row-end"><span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(acc(s.status))}</span><span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
     </div>`;
   };
   let h="";
@@ -888,14 +900,14 @@ function openRdv(id){
   const s=DB.seances.find(x=>x.id===id); if(!s) return;
   const c=s.clientId?clientById(s.clientId):null;
   let h=`<h2>RDV telephonique</h2>
-    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("maison-lumiere")}<span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(s.status)}</span></div>
+    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("maison-lumiere")}<span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(acc(s.status))}</span></div>
     <div class="card">`;
   h+=kv("Quand rappeler",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
-  if(s.creneau) h+=kv("Creneau demande",esc(s.creneau));
+  if(s.creneau) h+=kv("Créneau demandé",esc(s.creneau));
   if(s.objet) h+=kv("Objet",esc(s.objet));
   if(c){
     h+=kv("Contact",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
-    if(c.tel) h+=kv("Telephone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
+    if(c.tel) h+=kv("Téléphone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
   }
   if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
   h+=`</div>
@@ -926,7 +938,7 @@ function openFiche(id){
     <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
     <div style="flex:1;min-width:0;">
       <h2>${esc(c.name)}</h2>
-      <div class="meta">${brandBadge(c.brand)}<span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(c.status)}</span>${c.fromSite?'<span class="badge info"><span class="dotm"></span>Devis site</span>':''}</div>
+      <div class="meta">${brandBadge(c.brand)}<span class="badge ${STATUS_STYLE[c.status]||"neutral"}">${esc(acc(c.status))}</span>${c.fromSite?'<span class="badge info"><span class="dotm"></span>Devis site</span>':''}</div>
     </div>
   </div>`;
 
@@ -970,13 +982,13 @@ function openFiche(id){
 
   // infos
   h+=`<div class="card" style="margin:12px 0;">`;
-  if(c.type) h+=kv("Prestation",esc(c.type));
+  if(c.type) h+=kv("Prestation",esc(acc(c.type)));
   if(c.source) h+=kv("Vient de",esc(c.source));
-  if(c.tel) h+=kv("Telephone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
+  if(c.tel) h+=kv("Téléphone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
   if(c.email) h+=kv("Email",`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`);
   if(c.insta) h+=kv("Instagram",esc(c.insta));
-  if(c.budget) h+=kv("Budget evoque",euros(c.budget));
-  if(!c.type&&!c.tel&&!c.email&&!c.insta&&!c.source) h+=`<div class="kv"><div class="v" style="color:var(--ink-3)">Aucun contact enregistre. Touche Modifier pour completer.</div></div>`;
+  if(c.budget) h+=kv("Budget évoqué",euros(c.budget));
+  if(!c.type&&!c.tel&&!c.email&&!c.insta&&!c.source) h+=`<div class="kv"><div class="v" style="color:var(--ink-3)">Aucun contact enregistré. Touche Modifier pour compléter.</div></div>`;
   h+=`</div>`;
 
   if(c.notes){
@@ -1008,22 +1020,22 @@ function openFiche(id){
   if(c.brand==="maison-lumiere" && c.logistics && (c.logistics.mairie||c.logistics.ceremonie||c.logistics.domaine)){
     h+=`<div class="grouplab" style="margin-top:22px">Logistique jour J</div><div class="card">`;
     if(c.logistics.mairie) h+=kv("Mairie",esc(c.logistics.mairie));
-    if(c.logistics.ceremonie) h+=kv("Ceremonie",esc(c.logistics.ceremonie));
-    if(c.logistics.domaine) h+=kv("Domaine / reception",esc(c.logistics.domaine));
+    if(c.logistics.ceremonie) h+=kv("Cérémonie",esc(c.logistics.ceremonie));
+    if(c.logistics.domaine) h+=kv("Domaine / réception",esc(c.logistics.domaine));
     h+=`</div>`;
   }
 
   // seances liees
-  h+=`<div class="section-title"><h2 style="font-size:18px">Seances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
+  h+=`<div class="section-title"><h2 style="font-size:18px">Séances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
   if(seances.length){
     seances.forEach(s=>{
       h+=`<div class="relation" onclick="openSeance('${s.id}')">
         <div class="ri"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg></div>
-        <div class="rt"><div class="a">${esc(s.type||"Seance")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
-        <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span>
+        <div class="rt"><div class="a">${esc(acc(s.type)||"Séance")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
+        <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span>
       </div>`;
     });
-  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucune seance pour ce client.</div>`;
+  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucune séance pour ce client.</div>`;
 
   // paiements lies
   h+=`<div class="section-title"><h2 style="font-size:18px">Paiements</h2><button class="btn sm ghost" onclick="openPayEdit(null,'${c.id}')">Ajouter</button></div>`;
@@ -1033,11 +1045,11 @@ function openFiche(id){
       h+=`<div class="relation" onclick="openPayEdit('${p.id}')">
         <div class="ri"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div>
         <div class="rt"><div class="a">${esc(p.label||"Prestation")}</div><div class="b">${euros(a)} sur ${euros(t)}</div></div>
-        <span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(p.statut)}</span>
+        <span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(acc(p.statut))}</span>
       </div>`;
     });
-    if(totalDu>0) h+=`<div style="text-align:right;font-weight:600;font-size:14px;margin-top:4px;color:var(--warn)">Reste du : ${euros(totalDu)}</div>`;
-  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucun paiement enregistre.</div>`;
+    if(totalDu>0) h+=`<div style="text-align:right;font-weight:600;font-size:14px;margin-top:4px;color:var(--warn)">Reste dû : ${euros(totalDu)}</div>`;
+  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucun paiement enregistré.</div>`;
 
   h+=`<div class="divider"></div>
     <div style="display:flex;gap:10px;">
@@ -1111,7 +1123,7 @@ async function onPhotoPicked(clientId,input){
     }catch(e){}
   }
   saveDB();
-  if(msg) msg.textContent = done?(done+" photo"+(done>1?"s":"")+" ajoutee"+(done>1?"s":"")):"Aucune photo ajoutee";
+  if(msg) msg.textContent = done?(done+" photo"+(done>1?"s":"")+" ajoutée"+(done>1?"s":"")):"Aucune photo ajoutée";
   openFiche(clientId);
 }
 
@@ -1141,13 +1153,13 @@ function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v
 /* place la date du mariage dans l'agenda (cree une seance de type Mariage) */
 function addWeddingToAgenda(id){
   const c=clientById(id); if(!c||!c.eventDate) return;
-  if(DB.seances.some(s=>s.clientId===id&&s.type==="Mariage"&&s.date===c.eventDate)){ toast("Deja dans l'agenda"); openFiche(id); return; }
+  if(DB.seances.some(s=>s.clientId===id&&s.type==="Mariage"&&s.date===c.eventDate)){ toast("Déjà dans l'agenda"); openFiche(id); return; }
   DB.seances.push({
     id:uid(), clientId:id, brand:"maison-lumiere", type:"Mariage",
     date:c.eventDate, time:"", place:"", status:"A venir",
     notes:"Jour du mariage", createdAt:Date.now()
   });
-  saveDB(); openFiche(id); toast("Mariage ajoute a l'agenda");
+  saveDB(); openFiche(id); toast("Mariage ajouté à l'agenda");
 }
 
 /* ============================================================
@@ -1173,7 +1185,7 @@ function pickBrand(b){
 }
 function fillTypeOptions(sel,brand,current){
   const list=TYPES[brand]||[];
-  sel.innerHTML=`<option value="">Type de prestation...</option>`+list.map(t=>`<option ${current===t?"selected":""}>${t}</option>`).join("")+`<option value="__autre" ${current&&!list.includes(current)?"selected":""}>Autre...</option>`;
+  sel.innerHTML=`<option value="">Type de prestation...</option>`+list.map(t=>`<option value="${t}" ${current===t?"selected":""}>${acc(t)}</option>`).join("")+`<option value="__autre" ${current&&!list.includes(current)?"selected":""}>Autre...</option>`;
 }
 
 function openClientEdit(id){
@@ -1183,37 +1195,37 @@ function openClientEdit(id){
     <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
     <div class="field"><label>Nom du client *</label><input id="fName" value="${c?esc(c.name):""}" placeholder="Ex. Sophie et Julien"></div>
     <div class="field"><label>Statut</label>
-      <select id="fStatus">${CLIENT_STATUS.map(s=>`<option ${c&&c.status===s?"selected":""}>${s}</option>`).join("")}</select>
+      <select id="fStatus">${CLIENT_STATUS.map(s=>`<option value="${s}" ${c&&c.status===s?"selected":""}>${acc(s)}</option>`).join("")}</select>
     </div>
     <div class="field"><label>Prestation</label>
       <select id="typeSelect" onchange="if(this.value==='__autre'){document.getElementById('typeOther').style.display='block'}else{document.getElementById('typeOther').style.display='none'}"></select>
-      <input id="typeOther" style="display:none;margin-top:8px" placeholder="Precise le type" value="${c&&!(TYPES[editBrandTmp]||[]).includes(c.type||'')?esc(c.type||''):''}">
+      <input id="typeOther" style="display:none;margin-top:8px" placeholder="Précise le type" value="${c&&!(TYPES[editBrandTmp]||[]).includes(c.type||'')?esc(c.type||''):''}">
     </div>
     <div class="field two"><label>Contact</label>
-      <input id="fTel" value="${c?esc(c.tel||''):''}" placeholder="Telephone" inputmode="tel">
+      <input id="fTel" value="${c?esc(c.tel||''):''}" placeholder="Téléphone" inputmode="tel">
       <input id="fEmail" value="${c?esc(c.email||''):''}" placeholder="Email" inputmode="email">
     </div>
-    <div class="field two"><label>Reseaux & budget</label>
+    <div class="field two"><label>Réseaux & budget</label>
       <input id="fInsta" value="${c?esc(c.insta||''):''}" placeholder="@instagram">
       <input id="fBudget" value="${c?esc(c.budget||''):''}" placeholder="Budget (euros)" inputmode="numeric">
     </div>
     <div class="field"><label>Vient de</label>
       <select id="fSource">
-        ${["","Instagram","TikTok","Bouche a oreille","Google","Site web","Ancien client","Salon / evenement","Autre"].map(s=>`<option ${c&&c.source===s?"selected":""} value="${s}">${s||"Source du contact..."}</option>`).join("")}
+        ${["","Instagram","TikTok","Bouche à oreille","Google","Site web","Ancien client","Salon / événement","Autre"].map(s=>`<option ${c&&c.source===s?"selected":""} value="${s}">${s||"Source du contact..."}</option>`).join("")}
       </select>
     </div>
     <div class="field"><label id="eventDateLabel">${eventLabel(editBrandTmp)}</label>
       <input id="fEvent" type="date" value="${c?esc(c.eventDate||''):''}">
       <div class="hint">Pour un mariage : la date du grand jour. Laisse vide si pas encore fixe.</div>
     </div>
-    <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Attentes, contexte, details a retenir...">${c?esc(c.notes||''):''}</textarea></div>
-    <div class="field"><label id="wishesLabel">${inspirationLabel(editBrandTmp)}</label><textarea id="fWishes" placeholder="Style souhaite, inspirations, contraintes, demandes speciales...">${c?esc(c.wishes||''):''}</textarea></div>
+    <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Attentes, contexte, détails à retenir...">${c?esc(c.notes||''):''}</textarea></div>
+    <div class="field"><label id="wishesLabel">${inspirationLabel(editBrandTmp)}</label><textarea id="fWishes" placeholder="Style souhaité, inspirations, contraintes, demandes spéciales...">${c?esc(c.wishes||''):''}</textarea></div>
     <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
       <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
       <div class="field"><label>Adresse mairie</label><input id="fLogMairie" value="${c&&c.logistics?esc(c.logistics.mairie||''):''}" placeholder="Mairie, heure..."></div>
-      <div class="field"><label>Adresse ceremonie (eglise, laique...)</label><input id="fLogCeremonie" value="${c&&c.logistics?esc(c.logistics.ceremonie||''):''}" placeholder="Lieu de ceremonie, heure..."></div>
-      <div class="field"><label>Adresse domaine / reception</label><input id="fLogDomaine" value="${c&&c.logistics?esc(c.logistics.domaine||''):''}" placeholder="Domaine, salle..."></div>
-      <div class="hint">A remplir une fois le client confirme. Sert a preparer le deroule du jour J.</div>
+      <div class="field"><label>Adresse cérémonie (église, laïque...)</label><input id="fLogCeremonie" value="${c&&c.logistics?esc(c.logistics.ceremonie||''):''}" placeholder="Lieu de cérémonie, heure..."></div>
+      <div class="field"><label>Adresse domaine / réception</label><input id="fLogDomaine" value="${c&&c.logistics?esc(c.logistics.domaine||''):''}" placeholder="Domaine, salle..."></div>
+      <div class="hint">A remplir une fois le client confirmé. Sert à préparer le déroulé du jour J.</div>
     </div>
     <button class="btn wide" style="margin-top:6px" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
   if(c) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteClient('${id}')">Supprimer ce client</button>`;
@@ -1240,8 +1252,8 @@ function saveClient(id){
       domaine:document.getElementById("fLogDomaine").value.trim()
     }
   };
-  if(id){ const ex=clientById(id); if(ex&&ex.photos) data.photos=ex.photos; Object.assign(ex,data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise a jour"); }
-  else { const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc); saveDB(); closeModal(); openFiche(nc.id); toast("Client cree"); }
+  if(id){ const ex=clientById(id); if(ex&&ex.photos) data.photos=ex.photos; Object.assign(ex,data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise à jour"); }
+  else { const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc); saveDB(); closeModal(); openFiche(nc.id); toast("Client créé"); }
 }
 function deleteClient(id){
   const c=clientById(id);
@@ -1255,7 +1267,7 @@ function deleteClient(id){
   DB.seances=DB.seances.filter(s=>s.clientId!==id);
   DB.paiements=DB.paiements.filter(p=>p.clientId!==id);
   DB.taches=DB.taches.filter(t=>t.clientId!==id);
-  saveDB(); closeModal(); openClients(); toast("Client supprime");
+  saveDB(); closeModal(); openClients(); toast("Client supprimé");
 }
 
 /* ============================================================
@@ -1273,16 +1285,16 @@ function openSeanceEdit(id,clientId){
   let h=`<h2>${s?"Modifier la seance":"Nouvelle seance"}</h2>
     <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
     <div class="field"><label>Client</label>${clientPicker("sClient",preClient)}</div>
-    <div class="field"><label>Type de seance</label><select id="sType"></select></div>
+    <div class="field"><label>Type de séance</label><select id="sType"></select></div>
     <div class="field two"><label>Date & heure</label>
       <input id="sDate" type="date" value="${s?s.date:todayStr()}">
       <input id="sTime" type="time" value="${s?s.time||"":""}">
     </div>
-    <div class="field"><label>Lieu</label><input id="sPlace" value="${s?esc(s.place||""):""}" placeholder="Studio, domicile, exterieur..."></div>
+    <div class="field"><label>Lieu</label><input id="sPlace" value="${s?esc(s.place||""):""}" placeholder="Studio, domicile, extérieur..."></div>
     <div class="field"><label>Statut</label>
-      <select id="sStatus">${SEANCE_STATUS.map(x=>`<option ${s&&s.status===x?"selected":(!s&&x==="A venir"?"selected":"")}>${x}</option>`).join("")}</select>
+      <select id="sStatus">${SEANCE_STATUS.map(x=>`<option value="${x}" ${s&&s.status===x?"selected":(!s&&x==="A venir"?"selected":"")}>${acc(x)}</option>`).join("")}</select>
     </div>
-    <div class="field"><label>Notes de seance</label><textarea id="sNotes" placeholder="Deroule, materiel, consignes...">${s?esc(s.notes||""):""}</textarea></div>
+    <div class="field"><label>Notes de séance</label><textarea id="sNotes" placeholder="Déroulé, matériel, consignes...">${s?esc(s.notes||""):""}</textarea></div>
     <button class="btn wide" onclick="saveSeance('${id||""}')">${s?"Enregistrer":"Creer la seance"}</button>`;
   if(s) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer</button>`;
   openModal(h);
@@ -1303,21 +1315,21 @@ function saveSeance(id){
     notes:document.getElementById("sNotes").value.trim()
   };
   if(!data.date){ toast("Choisis une date"); return; }
-  if(s){ Object.assign(s,data); saveDB(); closeModal(); openSeance(id); toast("Seance mise a jour"); }
+  if(s){ Object.assign(s,data); saveDB(); closeModal(); openSeance(id); toast("Séance mise à jour"); }
   else { const ns=Object.assign({id:uid()},data); DB.seances.push(ns); saveDB(); closeModal();
-    if(data.clientId) openFiche(data.clientId); else openAgenda(); toast("Seance ajoutee"); }
+    if(data.clientId) openFiche(data.clientId); else openAgenda(); toast("Séance ajoutée"); }
 }
 function deleteSeance(id){
   const s=DB.seances.find(x=>x.id===id); const cid=s?s.clientId:null;
   DB.deleted=(DB.deleted||[]).concat([id]);
   DB.seances=DB.seances.filter(x=>x.id!==id); saveDB(); closeModal();
-  if(cid) openFiche(cid); else openAgenda(); toast("Seance supprimee");
+  if(cid) openFiche(cid); else openAgenda(); toast("Séance supprimée");
 }
 function openSeance(id){
   const s=DB.seances.find(x=>x.id===id); if(!s) return;
   const c=s.clientId?clientById(s.clientId):null;
-  let h=`<h2>${esc(s.type||"Seance")}</h2>
-    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge(s.brand)}<span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(s.status)}</span></div>
+  let h=`<h2>${esc(acc(s.type)||"Séance")}</h2>
+    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge(s.brand)}<span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span></div>
     <div class="card">`;
   h+=kv("Quand",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
   if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
@@ -1337,7 +1349,7 @@ function openSeance(id){
 let agendaFilter="upcoming";
 function renderAgenda(){
   const pills=document.getElementById("agendaPills");
-  const opts=[["upcoming","A venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passees"],["all","Tout"]];
+  const opts=[["upcoming","À venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passées"],["all","Tout"]];
   pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
 
   let list=DB.seances.filter(s=>passFilter(s.brand));
@@ -1355,7 +1367,7 @@ function renderAgenda(){
     box.innerHTML=`<div class="empty">
       <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>
       <div class="t">Agenda vide</div>
-      <div class="s">Aucune seance dans ce filtre. Cree une seance depuis une fiche client ou le bouton plus.</div>
+      <div class="s">Aucune séance dans ce filtre. Crée une séance depuis une fiche client ou le bouton plus.</div>
     </div>`;
     return;
   }
@@ -1385,10 +1397,10 @@ function renderPaiements(){
   pays.forEach(p=>{ const t=Number(p.total)||0,a=p.statut==="Solde"?t:(Number(p.acompte)||0); total+=t; recu+=a; du+=(t-a); });
   document.getElementById("payStats").innerHTML=`
     <div class="stat"><div class="lab">Encaisse</div><div class="num euro">${euros(recu)}</div><div class="foot">sur ${euros(total)} facture</div></div>
-    <div class="stat"><div class="lab">Reste a encaisser</div><div class="num euro">${euros(du)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} en cours</div></div>`;
+    <div class="stat"><div class="lab">Reste à encaisser</div><div class="num euro">${euros(du)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} en cours</div></div>`;
 
   const pills=document.getElementById("payPills");
-  const opts=[["all","Tous"],["En attente","En attente"],["Acompte recu","Acompte recu"],["Solde","Solde"]];
+  const opts=[["all","Tous"],["En attente","En attente"],["Acompte recu","Acompte reçu"],["Solde","Soldé"]];
   pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${payFilter===k?"on":""}" onclick="setPay('${k}')">${l}</button>`).join("");
 
   let list=pays.slice();
@@ -1416,7 +1428,7 @@ function renderPaiements(){
           <div class="t">${esc(c?c.name:p.label||"Prestation")}</div>
           <div class="s">${esc(p.label||(c?"":"Sans client"))}${p.date?" \u00b7 "+fmtDateShort(p.date):""}</div>
         </div>
-        <div class="row-end"><span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(p.statut)}</span><span style="font-weight:600;font-size:13px">${euros(a)} / ${euros(t)}</span></div>
+        <div class="row-end"><span class="badge ${PAY_STYLE[p.statut]||"neutral"}">${esc(acc(p.statut))}</span><span style="font-weight:600;font-size:13px">${euros(a)} / ${euros(t)}</span></div>
       </div>
       <div class="pay-bar" style="width:100%;margin-left:57px;max-width:calc(100% - 57px)"><div style="width:${pct}%;background:${p.statut==="Solde"?"var(--ok)":"var(--warn)"}"></div></div>
     </div>`;
@@ -1432,20 +1444,20 @@ function openPayEdit(id,clientId){
   let h=`<h2>${p?"Modifier le paiement":"Nouveau paiement"}</h2>
     <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
     <div class="field"><label>Client</label>${clientPicker("pClient",preClient)}</div>
-    <div class="field"><label>Libelle</label><input id="pLabel" value="${p?esc(p.label||""):""}" placeholder="Ex. Forfait mariage, seance grossesse..."></div>
+    <div class="field"><label>Libellé</label><input id="pLabel" value="${p?esc(p.label||""):""}" placeholder="Ex. Forfait mariage, séance grossesse..."></div>
     <div class="field two"><label>Montants (euros)</label>
       <input id="pTotal" inputmode="numeric" value="${p?esc(p.total||""):""}" placeholder="Total">
       <input id="pAcompte" inputmode="numeric" value="${p?esc(p.acompte||""):""}" placeholder="Acompte recu">
     </div>
     <div class="field"><label>Statut</label>
-      <select id="pStatus">${PAY_STATUS.map(x=>`<option ${p&&p.statut===x?"selected":(!p&&x==="En attente"?"selected":"")}>${x}</option>`).join("")}</select>
+      <select id="pStatus">${PAY_STATUS.map(x=>`<option value="${x}" ${p&&p.statut===x?"selected":(!p&&x==="En attente"?"selected":"")}>${acc(x)}</option>`).join("")}</select>
     </div>
     <div class="field two"><label>Dates</label>
       <input id="pDate" type="date" value="${p?(p.date||todayStr()):todayStr()}">
-      <input id="pDue" type="date" value="${p?(p.dueDate||""):""}" title="Echeance du solde">
+      <input id="pDue" type="date" value="${p?(p.dueDate||""):""}" title="Échéance du solde">
     </div>
-    <div class="hint">Date : quand le dossier a ete engage. Deuxieme date : echeance du solde (optionnel).</div>
-    <div class="field" style="margin-top:15px"><label>Notes</label><textarea id="pNotes" placeholder="Mode de reglement, conditions...">${p?esc(p.notes||""):""}</textarea></div>
+    <div class="hint">Date : quand le dossier a été engagé. Deuxième date : échéance du solde (optionnel).</div>
+    <div class="field" style="margin-top:15px"><label>Notes</label><textarea id="pNotes" placeholder="Mode de règlement, conditions...">${p?esc(p.notes||""):""}</textarea></div>
     <button class="btn wide" onclick="savePay('${id||""}')">${p?"Enregistrer":"Ajouter"}</button>`;
   if(p) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deletePay('${id}')">Supprimer</button>`;
   openModal(h);
@@ -1463,15 +1475,15 @@ function savePay(id){
     dueDate:document.getElementById("pDue").value, notes:document.getElementById("pNotes").value.trim()
   };
   if(!data.total){ toast("Indique au moins un montant total"); return; }
-  if(p){ Object.assign(p,data); saveDB(); closeModal(); openPaiements(); toast("Paiement mis a jour"); }
+  if(p){ Object.assign(p,data); saveDB(); closeModal(); openPaiements(); toast("Paiement mis à jour"); }
   else { DB.paiements.push(Object.assign({id:uid()},data)); saveDB(); closeModal();
-    if(data.clientId) openFiche(data.clientId); else openPaiements(); toast("Paiement ajoute"); }
+    if(data.clientId) openFiche(data.clientId); else openPaiements(); toast("Paiement ajouté"); }
 }
 function deletePay(id){
   const p=DB.paiements.find(x=>x.id===id); const cid=p?p.clientId:null;
   DB.deleted=(DB.deleted||[]).concat([id]);
   DB.paiements=DB.paiements.filter(x=>x.id!==id); saveDB(); closeModal();
-  if(cid) openFiche(cid); else openPaiements(); toast("Paiement supprime");
+  if(cid) openFiche(cid); else openPaiements(); toast("Paiement supprimé");
 }
 
 /* ============================================================
@@ -1509,33 +1521,33 @@ function openTaskEdit(id,clientId){
   const t=id?DB.taches.find(x=>x.id===id):null;
   let h=`<h2>${t?"Modifier le rappel":"Nouveau rappel"}</h2>
     <div class="field"><label>Quoi *</label><input id="tTitle" value="${t?esc(t.title):""}" placeholder="Relancer le devis, livrer la galerie..."></div>
-    <div class="field two"><label>Echeance & priorite</label>
+    <div class="field two"><label>Échéance & priorite</label>
       <input id="tDue" type="date" value="${t?(t.dueDate||""):""}">
       <select id="tPrio">${["Normale","Haute","Basse"].map(p=>`<option ${t&&t.priority===p?"selected":""}>${p}</option>`).join("")}</select>
     </div>
-    <div class="field"><label>Client lie (optionnel)</label>${clientPicker("tClient",t?t.clientId:(clientId||""),true)}</div>
-    <div class="field"><label>Details</label><textarea id="tNotes" placeholder="Precisions...">${t?esc(t.notes||""):""}</textarea></div>
+    <div class="field"><label>Client lié (optionnel)</label>${clientPicker("tClient",t?t.clientId:(clientId||""),true)}</div>
+    <div class="field"><label>Détails</label><textarea id="tNotes" placeholder="Précisions...">${t?esc(t.notes||""):""}</textarea></div>
     <button class="btn wide" onclick="saveTask('${id||""}')">${t?"Enregistrer":"Ajouter le rappel"}</button>`;
   if(t) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteTask('${id}')">Supprimer</button>`;
   openModal(h);
 }
 function saveTask(id){
   const title=document.getElementById("tTitle").value.trim();
-  if(!title){ toast("Ecris ce qu'il faut faire"); return; }
+  if(!title){ toast("Écris ce qu'il faut faire"); return; }
   const data={ title, dueDate:document.getElementById("tDue").value, priority:document.getElementById("tPrio").value,
     clientId:document.getElementById("tClient").value, notes:document.getElementById("tNotes").value.trim() };
   const t=id?DB.taches.find(x=>x.id===id):null;
   if(t){ Object.assign(t,data); } else { DB.taches.push(Object.assign({id:uid(),done:false},data)); }
-  saveDB(); closeModal(); openRappels(); toast(t?"Rappel mis a jour":"Rappel ajoute");
+  saveDB(); closeModal(); openRappels(); toast(t?"Rappel mis à jour":"Rappel ajouté");
 }
 function openTask(id){
   const t=DB.taches.find(x=>x.id===id); if(!t) return;
   const c=t.clientId?clientById(t.clientId):null;
   let h=`<h2>${esc(t.title)}</h2><div class="card">`;
-  if(t.dueDate) h+=kv("Echeance",fmtDate(t.dueDate)+(isPast(t.dueDate)&&!t.done?" (en retard)":""));
-  h+=kv("Priorite",esc(t.priority||"Normale"));
+  if(t.dueDate) h+=kv("Échéance",fmtDate(t.dueDate)+(isPast(t.dueDate)&&!t.done?" (en retard)":""));
+  h+=kv("Priorité",esc(t.priority||"Normale"));
   if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
-  if(t.notes) h+=kv("Details",esc(t.notes).replace(/\n/g,"<br>"));
+  if(t.notes) h+=kv("Détails",esc(t.notes).replace(/\n/g,"<br>"));
   h+=`</div><div style="display:flex;gap:9px;margin-top:16px">
     <button class="btn" style="flex:1" onclick="completeTask('${id}')">${t.done?"Rouvrir":"Marquer fait"}</button>
     <button class="btn ghost" style="flex:1" onclick="openTaskEdit('${id}')">Modifier</button></div>`;
@@ -1546,11 +1558,11 @@ function completeTask(id){
   t.done=!t.done; saveDB(); closeModal();
   const active=document.querySelector(".view.active").id;
   if(active==="home") buildHome(); else if(active==="rappels") renderRappels(); else if(active==="fiche") { /* noop */ }
-  toast(t.done?"Bien joue":"Rappel rouvert");
+  toast(t.done?"Bien joué":"Rappel rouvert");
 }
 function deleteTask(id){
   DB.deleted=(DB.deleted||[]).concat([id]);
-  DB.taches=DB.taches.filter(x=>x.id!==id); saveDB(); closeModal(); openRappels(); toast("Rappel supprime");
+  DB.taches=DB.taches.filter(x=>x.id!==id); saveDB(); closeModal(); openRappels(); toast("Rappel supprimé");
 }
 
 /* ============================================================
@@ -1560,7 +1572,7 @@ function openAddMenu(){
   openModal(`<h2>Ajouter</h2>
     <div style="display:flex;flex-direction:column;gap:9px">
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openClientEdit(null)"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>Nouveau client</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openSeanceEdit(null)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Nouvelle seance</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openSeanceEdit(null)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Nouvelle séance</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openPayEdit(null)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Nouveau paiement</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
     </div>`);
@@ -1575,7 +1587,7 @@ function renderReglages(){
   box.innerHTML=`
     <div class="stat-grid">
       <div class="stat"><div class="lab">Clients</div><div class="num">${nbC}</div></div>
-      <div class="stat"><div class="lab">Seances</div><div class="num">${nbS}</div></div>
+      <div class="stat"><div class="lab">Séances</div><div class="num">${nbS}</div></div>
       <div class="stat"><div class="lab">Paiements</div><div class="num">${nbP}</div></div>
       <div class="stat"><div class="lab">Rappels</div><div class="num">${nbT}</div></div>
     </div>
@@ -1584,8 +1596,8 @@ function renderReglages(){
     <div class="card" style="padding:16px">
       <div style="font-weight:600;margin-bottom:6px">${CLOUD?"Synchro auto active":"Mode local"}</div>
       <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">${CLOUD
-        ?"Tes donnees sont sauvegardees automatiquement sur ton site. Ouvre la meme adresse sur ton telephone et ton ordi, tout reste a jour."
-        :"Tu as ouvert le fichier en local, donc la synchro auto ne tourne pas. Une fois le site en ligne (Netlify), elle s'active toute seule. En attendant, utilise la sauvegarde manuelle ci dessous."}</div>
+        ?"Tes données sont sauvegardées automatiquement sur ton site. Ouvre la même adresse sur ton téléphone et ton ordi, tout reste à jour."
+        :"Tu as ouvert le fichier en local, donc la synchro auto ne tourne pas. Une fois le site en ligne (Netlify), elle s'active toute seule. En attendant, utilise la sauvegarde manuelle ci-dessous."}</div>
       ${CLOUD?`<button class="btn ghost sm" style="margin-top:12px" onclick="syncNow()">Rafraichir depuis le cloud</button>`:""}
       <div id="syncMsg" style="font-size:13px;color:var(--ok);margin-top:10px"></div>
     </div>
@@ -1604,13 +1616,13 @@ function renderReglages(){
       <div id="syncMsg2" style="font-size:13px;color:var(--ink-2);margin-top:9px"></div>
     </div>
 
-    <div class="grouplab">Donnees</div>
+    <div class="grouplab">Données</div>
     <div class="card" style="padding:16px">
       <button class="btn danger sm wide" onclick="wipeAll()">Tout effacer sur cet appareil</button>
-      <div class="hint" style="margin-top:8px">Efface uniquement les donnees locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
+      <div class="hint" style="margin-top:8px">Efface uniquement les données locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
     </div>
 
-    <div class="grouplab">Securite</div>
+    <div class="grouplab">Sécurité</div>
     <div class="card" style="padding:16px" id="securityCard"></div>
 
     <div class="grouplab">A propos</div>
@@ -1643,11 +1655,11 @@ function renderContacts(brand){
     chips.map(([k,l])=>`<button class="pill ${contactsBrand===k?"on":""}" onclick="renderContacts('${k}')">${l}</button>`).join("")+`</div>`;
   h+=`<div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Emails</div><div class="num" style="font-size:24px">${emails.length}</div></div>
-      <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Numeros</div><div class="num" style="font-size:24px">${phones.length}</div></div>
+      <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Numéros</div><div class="num" style="font-size:24px">${phones.length}</div></div>
     </div>`;
   h+=`<div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn ghost sm wide" onclick="copyContacts('emails')">Copier les emails</button>
-      <button class="btn ghost sm wide" onclick="copyContacts('phones')">Copier les numeros</button>
+      <button class="btn ghost sm wide" onclick="copyContacts('phones')">Copier les numéros</button>
       <button class="btn ghost sm wide" onclick="downloadContactsCsv()">Telecharger en CSV (Excel)</button>
     </div>
     <div id="contactsMsg" style="font-size:12.5px;color:var(--ink-2);margin-top:9px"></div>
@@ -1660,12 +1672,12 @@ function copyContacts(which){
   const txt=list.join(which==="emails"?", ":"\n");
   const msg=document.getElementById("contactsMsg");
   const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select();
-  try{ document.execCommand("copy"); if(msg) msg.textContent=list.length+" "+(which==="emails"?"emails copies":"numeros copies")+"."; }
-  catch(e){ if(msg) msg.textContent="Copie impossible, selectionne a la main."; }
+  try{ document.execCommand("copy"); if(msg) msg.textContent=list.length+" "+(which==="emails"?"emails copiés":"numéros copiés")+"."; }
+  catch(e){ if(msg) msg.textContent="Copie impossible, sélectionne à la main."; }
   document.body.removeChild(ta);
 }
 function downloadContactsCsv(){
-  const rows=[["Nom","Email","Telephone","Marque","Statut"]];
+  const rows=[["Nom","Email","Téléphone","Marque","Statut"]];
   DB.clients.forEach(c=>{
     if(contactsBrand!=="all"&&c.brand!==contactsBrand) return;
     if(!c.email&&!c.tel) return;
@@ -1687,17 +1699,17 @@ async function renderSecurity(){
   }
   const bioOn=bioEnabled();
   const bioCanUse=await bioAvailable();
-  let h=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Ton mot de passe protege l'acces a l'appli et a tes donnees. Le deverrouillage par empreinte est propre a chaque appareil.</div>`;
+  let h=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Ton mot de passe protégé l'acces a l'appli et a tes données. Le deverrouillage par empreinte est propre à chaque appareil.</div>`;
   if(bioCanUse){
     if(bioOn){
-      h+=`<button class="btn ghost sm wide" style="margin-bottom:9px" onclick="disableBio()">Desactiver l'empreinte sur cet appareil</button>`;
+      h+=`<button class="btn ghost sm wide" style="margin-bottom:9px" onclick="disableBio()">Désactiver l'empreinte sur cet appareil</button>`;
     } else {
       h+=`<button class="btn ghost sm wide" style="margin-bottom:9px" onclick="enableBio()">Activer l'empreinte sur cet appareil</button>`;
     }
   } else {
     h+=`<div class="hint" style="margin-bottom:9px">Cet appareil ne propose pas de deverrouillage par empreinte. Le mot de passe reste utilise.</div>`;
   }
-  h+=`<button class="btn danger sm wide" onclick="logout()">Se deconnecter</button>`;
+  h+=`<button class="btn danger sm wide" onclick="logout()">Se déconnecter</button>`;
   box.innerHTML=h;
 }
 function setSyncMsg(t){ const e=document.getElementById("syncMsg"); if(e) e.textContent=t||""; }
@@ -1787,7 +1799,7 @@ async function cloudPull(){
     if(d&&(d.clients||d.seances||d.paiements||d.taches)){
       applyData(d);
       repaintActive();
-      setSyncMsg("A jour.");
+      setSyncMsg("À jour.");
     }
   }catch(e){}
 }
@@ -1846,7 +1858,7 @@ function showLock(){
     // empreinte en avant, mot de passe cache en secours
     bioZone.style.display="block";
     passZone.style.display="none";
-    if(sub) sub.textContent="Deverrouille avec ton empreinte.";
+    if(sub) sub.textContent="Déverrouille avec ton empreinte.";
     if(retry) retry.style.display="inline-block";
     // tentative automatique (echoue en silence sur mobile sans geste, le bouton prend le relais)
     setTimeout(()=>{ if(!authed) unlockWithBio(true); }, 150);
@@ -1855,7 +1867,7 @@ function showLock(){
   } else {
     bioZone.style.display="none";
     passZone.style.display="block";
-    if(sub) sub.textContent="Espace protege.";
+    if(sub) sub.textContent="Espace protégé.";
     if(retry) retry.style.display="none";
   }
 }
@@ -1888,7 +1900,7 @@ async function submitPassword(){
   const err=document.getElementById("lockErr");
   const pass=(inp.value||"").trim();
   if(!pass){ return; }
-  err.textContent="Verification...";
+  err.textContent="Vérification...";
   const ok=await verifyKey(pass);
   if(ok){
     CRM_KEY=pass;
@@ -1921,7 +1933,7 @@ async function bioAvailable(){
 async function offerBioIfPossible(){
   if(bioEnabled()) return;
   if(!await bioAvailable()) return;
-  openModal(`<h2>Deverrouillage par empreinte</h2>
+  openModal(`<h2>Déverrouillage par empreinte</h2>
     <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 18px">Sur cet appareil, tu peux ouvrir le CRM avec ton empreinte digitale au lieu de retaper ton mot de passe.</p>
     <button class="btn wide" onclick="enableBioFromPrompt()">Activer l'empreinte</button>
     <button class="btn ghost wide" style="margin-top:9px" onclick="closeModal()">Plus tard</button>`);
@@ -1937,12 +1949,12 @@ async function enableBio(){
       authenticatorSelection:{ authenticatorAttachment:"platform", userVerification:"required", residentKey:"preferred" },
       timeout:60000, attestation:"none"
     }});
-    if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); toast("Empreinte activee"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
+    if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); toast("Empreinte activée"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
   }catch(e){ toast(e&&e.name==="NotAllowedError" ? "Activation annulee, reessaie" : "Empreinte indisponible sur cet appareil"); }
 }
 function disableBio(){
   try{ localStorage.removeItem(BIO_STORE); }catch(e){}
-  toast("Empreinte desactivee");
+  toast("Empreinte désactivée");
   if(document.querySelector("#reglages.active")) renderReglages();
 }
 async function unlockWithBio(silent){
@@ -1962,7 +1974,7 @@ async function unlockWithBio(silent){
   }
 }
 function logout(){
-  if(!confirm("Se deconnecter de cet appareil ?")) return;
+  if(!confirm("Se déconnecter de cet appareil ?")) return;
   authed=false; CRM_KEY="";
   try{ localStorage.removeItem(KEY_STORE); localStorage.removeItem(BIO_STORE); }catch(e){}
   showLock();
@@ -1978,27 +1990,27 @@ setInterval(async ()=>{
   const added=await pullMerge();
   if(added) toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
 },30000);
-function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Recuperation..."); cloudPull(); }
+function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Récupération..."); cloudPull(); }
 
 function exportManual(){
   const ta=document.getElementById("syncBox"); ta.value=JSON.stringify(currentData());
   ta.focus(); ta.select();
-  try{ document.execCommand("copy"); setSyncMsg2("Code copie. Colle le sur ton autre appareil puis touche Importer."); }
-  catch(e){ setSyncMsg2("Selectionne tout le texte et copie le a la main."); }
+  try{ document.execCommand("copy"); setSyncMsg2("Code copié. Colle le sur ton autre appareil puis touche Importer."); }
+  catch(e){ setSyncMsg2("Sélectionne tout le texte et copié le à la main."); }
 }
 function importManual(){
   const ta=document.getElementById("syncBox");
   try{
     const d=JSON.parse(ta.value.trim());
     if(!d||(!Array.isArray(d.clients)&&!Array.isArray(d.seances)&&!Array.isArray(d.paiements)&&!Array.isArray(d.taches))) throw 0;
-    applyData(d); saveDB(); setSyncMsg2("Donnees importees sur cet appareil."); toast("Sauvegarde restauree");
+    applyData(d); saveDB(); setSyncMsg2("Données importées sur cet appareil."); toast("Sauvegarde restaurée");
   }catch(e){ setSyncMsg2("Code invalide. Recolle le code complet (il commence par une accolade)."); }
 }
 function wipeAll(){
-  if(!confirm("Effacer toutes les donnees locales ? Pense a copier ta sauvegarde avant.")) return;
+  if(!confirm("Effacer toutes les données locales ? Pense à copier ta sauvegarde avant.")) return;
   DB={clients:[],seances:[],paiements:[],taches:[],deleted:[],v:1,t:Date.now()};
   try{ localStorage.removeItem(KEY); }catch(e){}
-  renderReglages(); toast("Donnees effacees");
+  renderReglages(); toast("Données effacées");
 }
 
 /* ============================================================
