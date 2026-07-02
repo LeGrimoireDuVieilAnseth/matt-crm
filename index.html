@@ -621,7 +621,7 @@ function buildHome(){
   buildBrandbar();
   const body=document.getElementById("homeBody");
   const clients=DB.clients.filter(c=>passFilter(c.brand)&&c.status!=="Archive");
-  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee");
+  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee"&&s.type!=="RDV telephonique");
   const pays=DB.paiements.filter(p=>passFilter(p.brand));
   const taches=DB.taches.filter(t=>!t.done);
 
@@ -703,11 +703,20 @@ function buildHome(){
     });
   }
 
-  // prochaines seances
-  const next=upcoming.filter(s=>!isToday(s.date)).slice(0,5);
-  if(next.length){
-    h+=`<div class="section-title"><h2>Prochaines séances</h2><span class="count" onclick="openAgenda()" style="cursor:pointer">tout voir</span></div>`;
-    next.forEach(s=>h+=seanceRow(s));
+  // prochains RDV telephoniques
+  const appels=DB.seances.filter(s=>s.type==="RDV telephonique"&&s.status!=="Annulee"&&s.status!=="Faite"&&s.date>=todayStr()&&passFilter(s.brand))
+    .sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  if(appels.length){
+    h+=`<div class="section-title"><h2>RDV téléphonique</h2><span class="count">${appels.length}</span></div>`;
+    appels.slice(0,5).forEach(s=>{
+      const c=s.clientId?clientById(s.clientId):null;
+      const when=`${relDay(s.date)}${s.time?" à "+s.time.replace(":","h"):""}`;
+      h+=`<div class="row" data-b="maison-lumiere" onclick="openRdv('${s.id}')">
+        <div class="avatar" data-b="maison-lumiere"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg></div>
+        <div class="row-main"><div class="t">${esc(c?c.name:"Contact")}</div><div class="s">${esc(s.objet||"Appel")}</div></div>
+        <div class="row-end">${c&&c.tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(c.tel.replace(/\s/g,''))}" onclick="event.stopPropagation()">Appeler</a>`:""}<span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
+      </div>`;
+    });
   }
 
   // prochains mariages (Maison Lumiere) : seulement clients confirmes, pas les prospects
@@ -960,10 +969,10 @@ function renderRdvList(){
 function openRdv(id){
   const s=DB.seances.find(x=>x.id===id); if(!s) return;
   const c=s.clientId?clientById(s.clientId):null;
-  let h=`<h2>RDV telephonique</h2>
+  let h=`<h2>RDV téléphonique</h2>
     <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("maison-lumiere")}<span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(acc(s.status))}</span></div>
     <div class="card">`;
-  h+=kv("Quand rappeler",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
+  h+=kv("Quand rappeler",`${fmtDate(s.date)}${s.time?" à "+s.time.replace(":","h"):""}`);
   if(s.creneau) h+=kv("Créneau demandé",esc(s.creneau));
   if(s.objet) h+=kv("Objet",esc(s.objet));
   if(c){
@@ -976,13 +985,45 @@ function openRdv(id){
       ${c&&c.tel?`<a class="btn" style="flex:1" href="tel:${esc(c.tel.replace(/\s/g,''))}">Appeler</a>`:""}
       <button class="btn ghost" style="flex:1" onclick="markRdvDone('${id}')">${s.status==="Faite"?"Rouvrir":"Marquer fait"}</button>
     </div>
+    <button class="btn ghost wide" style="margin-top:9px" onclick="openRdvEdit('${id}')">Modifier</button>
     <button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer ce RDV</button>`;
   openModal(h);
+}
+function repaintAfterRdv(cid){
+  const active=document.querySelector(".view.active"); const av=active?active.id:"";
+  if(av==="fiche"&&cid) openFiche(cid); else if(av==="home") buildHome(); else if(av==="clients") renderClients();
 }
 function markRdvDone(id){
   const s=DB.seances.find(x=>x.id===id); if(!s) return;
   s.status = s.status==="Faite" ? "A venir" : "Faite";
-  saveDB(); closeModal(); renderClients(); toast(s.status==="Faite"?"RDV fait":"RDV rouvert");
+  saveDB(); closeModal(); repaintAfterRdv(s.clientId); toast(s.status==="Faite"?"RDV fait":"RDV rouvert");
+}
+function openRdvEdit(id,clientId){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  const cid=clientId||(s?s.clientId:"");
+  let h=`<h2>${s?"Modifier le RDV":"Nouveau RDV téléphonique"}</h2>
+    <div class="field"><label>Client</label>${clientPicker("rClient",cid)}</div>
+    <div class="field two"><label>Date & heure</label>
+      <input id="rDate" type="date" value="${s?s.date:todayStr()}">
+      <input id="rTime" type="time" value="${s?(s.time||""):""}">
+    </div>
+    <div class="field"><label>Objet de l'appel</label><input id="rObjet" value="${s?esc(s.objet||""):""}" placeholder="Sujet, question du client..."></div>
+    <div class="field"><label>Statut</label><select id="rStatus">${["A venir","Faite","Annulee"].map(x=>`<option value="${x}" ${s&&s.status===x?"selected":(!s&&x==="A venir"?"selected":"")}>${acc(x)}</option>`).join("")}</select></div>
+    <div class="field"><label>Notes</label><textarea id="rNotes" placeholder="Détails...">${s?esc(s.notes||""):""}</textarea></div>
+    <button class="btn wide" onclick="saveRdv('${id||""}')">${s?"Enregistrer":"Ajouter le RDV"}</button>`;
+  if(s) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer</button>`;
+  openModal(h);
+}
+function saveRdv(id){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  const cid=document.getElementById("rClient").value;
+  const data={ brand:"maison-lumiere", type:"RDV telephonique", clientId:cid,
+    date:document.getElementById("rDate").value, time:document.getElementById("rTime").value,
+    objet:document.getElementById("rObjet").value.trim(), status:document.getElementById("rStatus").value,
+    notes:document.getElementById("rNotes").value.trim(), place:"Appel" };
+  if(!data.date){ toast("Choisis une date"); return; }
+  if(s){ Object.assign(s,data); } else { data.id=uid(); data.createdAt=Date.now(); DB.seances.push(data); }
+  saveDB(); closeModal(); repaintAfterRdv(cid); toast(s?"RDV mis à jour":"RDV ajouté");
 }
 function setClientBrand(b){ clientBrand=b; clientStatusFilter="all"; mlView="clients"; renderClients(); }
 function setClientStatus(s){ clientStatusFilter=s; renderClients(); }
@@ -1092,17 +1133,32 @@ function openFiche(id){
     h+=`</div>`;
   }
 
-  // seances liees
-  h+=`<div class="section-title"><h2 style="font-size:18px">Séances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
-  if(seances.length){
-    seances.forEach(s=>{
-      h+=`<div class="relation" onclick="openSeance('${s.id}')">
-        <div class="ri"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg></div>
-        <div class="rt"><div class="a">${esc(acc(s.type)||"Séance")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
-        <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span>
-      </div>`;
-    });
-  } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucune séance pour ce client.</div>`;
+  // RDV telephonique (Maison Lumiere) OU seances (autres marques)
+  if(c.brand==="maison-lumiere"){
+    const rdvs=seances.filter(s=>s.type==="RDV telephonique").sort((a,b)=>(b.date+(b.time||"")).localeCompare(a.date+(a.time||"")));
+    h+=`<div class="section-title"><h2 style="font-size:18px">RDV téléphonique</h2><button class="btn sm ghost" onclick="openRdvEdit(null,'${c.id}')">Ajouter</button></div>`;
+    if(rdvs.length){
+      rdvs.forEach(s=>{
+        h+=`<div class="relation" onclick="openRdv('${s.id}')">
+          <div class="ri"><svg viewBox="0 0 24 24"><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.54 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11 11 0 0 0 .54 3.4 1 1 0 0 1-.24 1Z"/></svg></div>
+          <div class="rt"><div class="a">${esc(s.objet||"Appel")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
+          <span class="badge ${SEANCE_STYLE[s.status]||"info"}">${esc(acc(s.status))}</span>
+        </div>`;
+      });
+    } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucun RDV téléphonique pour ce client.</div>`;
+  } else {
+    const seancesA=seances.filter(s=>s.type!=="RDV telephonique");
+    h+=`<div class="section-title"><h2 style="font-size:18px">Séances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
+    if(seancesA.length){
+      seancesA.forEach(s=>{
+        h+=`<div class="relation" onclick="openSeance('${s.id}')">
+          <div class="ri"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg></div>
+          <div class="rt"><div class="a">${esc(acc(s.type)||"Séance")}</div><div class="b">${fmtDate(s.date)}${s.time?" \u00b7 "+s.time.replace(":","h"):""}</div></div>
+          <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span>
+        </div>`;
+      });
+    } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucune séance pour ce client.</div>`;
+  }
 
   // paiements lies
   h+=`<div class="section-title"><h2 style="font-size:18px">Paiements</h2><button class="btn sm ghost" onclick="openPayEdit(null,'${c.id}')">Ajouter</button></div>`;
