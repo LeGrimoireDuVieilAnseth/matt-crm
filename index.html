@@ -1634,8 +1634,8 @@ async function submitPassword(){
     err.textContent="";
     inp.value="";
     onAuthenticated();
-    // proposer l'empreinte si dispo et pas encore active
-    if(!bioEnabled()) maybeOfferBio();
+    // proposer l'empreinte via un bouton (l'activation doit partir d'un appui direct)
+    setTimeout(offerBioIfPossible, 400);
   } else {
     err.textContent="Mot de passe incorrect.";
   }
@@ -1656,11 +1656,15 @@ async function bioAvailable(){
     return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   }catch(e){ return false; }
 }
-async function maybeOfferBio(){
+async function offerBioIfPossible(){
+  if(bioEnabled()) return;
   if(!await bioAvailable()) return;
-  if(!confirm("Activer le deverrouillage par empreinte sur cet appareil ?")) return;
-  await enableBio();
+  openModal(`<h2>Deverrouillage par empreinte</h2>
+    <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 18px">Sur cet appareil, tu peux ouvrir le CRM avec ton empreinte digitale au lieu de retaper ton mot de passe.</p>
+    <button class="btn wide" onclick="enableBioFromPrompt()">Activer l'empreinte</button>
+    <button class="btn ghost wide" style="margin-top:9px" onclick="closeModal()">Plus tard</button>`);
 }
+function enableBioFromPrompt(){ closeModal(); enableBio(); }
 async function enableBio(){
   try{
     const cred=await navigator.credentials.create({ publicKey:{
@@ -1672,7 +1676,7 @@ async function enableBio(){
       timeout:60000, attestation:"none"
     }});
     if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); toast("Empreinte activee"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
-  }catch(e){ toast("Empreinte non activee"); }
+  }catch(e){ toast(e&&e.name==="NotAllowedError" ? "Activation annulee, reessaie" : "Empreinte indisponible sur cet appareil"); }
 }
 function disableBio(){
   try{ localStorage.removeItem(BIO_STORE); }catch(e){}
