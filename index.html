@@ -293,6 +293,18 @@
   .relation .rt .b{font-size:12.5px;color:var(--ink-2);}
 
   .synccode{width:100%;min-height:120px;font-family:ui-monospace,monospace;font-size:12px;padding:12px;border:1px solid var(--line-2);border-radius:12px;background:var(--surface-2);resize:vertical;color:var(--ink-2);line-height:1.5;}
+
+  /* ecran de verrouillage */
+  .lock{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;align-items:center;justify-content:center;padding:24px;padding-top:calc(env(safe-area-inset-top) + 24px);}
+  .lock-card{width:100%;max-width:360px;text-align:center;}
+  .lock-logo{width:60px;height:60px;border-radius:17px;background:var(--ink);display:grid;place-items:center;margin:0 auto 18px;}
+  .lock-logo svg{width:32px;height:32px;}
+  .lock-card h2{font-size:30px;font-weight:600;letter-spacing:-.02em;}
+  .lock-sub{font-size:14px;color:var(--ink-2);margin:8px 0 22px;line-height:1.5;}
+  .lock-card input{width:100%;padding:14px 15px;border:1px solid var(--line-2);border-radius:13px;background:var(--surface);font-size:16px;margin-bottom:12px;text-align:center;}
+  .lock-card input:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(26,26,28,.07);}
+  .lock-err{font-size:13px;color:var(--danger);margin-top:12px;min-height:18px;}
+  .lock .btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 </style>
 </head>
 <body>
@@ -391,6 +403,24 @@
 <!-- MODAL -->
 <div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal"><div class="modal-grip"></div><div id="modalContent"></div></div>
+</div>
+
+<!-- ECRAN DE VERROUILLAGE -->
+<div class="lock" id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-logo">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="5.4" stroke="#fff" stroke-width="1.9" fill="none"/><circle cx="12" cy="13" r="2.2" fill="#e8834a"/><path d="M5 8h3l1.4-2h5.2L16 8h3v1" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
+    </div>
+    <h2>Studio</h2>
+    <div class="lock-sub">Espace protege. Entre ton mot de passe.</div>
+    <input id="lockPass" type="password" autocomplete="current-password" placeholder="Mot de passe" inputmode="text">
+    <button class="btn wide" onclick="submitPassword()">Entrer</button>
+    <button class="btn ghost wide" id="bioBtn" style="display:none;margin-top:9px" onclick="unlockWithBio()">
+      <svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v1M12 3a7 7 0 0 1 7 7v4M8.5 12v2a3.5 3.5 0 0 0 7 0M12 8a2 2 0 0 0-2 2v4M15.5 18.5c.3-1 .5-2 .5-3.5"/></svg>
+      Deverrouiller avec l'empreinte
+    </button>
+    <div id="lockErr" class="lock-err"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1412,6 +1442,9 @@ function renderReglages(){
       <div class="hint" style="margin-top:8px">Efface uniquement les donnees locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
     </div>
 
+    <div class="grouplab">Securite</div>
+    <div class="card" style="padding:16px" id="securityCard"></div>
+
     <div class="grouplab">A propos</div>
     <div class="card" style="padding:16px;font-size:13px;color:var(--ink-3);line-height:1.6">
       Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
@@ -1419,6 +1452,29 @@ function renderReglages(){
   setSyncMsg("");
   if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
+  renderSecurity();
+}
+async function renderSecurity(){
+  const box=document.getElementById("securityCard");
+  if(!box) return;
+  if(!CLOUD){
+    box.innerHTML=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">La protection par mot de passe fonctionne uniquement sur ton site en ligne.</div>`;
+    return;
+  }
+  const bioOn=bioEnabled();
+  const bioCanUse=await bioAvailable();
+  let h=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Ton mot de passe protege l'acces a l'appli et a tes donnees. Le deverrouillage par empreinte est propre a chaque appareil.</div>`;
+  if(bioCanUse){
+    if(bioOn){
+      h+=`<button class="btn ghost sm wide" style="margin-bottom:9px" onclick="disableBio()">Desactiver l'empreinte sur cet appareil</button>`;
+    } else {
+      h+=`<button class="btn ghost sm wide" style="margin-bottom:9px" onclick="enableBio()">Activer l'empreinte sur cet appareil</button>`;
+    }
+  } else {
+    h+=`<div class="hint" style="margin-bottom:9px">Cet appareil ne propose pas de deverrouillage par empreinte. Le mot de passe reste utilise.</div>`;
+  }
+  h+=`<button class="btn danger sm wide" onclick="logout()">Se deconnecter</button>`;
+  box.innerHTML=h;
 }
 function setSyncMsg(t){ const e=document.getElementById("syncMsg"); if(e) e.textContent=t||""; }
 function setSyncMsg2(t){ const e=document.getElementById("syncMsg2"); if(e) e.textContent=t||""; }
@@ -1474,10 +1530,34 @@ function mergeCloud(cloud){
 }
 
 /* --- cloud (fonction Netlify + Blobs, comme le Grimoire) --- */
+/* ============================================================
+   AUTHENTIFICATION (mot de passe + empreinte)
+   Le mot de passe est verifie cote serveur : les donnees ne
+   sortent du cloud que si la cle est bonne. L'empreinte sert de
+   deverrouillage rapide sur mobile.
+   ============================================================ */
+const KEY_STORE="studio_matt_key";
+const BIO_STORE="studio_matt_bio";
+let CRM_KEY = "";
+try{ CRM_KEY = localStorage.getItem(KEY_STORE) || ""; }catch(e){}
+let authed=false;
+
+function apiHeaders(json){
+  const h = json ? {"Content-Type":"application/json"} : {"Accept":"application/json"};
+  if(CRM_KEY) h["X-CRM-Key"]=CRM_KEY;
+  return h;
+}
+function handleUnauthorized(){
+  authed=false; CRM_KEY="";
+  try{ localStorage.removeItem(KEY_STORE); }catch(e){}
+  showLock();
+}
+
 async function cloudPull(){
   if(!CLOUD) return;
   try{
-    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+    const res=await fetch(ENDPOINT,{headers:apiHeaders(),cache:"no-store"});
+    if(res.status===401){ handleUnauthorized(); return; }
     if(!res.ok) return;
     const d=await res.json();
     if(d&&(d.clients||d.seances||d.paiements||d.taches)){
@@ -1490,9 +1570,10 @@ async function cloudPull(){
 
 /* Recupere en douceur les nouveautes du cloud sans ecraser le travail local. */
 async function pullMerge(){
-  if(!CLOUD||applying) return 0;
+  if(!CLOUD||applying||!authed) return 0;
   try{
-    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+    const res=await fetch(ENDPOINT,{headers:apiHeaders(),cache:"no-store"});
+    if(res.status===401){ handleUnauthorized(); return 0; }
     if(!res.ok) return 0;
     const cloud=await res.json();
     const added=mergeCloud(cloud||{});
@@ -1502,28 +1583,130 @@ async function pullMerge(){
 }
 
 function cloudPush(){
-  if(!CLOUD||applying) return;
+  if(!CLOUD||applying||!authed) return;
   clearTimeout(pushTimer);
   pushTimer=setTimeout(async ()=>{
     try{
-      const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json"},cache:"no-store"});
+      const res=await fetch(ENDPOINT,{headers:apiHeaders(),cache:"no-store"});
+      if(res.status===401){ handleUnauthorized(); return; }
       if(res.ok){
         const cloud=await res.json();
         const added=mergeCloud(cloud||{});
         if(added){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
       }
     }catch(e){}
-    fetch(ENDPOINT,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(currentData())}).catch(()=>{});
+    fetch(ENDPOINT,{method:"PUT",headers:apiHeaders(true),body:JSON.stringify(currentData())}).catch(()=>{});
     DB.lastPull=Date.now();
   },700);
 }
 
+/* verifie une cle candidate aupres du serveur */
+async function verifyKey(candidate){
+  try{
+    const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json","X-CRM-Key":candidate},cache:"no-store"});
+    return res.status!==401;
+  }catch(e){ return false; }
+}
+
+/* ---------- ecran de verrouillage ---------- */
+function showLock(){
+  const el=document.getElementById("lockScreen");
+  if(el){ el.style.display="flex"; }
+  document.body.style.overflow="hidden";
+  const bioBtn=document.getElementById("bioBtn");
+  if(bioBtn) bioBtn.style.display = bioEnabled() ? "inline-flex" : "none";
+}
+function hideLock(){
+  const el=document.getElementById("lockScreen");
+  if(el){ el.style.display="none"; }
+  document.body.style.overflow="";
+}
+async function submitPassword(){
+  const inp=document.getElementById("lockPass");
+  const err=document.getElementById("lockErr");
+  const pass=(inp.value||"").trim();
+  if(!pass){ return; }
+  err.textContent="Verification...";
+  const ok=await verifyKey(pass);
+  if(ok){
+    CRM_KEY=pass;
+    try{ localStorage.setItem(KEY_STORE,pass); }catch(e){}
+    err.textContent="";
+    inp.value="";
+    onAuthenticated();
+    // proposer l'empreinte si dispo et pas encore active
+    if(!bioEnabled()) maybeOfferBio();
+  } else {
+    err.textContent="Mot de passe incorrect.";
+  }
+}
+function onAuthenticated(){
+  authed=true;
+  hideLock();
+  cloudPull();
+}
+
+/* ---------- empreinte digitale (WebAuthn) ---------- */
+function bioEnabled(){ try{ return !!localStorage.getItem(BIO_STORE); }catch(e){ return false; } }
+function b64(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function unb64(str){ return Uint8Array.from(atob(str), c=>c.charCodeAt(0)); }
+async function bioAvailable(){
+  try{
+    if(!window.PublicKeyCredential || !window.isSecureContext) return false;
+    return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  }catch(e){ return false; }
+}
+async function maybeOfferBio(){
+  if(!await bioAvailable()) return;
+  if(!confirm("Activer le deverrouillage par empreinte sur cet appareil ?")) return;
+  await enableBio();
+}
+async function enableBio(){
+  try{
+    const cred=await navigator.credentials.create({ publicKey:{
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp:{ name:"Studio, l'atelier de Matt", id: location.hostname },
+      user:{ id: crypto.getRandomValues(new Uint8Array(16)), name:"matt", displayName:"Matt" },
+      pubKeyCredParams:[{type:"public-key",alg:-7},{type:"public-key",alg:-257}],
+      authenticatorSelection:{ authenticatorAttachment:"platform", userVerification:"required", residentKey:"preferred" },
+      timeout:60000, attestation:"none"
+    }});
+    if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); toast("Empreinte activee"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
+  }catch(e){ toast("Empreinte non activee"); }
+}
+function disableBio(){
+  try{ localStorage.removeItem(BIO_STORE); }catch(e){}
+  toast("Empreinte desactivee");
+  if(document.querySelector("#reglages.active")) renderReglages();
+}
+async function unlockWithBio(){
+  const err=document.getElementById("lockErr");
+  const id=localStorage.getItem(BIO_STORE);
+  if(!id){ return; }
+  try{
+    err.textContent="";
+    const assertion=await navigator.credentials.get({ publicKey:{
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials:[{ type:"public-key", id: unb64(id) }],
+      userVerification:"required", timeout:60000
+    }});
+    if(assertion){ onAuthenticated(); }
+  }catch(e){ err.textContent="Empreinte non reconnue. Utilise ton mot de passe."; }
+}
+function logout(){
+  if(!confirm("Se deconnecter de cet appareil ?")) return;
+  authed=false; CRM_KEY="";
+  try{ localStorage.removeItem(KEY_STORE); localStorage.removeItem(BIO_STORE); }catch(e){}
+  showLock();
+  if(document.querySelector("#reglages.active")) setView("home");
+}
+
 /* Recuperation automatique des prospects du site :
    a chaque retour sur l'appli, et regulierement quand elle est ouverte. */
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden) pullMerge(); });
-window.addEventListener("focus",()=>{ pullMerge(); });
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && authed) pullMerge(); });
+window.addEventListener("focus",()=>{ if(authed) pullMerge(); });
 setInterval(async ()=>{
-  if(!CLOUD||applying||document.hidden) return;
+  if(!CLOUD||applying||document.hidden||!authed) return;
   const added=await pullMerge();
   if(added) toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
 },30000);
@@ -1556,7 +1739,21 @@ function wipeAll(){
 loadDB();
 buildHome();
 setView("home");
-if(CLOUD){ cloudPull(); }
+if(CLOUD){
+  // acces protege : on passe par l'ecran de verrouillage
+  showLock();
+  document.getElementById("lockPass").addEventListener("keydown",e=>{ if(e.key==="Enter") submitPassword(); });
+  if(bioEnabled()){
+    // deverrouillage empreinte propose d'entree
+    unlockWithBio();
+  } else if(CRM_KEY){
+    // deja connecte sur cet appareil (PC) : on verifie la cle en silence
+    verifyKey(CRM_KEY).then(ok=>{ if(ok){ onAuthenticated(); } });
+  }
+} else {
+  // fichier local, pas de cloud : pas de verrou
+  authed=true;
+}
 
 /* raccourci clavier Echap pour fermer le modal */
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });

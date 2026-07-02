@@ -1,12 +1,28 @@
 // netlify/functions/store-crm.js
 // Coffre de synchronisation du CRM Studio (separe du Grimoire).
-// GET  : renvoie les donnees enregistrees (lecture forte, toujours a jour)
-// PUT  : enregistre les donnees envoyees par l'app
+// Protege par mot de passe : la lecture et l'ecriture exigent la bonne cle
+// (definie dans la variable d'environnement Netlify CRM_KEY).
+// Tant que CRM_KEY n'est pas definie, l'acces reste ouvert (phase de mise en place).
 import { getStore } from "@netlify/blobs";
+
+const REQUIRED = process.env.CRM_KEY || "";
+
+function authorized(request){
+  if(!REQUIRED) return true; // pas encore configure
+  const k = request.headers.get("x-crm-key") || "";
+  return k === REQUIRED;
+}
 
 export default async (request) => {
   const store = getStore({ name: "studio-crm", consistency: "strong" });
   const KEY = "data";
+
+  if (!authorized(request)) {
+    return new Response(JSON.stringify({ ok:false, error:"unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
+    });
+  }
 
   if (request.method === "GET") {
     const data = await store.get(KEY, { type: "json", consistency: "strong" });
