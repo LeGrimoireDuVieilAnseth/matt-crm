@@ -313,6 +313,10 @@
   .lock-err{font-size:13px;color:var(--danger);margin-top:12px;min-height:18px;}
   .lock-link{background:none;border:none;color:var(--ink-2);font-size:13.5px;font-weight:500;cursor:pointer;margin-top:14px;text-decoration:underline;text-underline-offset:3px;}
   .lock-link:hover{color:var(--ink);}
+  .photo-tile{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--surface-3);cursor:pointer;border:1px solid var(--line);}
+  .photo-tile img{width:100%;height:100%;object-fit:cover;display:block;}
+  .photo-del{position:absolute;top:5px;right:5px;width:24px;height:24px;border-radius:7px;border:none;background:rgba(20,20,24,.62);color:#fff;display:grid;place-items:center;cursor:pointer;}
+  .photo-del svg{width:14px;height:14px;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;}
   .lock .btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 </style>
 </head>
@@ -974,6 +978,38 @@ function openFiche(id){
     h+=`<div class="grouplab">Notes</div><div class="card" style="padding:15px 16px;font-size:14.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink-2)">${esc(c.notes)}</div>`;
   }
 
+  // demande particuliere + photos d'inspiration
+  h+=`<div class="section-title"><h2 style="font-size:18px">Demande particuliere</h2></div>`;
+  if(c.wishes){
+    h+=`<div class="card" style="padding:15px 16px;font-size:14.5px;line-height:1.6;white-space:pre-wrap;color:var(--ink-2);margin-bottom:10px">${esc(c.wishes)}</div>`;
+  } else {
+    h+=`<div style="color:var(--ink-3);font-size:14px;padding:0 2px 8px">Aucune demande notee. Utilise Modifier pour en ajouter une.</div>`;
+  }
+  const photos=Array.isArray(c.photos)?c.photos:[];
+  h+=`<div id="photoGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px">`;
+  photos.forEach(p=>{
+    h+=`<div class="photo-tile" onclick="viewPhoto('${p.id}')">
+      <img data-photo="${p.id}" alt="${esc(p.name||'inspiration')}">
+      <button class="photo-del" onclick="event.stopPropagation();removePhoto('${c.id}','${p.id}')" aria-label="Supprimer">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>`;
+  });
+  h+=`</div>`;
+  h+=`<input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="onPhotoPicked('${c.id}',this)">
+    <button class="btn ghost sm wide" style="margin-top:10px" onclick="document.getElementById('photoInput').click()">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Ajouter des photos d'inspiration</button>
+    <div id="photoMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:6px"></div>`;
+
+  // logistique jour J (Maison Lumiere)
+  if(c.brand==="maison-lumiere" && c.logistics && (c.logistics.mairie||c.logistics.ceremonie||c.logistics.domaine)){
+    h+=`<div class="grouplab" style="margin-top:22px">Logistique jour J</div><div class="card">`;
+    if(c.logistics.mairie) h+=kv("Mairie",esc(c.logistics.mairie));
+    if(c.logistics.ceremonie) h+=kv("Ceremonie",esc(c.logistics.ceremonie));
+    if(c.logistics.domaine) h+=kv("Domaine / reception",esc(c.logistics.domaine));
+    h+=`</div>`;
+  }
+
   // seances liees
   h+=`<div class="section-title"><h2 style="font-size:18px">Seances</h2><button class="btn sm ghost" onclick="openSeanceEdit(null,'${c.id}')">Ajouter</button></div>`;
   if(seances.length){
@@ -1008,6 +1044,94 @@ function openFiche(id){
 
   document.getElementById("ficheBody").innerHTML=h;
   setView("fiche");
+  loadFichePhotos();
+}
+
+/* ============================================================
+   PHOTOS D'INSPIRATION (stockage separe via crm-media)
+   ============================================================ */
+const MEDIA_ENDPOINT="/.netlify/functions/crm-media";
+const photoCache={}; // id -> objectURL
+
+function loadFichePhotos(){
+  document.querySelectorAll("#photoGrid img[data-photo]").forEach(img=>{
+    const id=img.getAttribute("data-photo");
+    if(photoCache[id]){ img.src=photoCache[id]; return; }
+    fetch(MEDIA_ENDPOINT+"?id="+encodeURIComponent(id),{headers: CRM_KEY?{"X-CRM-Key":CRM_KEY}:{},cache:"no-store"})
+      .then(r=>r.ok?r.blob():null)
+      .then(b=>{ if(b){ const u=URL.createObjectURL(b); photoCache[id]=u; img.src=u; } })
+      .catch(()=>{});
+  });
+}
+
+/* compresse une image (max 1400px, JPEG) pour un stockage leger */
+function compressImage(file){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const max=1400;
+      let w=img.width,h=img.height;
+      if(w>max||h>max){ if(w>=h){ h=Math.round(h*max/w); w=max; } else { w=Math.round(w*max/h); h=max; } }
+      const canvas=document.createElement("canvas");
+      canvas.width=w; canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      canvas.toBlob(b=>{ b?resolve(b):reject(); },"image/jpeg",0.82);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(); };
+    img.src=url;
+  });
+}
+
+async function onPhotoPicked(clientId,input){
+  const files=Array.from(input.files||[]);
+  input.value="";
+  if(!files.length) return;
+  if(!CLOUD){ toast("Disponible seulement en ligne"); return; }
+  const msg=document.getElementById("photoMsg");
+  const c=clientById(clientId); if(!c) return;
+  if(!Array.isArray(c.photos)) c.photos=[];
+  let done=0;
+  for(const f of files){
+    if(!f.type.startsWith("image/")) continue;
+    if(msg) msg.textContent="Envoi des photos ("+(done+1)+"/"+files.length+")...";
+    try{
+      const blob=await compressImage(f);
+      const id="img_"+uid();
+      const res=await fetch(MEDIA_ENDPOINT+"?id="+encodeURIComponent(id),{
+        method:"PUT",
+        headers: Object.assign({"Content-Type":"image/jpeg"}, CRM_KEY?{"X-CRM-Key":CRM_KEY}:{}),
+        body: blob
+      });
+      if(res.ok){ c.photos.push({id,name:f.name||"inspiration"}); photoCache[id]=URL.createObjectURL(blob); done++; }
+    }catch(e){}
+  }
+  saveDB();
+  if(msg) msg.textContent = done?(done+" photo"+(done>1?"s":"")+" ajoutee"+(done>1?"s":"")):"Aucune photo ajoutee";
+  openFiche(clientId);
+}
+
+function removePhoto(clientId,photoId){
+  if(!confirm("Retirer cette photo ?")) return;
+  const c=clientById(clientId); if(!c||!Array.isArray(c.photos)) return;
+  c.photos=c.photos.filter(p=>p.id!==photoId);
+  saveDB();
+  fetch(MEDIA_ENDPOINT+"?id="+encodeURIComponent(photoId),{method:"DELETE",headers: CRM_KEY?{"X-CRM-Key":CRM_KEY}:{}}).catch(()=>{});
+  if(photoCache[photoId]){ URL.revokeObjectURL(photoCache[photoId]); delete photoCache[photoId]; }
+  openFiche(clientId);
+}
+
+function viewPhoto(photoId){
+  const src=photoCache[photoId];
+  const inner = src
+    ? `<img src="${src}" style="width:100%;border-radius:14px;display:block">`
+    : `<div style="padding:40px;text-align:center;color:var(--ink-3)">Chargement...</div>`;
+  openModal(`<div style="margin-top:4px">${inner}</div>`);
+  if(!src){
+    fetch(MEDIA_ENDPOINT+"?id="+encodeURIComponent(photoId),{headers: CRM_KEY?{"X-CRM-Key":CRM_KEY}:{},cache:"no-store"})
+      .then(r=>r.ok?r.blob():null).then(b=>{ if(b){ const u=URL.createObjectURL(b); photoCache[photoId]=u; document.getElementById("modalContent").innerHTML=`<div style="margin-top:4px"><img src="${u}" style="width:100%;border-radius:14px;display:block"></div>`; } }).catch(()=>{});
+  }
 }
 function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
 
@@ -1039,6 +1163,8 @@ function pickBrand(b){
   if(ts) fillTypeOptions(ts,b,ts.value);
   const el=document.getElementById("eventDateLabel");
   if(el) el.textContent=eventLabel(b);
+  const lg=document.getElementById("logGroup");
+  if(lg) lg.style.display = (b==="maison-lumiere") ? "block" : "none";
 }
 function fillTypeOptions(sel,brand,current){
   const list=TYPES[brand]||[];
@@ -1076,7 +1202,15 @@ function openClientEdit(id){
       <div class="hint">Pour un mariage : la date du grand jour. Laisse vide si pas encore fixe.</div>
     </div>
     <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Attentes, contexte, details a retenir...">${c?esc(c.notes||''):''}</textarea></div>
-    <button class="btn wide" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
+    <div class="field"><label>Demande particuliere du client</label><textarea id="fWishes" placeholder="Style souhaite, inspirations, contraintes, demandes speciales...">${c?esc(c.wishes||''):''}</textarea></div>
+    <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
+      <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
+      <div class="field"><label>Adresse mairie</label><input id="fLogMairie" value="${c&&c.logistics?esc(c.logistics.mairie||''):''}" placeholder="Mairie, heure..."></div>
+      <div class="field"><label>Adresse ceremonie (eglise, laique...)</label><input id="fLogCeremonie" value="${c&&c.logistics?esc(c.logistics.ceremonie||''):''}" placeholder="Lieu de ceremonie, heure..."></div>
+      <div class="field"><label>Adresse domaine / reception</label><input id="fLogDomaine" value="${c&&c.logistics?esc(c.logistics.domaine||''):''}" placeholder="Domaine, salle..."></div>
+      <div class="hint">A remplir une fois le client confirme. Sert a preparer le deroule du jour J.</div>
+    </div>
+    <button class="btn wide" style="margin-top:6px" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
   if(c) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteClient('${id}')">Supprimer ce client</button>`;
   openModal(h);
   const ts=document.getElementById("typeSelect");
@@ -1093,9 +1227,15 @@ function saveClient(id){
     tel:document.getElementById("fTel").value.trim(), email:document.getElementById("fEmail").value.trim(),
     insta:document.getElementById("fInsta").value.trim(), budget:document.getElementById("fBudget").value.trim(),
     source:document.getElementById("fSource").value, notes:document.getElementById("fNotes").value.trim(),
-    eventDate:document.getElementById("fEvent").value
+    eventDate:document.getElementById("fEvent").value,
+    wishes:document.getElementById("fWishes").value.trim(),
+    logistics:{
+      mairie:document.getElementById("fLogMairie").value.trim(),
+      ceremonie:document.getElementById("fLogCeremonie").value.trim(),
+      domaine:document.getElementById("fLogDomaine").value.trim()
+    }
   };
-  if(id){ Object.assign(clientById(id),data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise a jour"); }
+  if(id){ const ex=clientById(id); if(ex&&ex.photos) data.photos=ex.photos; Object.assign(ex,data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise a jour"); }
   else { const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc); saveDB(); closeModal(); openFiche(nc.id); toast("Client cree"); }
 }
 function deleteClient(id){
@@ -1445,6 +1585,9 @@ function renderReglages(){
       <div id="syncMsg" style="font-size:13px;color:var(--ok);margin-top:10px"></div>
     </div>
 
+    <div class="grouplab">Contacts & campagnes</div>
+    <div class="card" style="padding:16px" id="contactsCard"></div>
+
     <div class="grouplab">Sauvegarde manuelle</div>
     <div class="card" style="padding:16px">
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
@@ -1473,6 +1616,62 @@ function renderReglages(){
   if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
+  renderContacts(contactsBrand);
+}
+let contactsBrand="all";
+function collectContacts(brand){
+  const emails=new Map(), phones=new Map();
+  DB.clients.forEach(c=>{
+    if(brand!=="all"&&c.brand!==brand) return;
+    const e=(c.email||"").trim(); if(e){ const k=e.toLowerCase(); if(!emails.has(k)) emails.set(k,e); }
+    const t=(c.tel||"").trim(); if(t){ const k=t.replace(/\s/g,""); if(!phones.has(k)) phones.set(k,t); }
+  });
+  return { emails:[...emails.values()], phones:[...phones.values()] };
+}
+function renderContacts(brand){
+  contactsBrand=brand||"all";
+  const box=document.getElementById("contactsCard");
+  if(!box) return;
+  const {emails,phones}=collectContacts(contactsBrand);
+  const chips=[["all","Tout"]].concat(BRAND_ORDER.map(b=>[b,BRANDS[b].name]));
+  let h=`<div class="pill-row" style="margin:0 0 12px">`+
+    chips.map(([k,l])=>`<button class="pill ${contactsBrand===k?"on":""}" onclick="renderContacts('${k}')">${l}</button>`).join("")+`</div>`;
+  h+=`<div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Emails</div><div class="num" style="font-size:24px">${emails.length}</div></div>
+      <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Numeros</div><div class="num" style="font-size:24px">${phones.length}</div></div>
+    </div>`;
+  h+=`<div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn ghost sm wide" onclick="copyContacts('emails')">Copier les emails</button>
+      <button class="btn ghost sm wide" onclick="copyContacts('phones')">Copier les numeros</button>
+      <button class="btn ghost sm wide" onclick="downloadContactsCsv()">Telecharger en CSV (Excel)</button>
+    </div>
+    <div id="contactsMsg" style="font-size:12.5px;color:var(--ink-2);margin-top:9px"></div>
+    <div class="hint" style="margin-top:8px">Pense a n'utiliser ces contacts que pour des personnes qui ont accepte d'etre recontactees.</div>`;
+  box.innerHTML=h;
+}
+function copyContacts(which){
+  const {emails,phones}=collectContacts(contactsBrand);
+  const list=which==="emails"?emails:phones;
+  const txt=list.join(which==="emails"?", ":"\n");
+  const msg=document.getElementById("contactsMsg");
+  const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand("copy"); if(msg) msg.textContent=list.length+" "+(which==="emails"?"emails copies":"numeros copies")+"."; }
+  catch(e){ if(msg) msg.textContent="Copie impossible, selectionne a la main."; }
+  document.body.removeChild(ta);
+}
+function downloadContactsCsv(){
+  const rows=[["Nom","Email","Telephone","Marque","Statut"]];
+  DB.clients.forEach(c=>{
+    if(contactsBrand!=="all"&&c.brand!==contactsBrand) return;
+    if(!c.email&&!c.tel) return;
+    rows.push([c.name||"",c.email||"",c.tel||"",(BRANDS[c.brand]||{}).name||"",c.status||""]);
+  });
+  const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="contacts-"+contactsBrand+".csv"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
+  const msg=document.getElementById("contactsMsg"); if(msg) msg.textContent="Fichier CSV telecharge.";
 }
 async function renderSecurity(){
   const box=document.getElementById("securityCard");
