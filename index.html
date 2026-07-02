@@ -304,6 +304,8 @@
   .lock-card input{width:100%;padding:14px 15px;border:1px solid var(--line-2);border-radius:13px;background:var(--surface);font-size:16px;margin-bottom:12px;text-align:center;}
   .lock-card input:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(26,26,28,.07);}
   .lock-err{font-size:13px;color:var(--danger);margin-top:12px;min-height:18px;}
+  .lock-link{background:none;border:none;color:var(--ink-2);font-size:13.5px;font-weight:500;cursor:pointer;margin-top:14px;text-decoration:underline;text-underline-offset:3px;}
+  .lock-link:hover{color:var(--ink);}
   .lock .btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 </style>
 </head>
@@ -412,13 +414,24 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="5.4" stroke="#fff" stroke-width="1.9" fill="none"/><circle cx="12" cy="13" r="2.2" fill="#e8834a"/><path d="M5 8h3l1.4-2h5.2L16 8h3v1" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" fill="none"/></svg>
     </div>
     <h2>Studio</h2>
-    <div class="lock-sub">Espace protege. Entre ton mot de passe.</div>
-    <input id="lockPass" type="password" autocomplete="current-password" placeholder="Mot de passe" inputmode="text">
-    <button class="btn wide" onclick="submitPassword()">Entrer</button>
-    <button class="btn ghost wide" id="bioBtn" style="display:none;margin-top:9px" onclick="unlockWithBio()">
-      <svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v1M12 3a7 7 0 0 1 7 7v4M8.5 12v2a3.5 3.5 0 0 0 7 0M12 8a2 2 0 0 0-2 2v4M15.5 18.5c.3-1 .5-2 .5-3.5"/></svg>
-      Deverrouiller avec l'empreinte
-    </button>
+    <div class="lock-sub" id="lockSub">Espace protege.</div>
+
+    <!-- zone empreinte (mise en avant si activee) -->
+    <div id="bioZone" style="display:none">
+      <button class="btn wide" id="bioBtn" onclick="unlockWithBio()">
+        <svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-7 7v1M12 3a7 7 0 0 1 7 7v4M8.5 12v2a3.5 3.5 0 0 0 7 0M12 8a2 2 0 0 0-2 2v4M15.5 18.5c.3-1 .5-2 .5-3.5"/></svg>
+        Deverrouiller avec l'empreinte
+      </button>
+      <button class="lock-link" onclick="showPassZone()">Utiliser le mot de passe</button>
+    </div>
+
+    <!-- zone mot de passe -->
+    <div id="passZone">
+      <input id="lockPass" type="password" autocomplete="current-password" placeholder="Mot de passe" inputmode="text">
+      <button class="btn wide" onclick="submitPassword()">Entrer</button>
+      <button class="lock-link" id="bioRetry" style="display:none" onclick="unlockWithBio()">Utiliser l'empreinte</button>
+    </div>
+
     <div id="lockErr" class="lock-err"></div>
   </div>
 </div>
@@ -1613,8 +1626,46 @@ function showLock(){
   const el=document.getElementById("lockScreen");
   if(el){ el.style.display="flex"; }
   document.body.style.overflow="hidden";
-  const bioBtn=document.getElementById("bioBtn");
-  if(bioBtn) bioBtn.style.display = bioEnabled() ? "inline-flex" : "none";
+  const bio=bioEnabled();
+  const bioZone=document.getElementById("bioZone");
+  const passZone=document.getElementById("passZone");
+  const sub=document.getElementById("lockSub");
+  const retry=document.getElementById("bioRetry");
+  if(bio){
+    // empreinte en avant, mot de passe cache en secours
+    bioZone.style.display="block";
+    passZone.style.display="none";
+    if(sub) sub.textContent="Deverrouille avec ton empreinte.";
+    if(retry) retry.style.display="inline-block";
+    // tentative automatique (echoue en silence sur mobile sans geste, le bouton prend le relais)
+    setTimeout(()=>{ if(!authed) unlockWithBio(true); }, 150);
+    // premier appui sur l'ecran : declenche l'empreinte
+    armBioOnTap();
+  } else {
+    bioZone.style.display="none";
+    passZone.style.display="block";
+    if(sub) sub.textContent="Espace protege.";
+    if(retry) retry.style.display="none";
+  }
+}
+function showPassZone(){
+  document.getElementById("bioZone").style.display="none";
+  document.getElementById("passZone").style.display="block";
+  document.getElementById("lockSub").textContent="Entre ton mot de passe.";
+  const inp=document.getElementById("lockPass"); if(inp) inp.focus();
+}
+let bioTapArmed=false;
+function armBioOnTap(){
+  if(bioTapArmed) return; bioTapArmed=true;
+  const el=document.getElementById("lockScreen");
+  const handler=(ev)=>{
+    // on ignore les appuis sur les boutons/liens (ils ont deja leur action)
+    if(ev.target.closest("button")) return;
+    el.removeEventListener("pointerdown",handler);
+    bioTapArmed=false;
+    if(!authed) unlockWithBio(true);
+  };
+  el.addEventListener("pointerdown",handler);
 }
 function hideLock(){
   const el=document.getElementById("lockScreen");
@@ -1683,7 +1734,7 @@ function disableBio(){
   toast("Empreinte desactivee");
   if(document.querySelector("#reglages.active")) renderReglages();
 }
-async function unlockWithBio(){
+async function unlockWithBio(silent){
   const err=document.getElementById("lockErr");
   const id=localStorage.getItem(BIO_STORE);
   if(!id){ return; }
@@ -1695,7 +1746,9 @@ async function unlockWithBio(){
       userVerification:"required", timeout:60000
     }});
     if(assertion){ onAuthenticated(); }
-  }catch(e){ err.textContent="Empreinte non reconnue. Utilise ton mot de passe."; }
+  }catch(e){
+    if(!silent){ err.textContent="Empreinte non reconnue. Tu peux utiliser ton mot de passe."; }
+  }
 }
 function logout(){
   if(!confirm("Se deconnecter de cet appareil ?")) return;
@@ -1745,12 +1798,9 @@ buildHome();
 setView("home");
 if(CLOUD){
   // acces protege : on passe par l'ecran de verrouillage
-  showLock();
+  showLock(); // showLock tente l'empreinte tout seul si elle est activee
   document.getElementById("lockPass").addEventListener("keydown",e=>{ if(e.key==="Enter") submitPassword(); });
-  if(bioEnabled()){
-    // deverrouillage empreinte propose d'entree
-    unlockWithBio();
-  } else if(CRM_KEY){
+  if(!bioEnabled() && CRM_KEY){
     // deja connecte sur cet appareil (PC) : on verifie la cle en silence
     verifyKey(CRM_KEY).then(ok=>{ if(ok){ onAuthenticated(); } });
   }
