@@ -3,6 +3,7 @@
 // et l'ajoute au CRM : un prospect maison-lumiere + un RDV telephonique dans l'agenda.
 // A deployer sur LE MEME site Netlify que store-crm.js.
 import { getStore } from "@netlify/blobs";
+import { notifyAll } from "../push-lib.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -107,6 +108,15 @@ export default async (request) => {
 
   data.t = now;
   await store.setJSON(KEY, data);
+
+  // notification push
+  try{
+    await notifyAll(
+      "Nouvelle demande d'appel",
+      nom + (creneau ? " . " + creneau : "") + (tel ? " . " + tel : ""),
+      "/"
+    );
+  }catch(e){}
 
   return new Response(JSON.stringify({ ok: true }), { headers: { ...cors, "Content-Type": "application/json" } });
 };

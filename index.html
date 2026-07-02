@@ -317,6 +317,9 @@
   .photo-tile img{width:100%;height:100%;object-fit:cover;display:block;}
   .photo-del{position:absolute;top:5px;right:5px;width:24px;height:24px;border-radius:7px;border:none;background:rgba(20,20,24,.62);color:#fff;display:grid;place-items:center;cursor:pointer;}
   .photo-del svg{width:14px;height:14px;stroke:currentColor;stroke-width:2.4;fill:none;stroke-linecap:round;}
+  .itin{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:3px 9px;border-radius:999px;background:var(--surface-3);color:var(--ink);font-size:12.5px;font-weight:600;text-decoration:none;white-space:nowrap;vertical-align:middle;}
+  .itin:hover{background:var(--line-2);}
+  .itin svg{width:14px;height:14px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .lock .btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 </style>
 </head>
@@ -459,7 +462,7 @@
 /* ---------- marques ---------- */
 const BRANDS = {
   "mybabyshoot":   { name:"Mybabyshoot",    short:"Baby",    color:"var(--baby)",    badge:"baby",    tag:"Grossesse & naissance" },
-  "maison-lumiere":{ name:"Maison Lumiere",  short:"Lumiere", color:"var(--lumiere)", badge:"lumiere", tag:"Mariage" },
+  "maison-lumiere":{ name:"Maison Lumière",  short:"Lumière", color:"var(--lumiere)", badge:"lumiere", tag:"Mariage" },
   "matt-la-photo": { name:"Matt la photo",   short:"Matt",    color:"var(--matt)",    badge:"matt",    tag:"Contenu & street" }
 };
 const BRAND_ORDER = ["mybabyshoot","maison-lumiere","matt-la-photo"];
@@ -1019,9 +1022,9 @@ function openFiche(id){
   // logistique jour J (Maison Lumiere)
   if(c.brand==="maison-lumiere" && c.logistics && (c.logistics.mairie||c.logistics.ceremonie||c.logistics.domaine)){
     h+=`<div class="grouplab" style="margin-top:22px">Logistique jour J</div><div class="card">`;
-    if(c.logistics.mairie) h+=kv("Mairie",esc(c.logistics.mairie));
-    if(c.logistics.ceremonie) h+=kv("Cérémonie",esc(c.logistics.ceremonie));
-    if(c.logistics.domaine) h+=kv("Domaine / réception",esc(c.logistics.domaine));
+    if(c.logistics.mairie) h+=kvAddr("Mairie",c.logistics.mairie);
+    if(c.logistics.ceremonie) h+=kvAddr("Cérémonie",c.logistics.ceremonie);
+    if(c.logistics.domaine) h+=kvAddr("Domaine / réception",c.logistics.domaine);
     h+=`</div>`;
   }
 
@@ -1149,6 +1152,14 @@ function viewPhoto(photoId){
   }
 }
 function kv(k,v){ return `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+/* lien itineraire Google Maps vers une adresse */
+function mapsLink(addr){
+  if(!addr) return "";
+  const u="https://www.google.com/maps/dir/?api=1&destination="+encodeURIComponent(addr);
+  return ` <a href="${u}" target="_blank" rel="noopener" class="itin"><svg viewBox="0 0 24 24"><path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z"/><circle cx="12" cy="10" r="2.4"/></svg>Itinéraire</a>`;
+}
+/* valeur avec lien itineraire */
+function kvAddr(k,addr){ return `<div class="kv"><div class="k">${k}</div><div class="v">${esc(addr)}${mapsLink(addr)}</div></div>`; }
 
 /* place la date du mariage dans l'agenda (cree une seance de type Mariage) */
 function addWeddingToAgenda(id){
@@ -1333,7 +1344,7 @@ function openSeance(id){
     <div class="card">`;
   h+=kv("Quand",`${fmtDate(s.date)}${s.time?" a "+s.time.replace(":","h"):""}`);
   if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
-  if(s.place) h+=kv("Lieu",esc(s.place));
+  if(s.place) h+=kvAddr("Lieu",s.place);
   if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
   h+=`</div>
     <div style="display:flex;gap:9px;margin-top:16px">
@@ -1622,6 +1633,9 @@ function renderReglages(){
       <div class="hint" style="margin-top:8px">Efface uniquement les données locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
     </div>
 
+    <div class="grouplab">Notifications</div>
+    <div class="card" style="padding:16px" id="notifCard"></div>
+
     <div class="grouplab">Sécurité</div>
     <div class="card" style="padding:16px" id="securityCard"></div>
 
@@ -1633,6 +1647,7 @@ function renderReglages(){
   if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
+  renderNotifs();
   renderContacts(contactsBrand);
 }
 let contactsBrand="all";
@@ -2014,8 +2029,70 @@ function wipeAll(){
 }
 
 /* ============================================================
+   NOTIFICATIONS PUSH
+   ============================================================ */
+const VAPID_PUBLIC="BAyq1326t7veB6WqcMZRqu6orrjl15VjWLOiCiD04V2SwRBXsaCDWQTiO2rhEwGnajmH933o3zfdT6z11QeFPaY";
+const SUBSCRIBE_ENDPOINT="/.netlify/functions/crm-subscribe";
+function urlB64ToUint8(base64){
+  const pad="=".repeat((4-base64.length%4)%4);
+  const b=(base64+pad).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(b); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+function notifSupported(){ return CLOUD && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+async function notifIsOn(){
+  if(!notifSupported()) return false;
+  try{ const reg=await navigator.serviceWorker.ready; const sub=await reg.pushManager.getSubscription(); return !!sub && Notification.permission==="granted"; }
+  catch(e){ return false; }
+}
+async function enableNotifs(){
+  if(!notifSupported()){ toast("Notifications non disponibles ici"); return; }
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){ toast("Autorisation refusée"); renderNotifs(); return; }
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){ sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:urlB64ToUint8(VAPID_PUBLIC) }); }
+    const res=await fetch(SUBSCRIBE_ENDPOINT,{ method:"POST", headers:Object.assign({"Content-Type":"application/json"}, CRM_KEY?{"X-CRM-Key":CRM_KEY}:{}), body:JSON.stringify(sub) });
+    if(res.ok){ toast("Notifications activées"); } else { toast("Activation impossible"); }
+  }catch(e){ toast("Activation impossible sur cet appareil"); }
+  renderNotifs();
+}
+async function disableNotifs(){
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.getSubscription();
+    if(sub){
+      fetch(SUBSCRIBE_ENDPOINT,{ method:"DELETE", headers:Object.assign({"Content-Type":"application/json"}, CRM_KEY?{"X-CRM-Key":CRM_KEY}:{}), body:JSON.stringify(sub) }).catch(()=>{});
+      await sub.unsubscribe();
+    }
+    toast("Notifications désactivées");
+  }catch(e){}
+  renderNotifs();
+}
+async function renderNotifs(){
+  const box=document.getElementById("notifCard");
+  if(!box) return;
+  if(!notifSupported()){
+    box.innerHTML=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">Les notifications fonctionnent sur l'appli ajoutée à ton écran d'accueil. Sur iPhone, ouvre le CRM depuis son icône, pas depuis le navigateur.</div>`;
+    return;
+  }
+  const on=await notifIsOn();
+  let h=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Reçois une alerte sur cet appareil dès qu'un devis ou une demande d'appel arrive du site, même appli fermée.</div>`;
+  if(on){
+    h+=`<div style="display:flex;align-items:center;gap:8px;color:var(--ok);font-size:13.5px;font-weight:600;margin-bottom:10px"><svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>Notifications activées sur cet appareil</div>
+      <button class="btn ghost sm wide" onclick="disableNotifs()">Désactiver sur cet appareil</button>`;
+  } else {
+    h+=`<button class="btn sm wide" onclick="enableNotifs()"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Activer les notifications</button>`;
+  }
+  box.innerHTML=h;
+}
+
+/* ============================================================
    INIT
    ============================================================ */
+if(CLOUD && "serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 loadDB();
 buildHome();
 setView("home");

@@ -5,6 +5,7 @@
 // on garde la fiche et on ajoute la nouvelle demande dans ses notes (rien de perdu).
 // A deployer sur LE MEME site Netlify que store-crm.js (memes donnees).
 import { getStore } from "@netlify/blobs";
+import { notifyAll } from "../push-lib.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -89,6 +90,15 @@ export default async (request) => {
 
   data.t = now;
   await store.setJSON(KEY, data);
+
+  // notification push
+  try{
+    await notifyAll(
+      "Nouveau devis Maison Lumiere",
+      nom + (eventDate ? " . mariage le " + frDate(eventDate) : "") + (tel ? " . " + tel : ""),
+      "/"
+    );
+  }catch(e){}
 
   return new Response(JSON.stringify({ ok: true }), { headers: { ...cors, "Content-Type": "application/json" } });
 };
