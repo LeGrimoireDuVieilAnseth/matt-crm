@@ -19,7 +19,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 });
 
 export default async (request) => {
-  if (request.method === "OPTIONS") return new Response("", { status: 204, headers: cors });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
 
   const secret = process.env.STRIPE_SECRET_KEY;

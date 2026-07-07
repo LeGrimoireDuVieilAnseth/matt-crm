@@ -10,7 +10,7 @@ const cors = {
 };
 
 export default async (request) => {
-  if (request.method === "OPTIONS") return new Response("", { status: 204, headers: cors });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "GET")
     return new Response("Methode non supportee", { status: 405, headers: cors });
 
