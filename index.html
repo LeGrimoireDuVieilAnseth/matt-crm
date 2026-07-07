@@ -621,7 +621,7 @@ function buildHome(){
   buildBrandbar();
   const body=document.getElementById("homeBody");
   const clients=DB.clients.filter(c=>passFilter(c.brand)&&c.status!=="Archive");
-  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee"&&s.type!=="RDV telephonique");
+  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo");
   const pays=DB.paiements.filter(p=>passFilter(p.brand));
   const taches=DB.taches.filter(t=>!t.done);
 
@@ -1519,7 +1519,7 @@ function renderAgenda(){
   const opts=[["upcoming","À venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passées"],["all","Tout"]];
   pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
 
-  let list=DB.seances.filter(s=>passFilter(s.brand));
+  let list=DB.seances.filter(s=>passFilter(s.brand)&&s.type!=="Indispo");
   const t=todayStr();
   if(agendaFilter==="upcoming") list=list.filter(s=>s.date>=t&&s.status!=="Annulee");
   else if(agendaFilter==="today") list=list.filter(s=>s.date===t);
@@ -1742,7 +1742,72 @@ function openAddMenu(){
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openSeanceEdit(null)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Nouvelle séance</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openPayEdit(null)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Nouveau paiement</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
     </div>`);
+}
+
+/* ============================================================
+   BLOCAGE DE CRENEAUX Mybabyshoot (indispos : mariage, vacances...)
+   Un blocage est une seance brand "mybabyshoot" type "Indispo",
+   pris en compte par la reservation en ligne (mbs-availability).
+   ============================================================ */
+function mbsBlocks(){
+  return DB.seances.filter(s=>s.brand==="mybabyshoot"&&s.type==="Indispo"&&s.status!=="Annulee")
+    .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+}
+function blockLabel(s){
+  const slot=s.time?("à "+s.time.replace(":","h")):"toute la journée";
+  const per=(s.dateEnd&&s.dateEnd!==s.date)?(" au "+fmtDate(s.dateEnd)):"";
+  return fmtDate(s.date)+per+" · "+slot;
+}
+function openBlocksList(){
+  const list=mbsBlocks();
+  let h=`<h2>Créneaux bloqués</h2>
+    <p class="hint" style="margin:0 0 12px">Ces dates ne seront pas proposées à la réservation en ligne Mybabyshoot.</p>
+    <button class="btn wide" onclick="openBlockEdit(null)">+ Bloquer une date ou un créneau</button>`;
+  if(!list.length){
+    h+=`<div class="empty" style="margin-top:16px"><div class="s">Aucun blocage pour l'instant.</div></div>`;
+  }else{
+    h+=`<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">`;
+    list.forEach(s=>{
+      h+=`<div class="row" onclick="openBlockEdit('${s.id}')">
+        <div class="row-main"><div class="t">${esc(blockLabel(s))}</div>${s.notes?`<div class="s">${esc(s.notes)}</div>`:""}</div>
+        <div class="row-end"><button class="btn sm danger" onclick="event.stopPropagation();deleteBlock('${s.id}')">Retirer</button></div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  openModal(h);
+}
+function openBlockEdit(id){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  const slots=["","10:30","14:30","18:00"];
+  let h=`<h2>${s?"Modifier le blocage":"Bloquer une date"}</h2>
+    <div class="field"><label>Date (ou début de période)</label><input id="blkDate" type="date" value="${s?s.date:todayStr()}"></div>
+    <div class="field"><label>Jusqu'au (optionnel, pour une période / des vacances)</label><input id="blkEnd" type="date" value="${s&&s.dateEnd?s.dateEnd:""}"></div>
+    <div class="field"><label>Créneau</label><select id="blkSlot">${slots.map(t=>`<option value="${t}" ${s&&(s.time||"")===t?"selected":""}>${t?t.replace(":","h"):"Toute la journée"}</option>`).join("")}</select></div>
+    <div class="field"><label>Motif (optionnel)</label><input id="blkNote" value="${s?esc(s.notes||""):""}" placeholder="Mariage, vacances..."></div>
+    <button class="btn wide" onclick="saveBlock('${id||""}')">${s?"Enregistrer":"Bloquer ce créneau"}</button>`;
+  if(s) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteBlock('${id}')">Retirer ce blocage</button>`;
+  openModal(h);
+}
+function saveBlock(id){
+  const s=id?DB.seances.find(x=>x.id===id):null;
+  let date=document.getElementById("blkDate").value;
+  let end=document.getElementById("blkEnd").value;
+  const time=document.getElementById("blkSlot").value;
+  const notes=document.getElementById("blkNote").value.trim();
+  if(!date){ toast("Choisis une date"); return; }
+  if(end&&end<date){ const t=date; date=end; end=t; }
+  const data={ brand:"mybabyshoot", type:"Indispo", date, dateEnd:(end&&end!==date)?end:"", time:time||"", status:"A venir", notes, place:"" };
+  if(s){ Object.assign(s,data); } else { data.id=uid(); data.createdAt=Date.now(); DB.seances.push(data); }
+  saveDB(); closeModal(); openBlocksList(); toast(s?"Blocage mis à jour":"Créneau bloqué");
+}
+function deleteBlock(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  DB.deleted=(DB.deleted||[]).concat([id]);
+  DB.seances=DB.seances.filter(x=>x.id!==id);
+  saveDB(); closeModal(); openBlocksList(); toast("Blocage retiré");
 }
 
 /* ============================================================
