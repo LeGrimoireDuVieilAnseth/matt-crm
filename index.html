@@ -1511,11 +1511,39 @@ function openSeance(id){
       dateISO:s.date, time:s.time||"", durationMin:120,
       location:s.place||"", details:c&&c.tel?"Tel : "+c.tel:""
     },"Ajouter à Google Agenda")}</div>
+    ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn wide" style="margin-top:6px" onclick="openMove('${id}')">Déplacer le créneau</button>`:""}
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier</button>
       ${c&&c.tel?`<a class="btn" style="flex:1" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
     </div>`;
   openModal(h);
+}
+
+/* Deplacer une reservation Mybabyshoot vers un autre creneau fixe (anti-doublon). */
+function openMove(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  const slots=["10:30","14:30","18:00"];
+  let h=`<h2>Déplacer le créneau</h2>
+    <p class="hint" style="margin:0 0 12px">${esc(acc(s.type)||"Séance")}${c?" . "+esc(c.name):""}. La disponibilité en ligne se met à jour toute seule.</p>
+    <div class="field"><label>Nouvelle date</label><input id="mvDate" type="date" value="${s.date}"></div>
+    <div class="field"><label>Nouveau créneau</label><select id="mvSlot">${slots.map(t=>`<option value="${t}" ${(s.time||"")===t?"selected":""}>${t.replace(":","h")}</option>`).join("")}</select></div>
+    <button class="btn wide" onclick="saveMove('${id}')">Déplacer</button>`;
+  openModal(h);
+}
+function mbsSlotBusy(exceptId,date,time){
+  return DB.seances.some(x=>x.id!==exceptId && x.brand==="mybabyshoot" && x.status!=="Annulee" &&
+    (x.type==="Indispo"
+      ? ((x.dateEnd?(date>=x.date&&date<=x.dateEnd):date===x.date) && (!x.time||x.time===time))
+      : (x.date===date && x.time===time)));
+}
+function saveMove(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const date=document.getElementById("mvDate").value;
+  const time=document.getElementById("mvSlot").value;
+  if(!date){ toast("Choisis une date"); return; }
+  if(mbsSlotBusy(id,date,time)){ toast("Ce créneau est déjà pris ou bloqué. Choisis-en un autre."); return; }
+  s.date=date; s.time=time; saveDB(); closeModal(); openSeance(id); toast("Créneau déplacé");
 }
 
 /* ============================================================
