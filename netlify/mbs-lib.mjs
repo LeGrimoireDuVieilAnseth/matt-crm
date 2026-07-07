@@ -20,9 +20,9 @@ export const HORIZON_DAYS = 90;
 // Duree du verrou pose pendant le paiement (au dela, le creneau se relibere).
 export const LOCK_TTL_MS = 20 * 60 * 1000;
 
-// Acompte selon le type de seance (voir arbitrages Matt).
-export function acompteFor(type){
-  return type === "duo" ? 190 : 90;
+// Acompte selon le total compose : 190 euros des 590 euros, sinon 90.
+export function acompteFor(total){
+  return Number(total) >= 590 ? 190 : 90;
 }
 
 // Libelle francais du type de seance (pour l'agenda et les emails).

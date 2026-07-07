@@ -41,11 +41,11 @@ export default async (request) => {
   if (!isValidSlot(date, time)) return json({ ok: false, error: "invalid_slot" }, 400);
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
 
-  // Acompte recalcule cote serveur : on ne fait jamais confiance au montant du client.
-  const acompte = acompteFor(type);
-  // Total de la seance (informatif, pour le reste du affiche dans le CRM).
+  // Total de la seance compose par le client (sert a l'acompte et au reste du).
   let total = Math.round(Number(body.total));
-  if (!Number.isFinite(total) || total < acompte || total > 5000) total = acompte;
+  if (!Number.isFinite(total) || total < 90 || total > 5000) total = 290;
+  // Acompte derive du total (190 des 590 euros, sinon 90), recalcule cote serveur.
+  const acompte = acompteFor(total);
 
   const store = crmStore();
   const now = Date.now();
