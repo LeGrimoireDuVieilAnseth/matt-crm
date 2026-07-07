@@ -664,6 +664,14 @@ function buildHome(){
     todaySeances.forEach(s=>h+=seanceRow(s,true));
   }
 
+  // agenda a venir (toutes marques : prochains jours et semaines)
+  const futurs=upcoming.filter(s=>!isToday(s.date));
+  if(futurs.length){
+    h+=`<div class="section-title"><h2>À venir</h2><span class="count">${futurs.length}</span></div>`;
+    futurs.slice(0,8).forEach(s=>h+=seanceRow(s));
+    if(futurs.length>8) h+=`<button class="btn ghost wide sm" onclick="openAgenda()">Voir tout l'agenda</button>`;
+  }
+
   // rappels chauds
   if(rappelsChauds.length){
     h+=`<div class="section-title"><h2>À traiter</h2><span class="count">${rappelsChauds.length}</span></div>`;
