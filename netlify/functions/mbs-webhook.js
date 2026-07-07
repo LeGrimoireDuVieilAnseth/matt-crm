@@ -6,6 +6,7 @@
 import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
+import nodemailer from "nodemailer";
 
 function frDate(iso){
   const p = String(iso).split("-");
@@ -13,8 +14,14 @@ function frDate(iso){
 }
 
 async function sendClientEmail(m){
-  const key = process.env.RESEND_API_KEY, from = process.env.MBS_FROM_EMAIL;
-  if (!key || !from || !m.email) return; // email non configure : on n'envoie rien
+  // Envoi "maison" via SMTP de la boite mail de Matt (identifiants dans Netlify).
+  const host = process.env.MBS_SMTP_HOST;
+  const user = process.env.MBS_SMTP_USER;
+  const pass = process.env.MBS_SMTP_PASS;
+  const from = process.env.MBS_FROM_EMAIL || user;
+  if (!host || !user || !pass || !m.email) return; // SMTP non configure : on n'envoie rien
+  const port = Number(process.env.MBS_SMTP_PORT || 465);
+  const secure = process.env.MBS_SMTP_SECURE ? (process.env.MBS_SMTP_SECURE === "true") : (port === 465);
   const reste = Math.max(0, Number(m.total) - Number(m.acompte));
   const html =
     "<p>Bonjour " + (m.prenom || "") + ",</p>" +
@@ -29,14 +36,11 @@ async function sendClientEmail(m){
     "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
     "<p>Mybabyshoot</p>";
   try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + key, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from, to: [m.email], subject: "Votre reservation est confirmee . Mybabyshoot", html
-      })
+    const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+    await transport.sendMail({
+      from, to: m.email, subject: "Votre reservation est confirmee . Mybabyshoot", html
     });
-  } catch (e) { /* non bloquant */ }
+  } catch (e) { /* non bloquant : l'email ne doit jamais faire echouer la reservation */ }
 }
 
 export default async (request) => {
