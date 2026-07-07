@@ -102,9 +102,24 @@ export function isLocked(data, date, time, now = Date.now()){
   );
 }
 
+// Un creneau est-il bloque par Matt (indisponibilite : mariage, vacances...) ?
+// Un blocage est stocke comme une seance brand "mybabyshoot" de type "Indispo"
+// (ainsi il est preserve et synchronise par le CRM comme les autres seances).
+//   time vide         -> journee entiere bloquee
+//   time renseigne    -> seul ce creneau est bloque
+//   dateEnd renseigne -> periode date..dateEnd bloquee (vacances)
+export function isBlocked(data, date, time){
+  return data.seances.some(s =>
+    s.brand === BRAND && s.type === "Indispo" && s.status !== "Annulee" &&
+    (s.dateEnd ? (date >= s.date && date <= s.dateEnd) : date === s.date) &&
+    (!s.time || s.time === time)
+  );
+}
+
 // Un creneau est-il libre a la reservation ?
 export function isFree(data, date, time, now = Date.now()){
-  return isValidSlot(date, time) && !isBooked(data, date, time) && !isLocked(data, date, time, now);
+  return isValidSlot(date, time) && !isBooked(data, date, time)
+    && !isLocked(data, date, time, now) && !isBlocked(data, date, time);
 }
 
 // Calcule les jours et creneaux disponibles a partir des donnees.
@@ -115,7 +130,7 @@ export function computeAvailability(data, now = Date.now()){
   for (let i = 0; i < HORIZON_DAYS; i++){
     const date = addDaysISO(start, i);
     if (!OPEN_DAYS.includes(weekdayOf(date))) continue;
-    const slots = SLOTS.filter(t => !isBooked(data, date, t) && !isLocked(data, date, t, now));
+    const slots = SLOTS.filter(t => !isBooked(data, date, t) && !isLocked(data, date, t, now) && !isBlocked(data, date, t));
     if (slots.length) days.push({ date, slots });
   }
   return days;
