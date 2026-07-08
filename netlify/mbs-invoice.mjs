@@ -3,6 +3,7 @@
 // externe : parfait en serverless) et fournit un numero de facture continu.
 import { getStore } from "@netlify/blobs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import nodemailer from "nodemailer";
 
 // Emetteur (auto-entrepreneur, sans TVA)
 const ISSUER = {
@@ -88,4 +89,71 @@ export async function makeInvoicePdf(inv){
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);
+}
+
+// Facture de solde (finale) : rappelle l'acompte deja verse et le solde regle.
+// inv : { number, dateStr, client:{name,email}, typeLabel, seanceDateFr, total, acompte }
+export async function makeFinalInvoicePdf(inv){
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const H = 842, M = 50;
+  const ink = rgb(0.16, 0.12, 0.07), soft = rgb(0.45, 0.40, 0.33), line = rgb(0.85, 0.80, 0.72);
+  const T = (x, yTop, str, size, f, c) => page.drawText(String(str), { x, y: H - yTop, size, font: f || font, color: c || ink });
+
+  T(M, 62, ISSUER.enseigne, 22, bold);
+  T(M, 84, ISSUER.nom, 10, font, soft);
+  T(M, 98, ISSUER.adresse, 10, font, soft);
+  T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
+  T(M, 126, ISSUER.tel + "   " + ISSUER.email, 10, font, soft);
+
+  T(360, 62, "FACTURE", 15, bold);
+  T(360, 84, "Facture n " + inv.number, 10, font, soft);
+  T(360, 98, "Date : " + inv.dateStr, 10, font, soft);
+
+  page.drawLine({ start: { x: M, y: H - 150 }, end: { x: 545, y: H - 150 }, thickness: 1, color: line });
+
+  T(M, 182, "Facturé à", 10, bold, soft);
+  T(M, 198, inv.client.name || "Client", 12, bold);
+  if (inv.client.email) T(M, 214, inv.client.email, 10, font, soft);
+
+  const yTable = 262;
+  T(M, yTable, "Description", 10, bold, soft);
+  T(430, yTable, "Montant", 10, bold, soft);
+  page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
+
+  T(M, yTable + 30, "Séance " + inv.typeLabel + " du " + inv.seanceDateFr, 11, font);
+  T(430, yTable + 30, eur(inv.total), 11, font);
+  T(M, yTable + 52, "Acompte déjà versé", 11, font, soft);
+  T(430, yTable + 52, "- " + eur(inv.acompte), 11, font, soft);
+  page.drawLine({ start: { x: M, y: H - (yTable + 72) }, end: { x: 545, y: H - (yTable + 72) }, thickness: 0.8, color: line });
+
+  const solde = Math.max(0, Number(inv.total) - Number(inv.acompte));
+  T(300, yTable + 98, "Solde réglé", 11, bold);
+  T(430, yTable + 98, eur(solde), 12, bold);
+  T(300, yTable + 120, "Total prestation", 10, font, soft);
+  T(430, yTable + 120, eur(inv.total), 10, font, soft);
+
+  T(M, yTable + 158, ISSUER.mentionTva, 9.5, font, soft);
+  T(M, yTable + 188, "Prestation réglée intégralement. Merci de votre confiance.", 10, font);
+
+  T(M, 800, ISSUER.enseigne + " . " + ISSUER.nom + " . SIRET " + ISSUER.siret + " . " + ISSUER.mentionTva, 8, font, soft);
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
+}
+
+// Envoi d'une facture par email (SMTP maison), avec copie a Matt (bcc).
+export async function sendInvoiceMail({ to, subject, html, pdf, pdfName }){
+  const host = process.env.MBS_SMTP_HOST, user = process.env.MBS_SMTP_USER, pass = process.env.MBS_SMTP_PASS;
+  const from = process.env.MBS_FROM_EMAIL || user;
+  if (!host || !user || !pass || !to) return false;
+  const port = Number(process.env.MBS_SMTP_PORT || 465);
+  const secure = process.env.MBS_SMTP_SECURE ? (process.env.MBS_SMTP_SECURE === "true") : (port === 465);
+  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
+  const attachments = pdf ? [{ filename: pdfName || "facture.pdf", content: pdf, contentType: "application/pdf" }] : [];
+  const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+  await transport.sendMail({ from, to, bcc, subject, html, attachments });
+  return true;
 }
