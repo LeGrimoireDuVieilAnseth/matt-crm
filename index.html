@@ -1552,6 +1552,7 @@ function openSeance(id){
       location:s.place||"", details:c&&c.tel?"Tel : "+c.tel:""
     },"Ajouter à Google Agenda")}</div>
     ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn wide" style="margin-top:6px" onclick="openMove('${id}')">Déplacer le créneau</button>`:""}
+    ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn ghost wide" style="margin-top:6px" onclick="sendFinalInvoice('${id}')">Facture de solde (client a réglé)</button>`:""}
     <div style="display:flex;gap:9px;margin-top:6px">
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier</button>
       ${c&&c.tel?`<a class="btn" style="flex:1" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
@@ -1584,6 +1585,25 @@ function saveMove(id){
   if(!date){ toast("Choisis une date"); return; }
   if(mbsSlotBusy(id,date,time)){ toast("Ce créneau est déjà pris ou bloqué. Choisis-en un autre."); return; }
   s.date=date; s.time=time; saveDB(); closeModal(); openSeance(id); toast("Créneau déplacé");
+}
+async function sendFinalInvoice(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  if(!c||!c.email){ toast("Ce client n'a pas d'email"); return; }
+  const p=DB.paiements.filter(x=>x.clientId===s.clientId&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+  const total=p?num(p.total):0, acompte=p?num(p.acompte):0;
+  if(!total){ toast("Aucun montant trouve pour cette seance"); return; }
+  if(!confirm("Envoyer la facture de solde a "+c.name+" ? (solde de "+euros(total-acompte)+")")) return;
+  toast("Envoi de la facture...");
+  try{
+    const r=await fetch("/.netlify/functions/mbs-invoice-final",{method:"POST",headers:apiHeaders(true),body:JSON.stringify({
+      client:{name:c.name,email:c.email}, typeLabel:s.type||"Seance",
+      seanceDateFr:(s.date||"").split("-").reverse().join("/"), total, acompte
+    })});
+    const j=await r.json().catch(()=>null);
+    if(j&&j.ok){ if(p){ p.statut="Solde"; saveDB(); } toast("Facture de solde envoyee ("+j.number+")"); openSeance(id); }
+    else { toast("Echec de l'envoi de la facture"); }
+  }catch(e){ toast("Erreur reseau"); }
 }
 
 /* ============================================================
