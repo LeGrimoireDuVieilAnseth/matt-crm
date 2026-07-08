@@ -601,12 +601,29 @@ function renderDemandes(){
     const when=c.createdAt?relDay(new Date(c.createdAt).toISOString().slice(0,10)):"";
     return `<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
       <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
-      <div class="row-main"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.source||acc(c.status)||"Demande")}</div></div>
-      <div class="row-end">${c.tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(c.tel.replace(/\s/g,''))}" onclick="event.stopPropagation()">Appeler</a>`:""}<span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
+      <div class="row-main"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.source||acc(c.status)||"Demande")}${when?" . "+esc(when):""}</div></div>
+      <div class="row-end">
+        ${c.tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(c.tel.replace(/\s/g,''))}" onclick="event.stopPropagation()">Appeler</a>`:""}
+        <button class="btn sm danger" style="padding:6px 10px" onclick="event.stopPropagation();deleteDemande('${c.id}')">Supprimer</button>
+      </div>
     </div>`;
   }).join('');
 }
-function openReglages(){ renderReglages(); setView("reglages"); }
+function deleteDemande(id){
+  const c=clientById(id); if(!c) return;
+  if(!confirm("Supprimer cette demande ("+c.name+") ?")) return;
+  const gone=[id]
+    .concat(DB.seances.filter(s=>s.clientId===id).map(s=>s.id))
+    .concat(DB.paiements.filter(p=>p.clientId===id).map(p=>p.id))
+    .concat(DB.taches.filter(t=>t.clientId===id).map(t=>t.id));
+  DB.deleted=(DB.deleted||[]).concat(gone);
+  DB.clients=DB.clients.filter(x=>x.id!==id);
+  DB.seances=DB.seances.filter(s=>s.clientId!==id);
+  DB.paiements=DB.paiements.filter(p=>p.clientId!==id);
+  DB.taches=DB.taches.filter(t=>t.clientId!==id);
+  saveDB(); renderDemandes(); toast("Demande supprimée");
+}
+function openReglages(){ setView("reglages"); try{ renderReglages(); }catch(e){ console.error("renderReglages:",e); } }
 
 function toast(msg){
   const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on");
