@@ -7,6 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import nodemailer from "nodemailer";
+import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
 
 function frDate(iso){
   const p = String(iso).split("-");
@@ -33,12 +34,17 @@ async function sendClientEmail(m){
     "<li><b>Acompte regle :</b> " + m.acompte + " euros</li>" +
     "<li><b>Solde le jour de la seance :</b> " + reste + " euros</li>" +
     "</ul>" +
+    (m.invPdf ? "<p>Votre facture d'acompte est en piece jointe.</p>" : "") +
     "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
     "<p>Mybabyshoot</p>";
+  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
+  const attachments = m.invPdf
+    ? [{ filename: "Facture-" + (m.invNum || "acompte") + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
+    : [];
   try {
     const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
     await transport.sendMail({
-      from, to: m.email, subject: "Votre reservation est confirmee . Mybabyshoot", html
+      from, to: m.email, bcc, subject: "Votre reservation est confirmee . Mybabyshoot", html, attachments
     });
   } catch (e) { /* non bloquant : l'email ne doit jamais faire echouer la reservation */ }
 }
@@ -145,8 +151,22 @@ export default async (request) => {
     );
   } catch (e) { /* non bloquant */ }
 
-  // Email de confirmation au client (best effort).
-  await sendClientEmail({ prenom, email, type, date, time, acompte, total });
+  // Facture d'acompte (PDF) : numero continu + generation, non bloquant.
+  let invNum = null, invPdf = null;
+  try {
+    invNum = await nextInvoiceNumber();
+    invPdf = await makeInvoicePdf({
+      number: invNum,
+      dateStr: new Date(now).toLocaleDateString("fr-FR"),
+      client: { name, email },
+      typeLabel: typeLbl,
+      seanceDateFr: frDate(date),
+      time, acompte, total
+    });
+  } catch (e) { /* non bloquant : une facture ratee ne doit pas casser la reservation */ }
+
+  // Email de confirmation au client (+ facture jointe, copie a Matt). Best effort.
+  await sendClientEmail({ prenom, email, type, date, time, acompte, total, invNum, invPdf });
 
   return new Response(JSON.stringify({ received: true, booked: true }), { status: 200 });
 };
