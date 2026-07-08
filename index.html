@@ -379,6 +379,11 @@
   <div id="taskList"></div>
 </section>
 
+<section id="demandes" class="view">
+  <div class="section-title"><h2>Demandes</h2><span class="count" id="demandeCount"></span></div>
+  <div id="demandesBody"></div>
+</section>
+
 <!-- ===================== FICHE CLIENT ===================== -->
 <section id="fiche" class="view">
   <button class="backlink" onclick="openClients()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Clients</button>
@@ -406,8 +411,8 @@
   <button class="tab" data-view="paiements" onclick="openPaiements()">
     <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span>Paiements</span>
   </button>
-  <button class="tab" data-view="rappels" onclick="openRappels()">
-    <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span>Rappels</span>
+  <button class="tab" data-view="demandes" onclick="openDemandes()">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><span>Demandes</span>
   </button>
 </nav>
 
@@ -569,12 +574,12 @@ let FILTER="all";
 function passFilter(b){ return FILTER==="all"||b===FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",fiche:"Fiche client",reglages:"Réglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",fiche:"Fiche client",reglages:"Réglages"};
 function setView(id){
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
   document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.view===id));
-  const showFab=["home","clients","agenda","paiements","rappels"].includes(id);
+  const showFab=["home","clients","agenda","paiements","rappels","demandes"].includes(id);
   document.getElementById("fab").style.display=showFab?"grid":"none";
   window.scrollTo(0,0);
 }
@@ -583,6 +588,24 @@ function openClients(){ renderClients(); setView("clients"); }
 function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
 function openRappels(){ renderRappels(); setView("rappels"); }
+function openDemandes(){ renderDemandes(); setView("demandes"); }
+function renderDemandes(){
+  const box=document.getElementById("demandesBody");
+  const list=DB.clients.filter(c=>c.fromSite && passFilter(c.brand)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  document.getElementById("demandeCount").textContent=list.length||"";
+  if(!list.length){
+    box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><div class="t">Aucune demande</div><div class="s">Les demandes envoyees depuis tes formulaires (site Mybabyshoot, Maison Lumiere) apparaitront ici.</div></div>`;
+    return;
+  }
+  box.innerHTML=list.map(c=>{
+    const when=c.createdAt?relDay(new Date(c.createdAt).toISOString().slice(0,10)):"";
+    return `<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
+      <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
+      <div class="row-main"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.source||acc(c.status)||"Demande")}</div></div>
+      <div class="row-end">${c.tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(c.tel.replace(/\s/g,''))}" onclick="event.stopPropagation()">Appeler</a>`:""}<span style="font-size:12.5px;font-weight:600;color:var(--ink-2)">${esc(when)}</span></div>
+    </div>`;
+  }).join('');
+}
 function openReglages(){ renderReglages(); setView("reglages"); }
 
 function toast(msg){
@@ -2065,7 +2088,7 @@ function repaintActive(){
   const id=active.id;
   if(id==="home") buildHome(); else if(id==="clients") renderClients();
   else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
-  else if(id==="rappels") renderRappels();
+  else if(id==="rappels") renderRappels(); else if(id==="demandes") renderDemandes();
 }
 
 /* Fusionne le cloud dans le local :
