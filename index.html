@@ -48,6 +48,14 @@
     --r-sm:11px;
     --tabh:64px;
   }
+  html[data-theme="creme"]{--bg:#faf4ea;--surface:#fffdf8;--surface-2:#f6efe1;--surface-3:#efe3d0;--ink:#2c2115;--ink-2:#6b5a45;--ink-3:#9a8a72;--ink-4:#c3b39a;--line:#e6d8c3;--line-2:#dccaad;--accent:#8c6239;}
+  html[data-theme="rose"]{--bg:#fdf3f5;--surface:#fffafb;--surface-2:#faedf0;--surface-3:#f3dfe4;--ink:#2f2028;--ink-2:#6e5560;--ink-3:#a08590;--ink-4:#cbb2ba;--line:#f0dbe1;--line-2:#e6c9d1;--accent:#c65b7c;}
+  html[data-theme="ocean"]{--bg:#eef5f7;--surface:#ffffff;--surface-2:#f2f8fa;--surface-3:#e4eef1;--ink:#12222a;--ink-2:#4c6069;--ink-3:#849aa2;--ink-4:#aec3ca;--line:#d8e6ea;--line-2:#c8dbe0;--accent:#0e7c8b;}
+  html[data-theme="sauge"]{--bg:#f0f4ee;--surface:#ffffff;--surface-2:#f4f8f2;--surface-3:#e6ede2;--ink:#1e271a;--ink-2:#556150;--ink-3:#8a9683;--ink-4:#b6c0af;--line:#dde6d8;--line-2:#ccd8c5;--accent:#4f7a3f;}
+  html[data-theme="lavande"]{--bg:#f4f1fa;--surface:#ffffff;--surface-2:#f7f4fc;--surface-3:#eae4f4;--ink:#221b2e;--ink-2:#5a5168;--ink-3:#8f869c;--ink-4:#bcb3c8;--line:#e5ddf1;--line-2:#d7cce9;--accent:#7a5bc6;}
+  .theme-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 13px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-size:13.5px;font-weight:600;cursor:pointer;}
+  .theme-btn.on{border-color:var(--accent);color:var(--ink);}
+  .theme-sw{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.15);display:inline-block;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;}
   body{
@@ -489,6 +497,10 @@ const TYPES = {
 
 /* ---------- storage ---------- */
 const KEY = "studio_matt_v1";
+const THEMES=[{id:'clair',nom:'Clair',sw:'#f3f3f1'},{id:'creme',nom:'Crème',sw:'#faf4ea'},{id:'rose',nom:'Rosé',sw:'#fdf3f5'},{id:'ocean',nom:'Océan',sw:'#dcecef'},{id:'sauge',nom:'Sauge',sw:'#dfe9da'},{id:'lavande',nom:'Lavande',sw:'#e7ddf5'}];
+function renderThemeRow(){ const row=document.getElementById("themeRow"); if(!row) return; const cur=document.documentElement.getAttribute("data-theme")||"clair"; row.innerHTML=THEMES.map(t=>'<button type="button" class="theme-btn'+(t.id===cur?' on':'')+'" onclick="applyTheme(\''+t.id+'\')"><span class="theme-sw" style="background:'+t.sw+'"></span>'+t.nom+'</button>').join(""); }
+function applyTheme(id){ document.documentElement.setAttribute("data-theme",id); try{localStorage.setItem("studio_theme",id);}catch(e){} renderThemeRow(); }
+try{ document.documentElement.setAttribute("data-theme", localStorage.getItem("studio_theme")||"clair"); }catch(e){}
 const ENDPOINT = "/.netlify/functions/store-crm";
 const CLOUD = (location.protocol==="http:"||location.protocol==="https:");
 let applying=false, pushTimer=null;
@@ -1920,6 +1932,11 @@ function renderReglages(){
       <div class="stat"><div class="lab">Rappels</div><div class="num">${nbT}</div></div>
     </div>
 
+    <div class="grouplab">Thème</div>
+    <div class="card" style="padding:16px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="themeRow"></div>
+    </div>
+
     <div class="grouplab">Chiffre d'affaires</div>
     <div class="card" style="padding:16px" id="caCard"></div>
 
@@ -1969,6 +1986,7 @@ function renderReglages(){
   renderSecurity();
   renderNotifs();
   renderCA();
+  renderThemeRow();
   renderContacts(contactsBrand);
 }
 let caYearOffset=0;
