@@ -1645,9 +1645,10 @@ function openSeance(id){
     ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn wide" style="margin-top:6px" onclick="openMove('${id}')">Déplacer le créneau</button>`:""}
     ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn ghost wide" style="margin-top:6px" onclick="sendFinalInvoice('${id}')">Facture de solde (client a réglé)</button>`:""}
     <div style="display:flex;gap:9px;margin-top:6px">
-      <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier</button>
-      ${c&&c.tel?`<a class="btn" style="flex:1" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
-    </div>`;
+      ${c?`<button class="btn ghost" style="flex:1" onclick="openClientEdit('${c.id}')">Modifier la fiche client</button>`:""}
+      <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier la séance</button>
+    </div>
+    ${c&&c.tel?`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}`;
   openModal(h);
 }
 
