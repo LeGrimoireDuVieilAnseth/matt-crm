@@ -223,6 +223,7 @@
   .field textarea{min-height:88px;resize:vertical;line-height:1.5;}
   .field.two{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
   .field.two label{grid-column:1/-1;}
+  .cap{font-size:11px;font-weight:600;color:var(--ink-3);margin:0 0 4px 2px;}
   .hint{font-size:12px;color:var(--ink-3);margin-top:5px;}
 
   .seg{display:flex;gap:6px;flex-wrap:wrap;}
@@ -1445,6 +1446,21 @@ function fillTypeOptions(sel,brand,current){
   sel.innerHTML=`<option value="">Type de prestation...</option>`+list.map(t=>`<option value="${t}" ${current===t?"selected":""}>${acc(t)}</option>`).join("")+`<option value="__autre" ${current&&!list.includes(current)?"selected":""}>Autre...</option>`;
 }
 
+/* ligne "adresse + horaire d'arrivee" du formulaire logistique */
+function logAddrRow(label,idA,idT,ph,va,vt){
+  return `<div class="field"><label>${label}</label>
+    <div style="display:grid;grid-template-columns:1fr 118px;gap:11px;align-items:end">
+      <input id="${idA}" value="${va}" placeholder="${ph}">
+      <div><div class="cap">Horaire</div><input id="${idT}" type="time" value="${vt}"></div>
+    </div></div>`;
+}
+/* ligne "moment + heure" (reveal, vin d'honneur, piece montee) */
+function logTimeRow(label,id,v){
+  return `<div class="field"><label>${label}</label>
+    <div style="display:grid;grid-template-columns:118px;gap:11px">
+      <div><div class="cap">Heure</div><input id="${id}" type="time" value="${v}"></div>
+    </div></div>`;
+}
 function openClientEdit(id){
   const c=id?clientById(id):null;
   editBrandTmp=c?c.brand:(FILTER!=="all"?FILTER:"mybabyshoot");
@@ -1482,26 +1498,15 @@ function openClientEdit(id){
     <div class="field"><label id="wishesLabel">${inspirationLabel(editBrandTmp)}</label><textarea id="fWishes" placeholder="Style souhaité, inspirations, contraintes, demandes spéciales...">${c?esc(c.wishes||''):''}</textarea></div>
     <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
       <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
-      <div class="field two" style="grid-template-columns:1fr 104px"><label>Domaine</label>
-        <input id="fLogDomaineAddr" value="${lgv('domaineAddr','domaine')}" placeholder="Adresse du domaine">
-        <input id="fLogDomaineTime" type="time" value="${lgv('domaineTime')}" aria-label="Heure d'arrivée domaine"></div>
-      <div class="field two" style="grid-template-columns:1fr 104px"><label>Préparatifs</label>
-        <input id="fLogPrepaAddr" value="${lgv('prepaAddr')}" placeholder="Adresse des préparatifs">
-        <input id="fLogPrepaTime" type="time" value="${lgv('prepaTime')}" aria-label="Heure d'arrivée préparatifs"></div>
-      <div class="field two" style="grid-template-columns:1fr 104px"><label>Mairie</label>
-        <input id="fLogMairieAddr" value="${lgv('mairieAddr','mairie')}" placeholder="Adresse mairie">
-        <input id="fLogMairieTime" type="time" value="${lgv('mairieTime')}" aria-label="Heure d'arrivée mairie"></div>
-      <div class="field two" style="grid-template-columns:1fr 104px"><label>Cérémonie église</label>
-        <input id="fLogEgliseAddr" value="${lgv('egliseAddr','ceremonie')}" placeholder="Adresse de l'église">
-        <input id="fLogEgliseTime" type="time" value="${lgv('egliseTime')}" aria-label="Heure d'arrivée église"></div>
-      <div class="field two" style="grid-template-columns:1fr 104px"><label>Cérémonie laïque</label>
-        <input id="fLogLaicAddr" value="${lgv('laicAddr')}" placeholder="Adresse de la cérémonie laïque">
-        <input id="fLogLaicTime" type="time" value="${lgv('laicTime')}" aria-label="Heure d'arrivée laïque"></div>
-      <div class="field two" style="grid-template-columns:1fr 1fr 1fr"><label>Moments clés</label>
-        <input id="fLogReveal" type="time" value="${lgv('revealTime')}" aria-label="Heure reveal" title="Reveal">
-        <input id="fLogVin" type="time" value="${lgv('vinTime')}" aria-label="Heure vin d'honneur" title="Vin d'honneur">
-        <input id="fLogPiece" type="time" value="${lgv('pieceTime')}" aria-label="Heure pièce montée" title="Pièce montée"></div>
-      <div class="hint">Reveal · vin d'honneur · pièce montée (dans cet ordre). À remplir une fois le client confirmé, pour préparer le déroulé du jour J.</div>
+      ${logAddrRow("Domaine","fLogDomaineAddr","fLogDomaineTime","Adresse du domaine",lgv('domaineAddr','domaine'),lgv('domaineTime'))}
+      ${logAddrRow("Préparatifs","fLogPrepaAddr","fLogPrepaTime","Adresse des préparatifs",lgv('prepaAddr'),lgv('prepaTime'))}
+      ${logAddrRow("Mairie","fLogMairieAddr","fLogMairieTime","Adresse de la mairie",lgv('mairieAddr','mairie'),lgv('mairieTime'))}
+      ${logAddrRow("Cérémonie église","fLogEgliseAddr","fLogEgliseTime","Adresse de l'église",lgv('egliseAddr','ceremonie'),lgv('egliseTime'))}
+      ${logAddrRow("Cérémonie laïque","fLogLaicAddr","fLogLaicTime","Adresse de la cérémonie laïque",lgv('laicAddr'),lgv('laicTime'))}
+      ${logTimeRow("Reveal","fLogReveal",lgv('revealTime'))}
+      ${logTimeRow("Vin d'honneur","fLogVin",lgv('vinTime'))}
+      ${logTimeRow("Pièce montée","fLogPiece",lgv('pieceTime'))}
+      <div class="hint">À remplir une fois le client confirmé, pour préparer le déroulé du jour J.</div>
     </div>
     <button class="btn wide" style="margin-top:6px" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
   if(c) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteClient('${id}')">Supprimer ce client</button>`;
