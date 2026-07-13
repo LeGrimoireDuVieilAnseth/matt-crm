@@ -1189,11 +1189,9 @@ function openFiche(id){
     <div id="photoMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:6px"></div>`;
 
   // logistique jour J (Maison Lumiere)
-  if(c.brand==="maison-lumiere" && c.logistics && (c.logistics.mairie||c.logistics.ceremonie||c.logistics.domaine)){
+  if(c.brand==="maison-lumiere" && hasLogistics(c.logistics)){
     h+=`<div class="grouplab" style="margin-top:22px">Logistique jour J</div><div class="card">`;
-    if(c.logistics.mairie) h+=kvAddr("Mairie",c.logistics.mairie);
-    if(c.logistics.ceremonie) h+=kvAddr("Cérémonie",c.logistics.ceremonie);
-    if(c.logistics.domaine) h+=kvAddr("Domaine / réception",c.logistics.domaine);
+    h+=logisticsHtml(c.logistics);
     h+=`</div>`;
   }
 
@@ -1344,6 +1342,39 @@ function mapsLink(addr){
 }
 /* valeur avec lien itineraire */
 function kvAddr(k,addr){ return `<div class="kv"><div class="k">${k}</div><div class="v">${esc(addr)}${mapsLink(addr)}</div></div>`; }
+function fmtHeure(t){ return t?esc(String(t)).replace(":","h"):""; }
+/* ligne adresse + heure d'arrivee (logistique mariage) */
+function kvAddrTime(k,addr,time){
+  if(!addr&&!time) return "";
+  const parts=[];
+  if(addr) parts.push(esc(addr)+mapsLink(addr));
+  if(time) parts.push(`<span style="color:var(--ink-2);font-size:13px">Arrivée ${fmtHeure(time)}</span>`);
+  return `<div class="kv"><div class="k">${k}</div><div class="v">${parts.join("<br>")}</div></div>`;
+}
+function kvHeure(k,t){ return t?`<div class="kv"><div class="k">${k}</div><div class="v">${fmtHeure(t)}</div></div>`:""; }
+/* true si au moins une info logistique est renseignee (compat ancien format) */
+function hasLogistics(L){
+  if(!L) return false;
+  return ["domaineAddr","domaineTime","prepaAddr","prepaTime","mairieAddr","mairieTime","egliseAddr","egliseTime","laicAddr","laicTime","revealTime","vinTime","pieceTime","mairie","ceremonie","domaine"]
+    .some(k=>L[k]);
+}
+/* rendu des lignes de logistique jour J */
+function logisticsHtml(L){
+  if(!L) return "";
+  const dA=L.domaineAddr!=null?L.domaineAddr:L.domaine;
+  const mA=L.mairieAddr!=null?L.mairieAddr:L.mairie;
+  const eA=L.egliseAddr!=null?L.egliseAddr:L.ceremonie;
+  let r="";
+  r+=kvAddrTime("Domaine",dA,L.domaineTime);
+  r+=kvAddrTime("Préparatifs",L.prepaAddr,L.prepaTime);
+  r+=kvAddrTime("Mairie",mA,L.mairieTime);
+  r+=kvAddrTime("Cérémonie église",eA,L.egliseTime);
+  r+=kvAddrTime("Cérémonie laïque",L.laicAddr,L.laicTime);
+  r+=kvHeure("Reveal",L.revealTime);
+  r+=kvHeure("Vin d'honneur",L.vinTime);
+  r+=kvHeure("Pièce montée",L.pieceTime);
+  return r;
+}
 
 /* lien "Ajouter a Google Agenda" (evenement pre-rempli) */
 function gcalLink(opts){
@@ -1417,6 +1448,9 @@ function fillTypeOptions(sel,brand,current){
 function openClientEdit(id){
   const c=id?clientById(id):null;
   editBrandTmp=c?c.brand:(FILTER!=="all"?FILTER:"mybabyshoot");
+  const L=(c&&c.logistics)?c.logistics:{};
+  // compat ancien format (mairie/ceremonie/domaine en une seule ligne)
+  const lgv=(k,old)=>esc(L[k]!=null?L[k]:(old&&L[old]!=null?L[old]:''));
   let h=`<h2>${c?"Modifier la fiche":"Nouveau client"}</h2>
     <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
     <div class="field"><label>Nom du client *</label><input id="fName" value="${c?esc(c.name):""}" placeholder="Ex. Sophie et Julien"></div>
@@ -1448,10 +1482,26 @@ function openClientEdit(id){
     <div class="field"><label id="wishesLabel">${inspirationLabel(editBrandTmp)}</label><textarea id="fWishes" placeholder="Style souhaité, inspirations, contraintes, demandes spéciales...">${c?esc(c.wishes||''):''}</textarea></div>
     <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
       <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
-      <div class="field"><label>Adresse mairie</label><input id="fLogMairie" value="${c&&c.logistics?esc(c.logistics.mairie||''):''}" placeholder="Mairie, heure..."></div>
-      <div class="field"><label>Adresse cérémonie (église, laïque...)</label><input id="fLogCeremonie" value="${c&&c.logistics?esc(c.logistics.ceremonie||''):''}" placeholder="Lieu de cérémonie, heure..."></div>
-      <div class="field"><label>Adresse domaine / réception</label><input id="fLogDomaine" value="${c&&c.logistics?esc(c.logistics.domaine||''):''}" placeholder="Domaine, salle..."></div>
-      <div class="hint">A remplir une fois le client confirmé. Sert à préparer le déroulé du jour J.</div>
+      <div class="field two" style="grid-template-columns:1fr 104px"><label>Domaine</label>
+        <input id="fLogDomaineAddr" value="${lgv('domaineAddr','domaine')}" placeholder="Adresse du domaine">
+        <input id="fLogDomaineTime" type="time" value="${lgv('domaineTime')}" aria-label="Heure d'arrivée domaine"></div>
+      <div class="field two" style="grid-template-columns:1fr 104px"><label>Préparatifs</label>
+        <input id="fLogPrepaAddr" value="${lgv('prepaAddr')}" placeholder="Adresse des préparatifs">
+        <input id="fLogPrepaTime" type="time" value="${lgv('prepaTime')}" aria-label="Heure d'arrivée préparatifs"></div>
+      <div class="field two" style="grid-template-columns:1fr 104px"><label>Mairie</label>
+        <input id="fLogMairieAddr" value="${lgv('mairieAddr','mairie')}" placeholder="Adresse mairie">
+        <input id="fLogMairieTime" type="time" value="${lgv('mairieTime')}" aria-label="Heure d'arrivée mairie"></div>
+      <div class="field two" style="grid-template-columns:1fr 104px"><label>Cérémonie église</label>
+        <input id="fLogEgliseAddr" value="${lgv('egliseAddr','ceremonie')}" placeholder="Adresse de l'église">
+        <input id="fLogEgliseTime" type="time" value="${lgv('egliseTime')}" aria-label="Heure d'arrivée église"></div>
+      <div class="field two" style="grid-template-columns:1fr 104px"><label>Cérémonie laïque</label>
+        <input id="fLogLaicAddr" value="${lgv('laicAddr')}" placeholder="Adresse de la cérémonie laïque">
+        <input id="fLogLaicTime" type="time" value="${lgv('laicTime')}" aria-label="Heure d'arrivée laïque"></div>
+      <div class="field two" style="grid-template-columns:1fr 1fr 1fr"><label>Moments clés</label>
+        <input id="fLogReveal" type="time" value="${lgv('revealTime')}" aria-label="Heure reveal" title="Reveal">
+        <input id="fLogVin" type="time" value="${lgv('vinTime')}" aria-label="Heure vin d'honneur" title="Vin d'honneur">
+        <input id="fLogPiece" type="time" value="${lgv('pieceTime')}" aria-label="Heure pièce montée" title="Pièce montée"></div>
+      <div class="hint">Reveal · vin d'honneur · pièce montée (dans cet ordre). À remplir une fois le client confirmé, pour préparer le déroulé du jour J.</div>
     </div>
     <button class="btn wide" style="margin-top:6px" onclick="saveClient('${id||''}')">${c?"Enregistrer":"Creer la fiche"}</button>`;
   if(c) h+=`<button class="btn danger wide" style="margin-top:9px" onclick="deleteClient('${id}')">Supprimer ce client</button>`;
@@ -1473,9 +1523,19 @@ function saveClient(id){
     eventDate:document.getElementById("fEvent").value,
     wishes:document.getElementById("fWishes").value.trim(),
     logistics:{
-      mairie:document.getElementById("fLogMairie").value.trim(),
-      ceremonie:document.getElementById("fLogCeremonie").value.trim(),
-      domaine:document.getElementById("fLogDomaine").value.trim()
+      domaineAddr:document.getElementById("fLogDomaineAddr").value.trim(),
+      domaineTime:document.getElementById("fLogDomaineTime").value,
+      prepaAddr:document.getElementById("fLogPrepaAddr").value.trim(),
+      prepaTime:document.getElementById("fLogPrepaTime").value,
+      mairieAddr:document.getElementById("fLogMairieAddr").value.trim(),
+      mairieTime:document.getElementById("fLogMairieTime").value,
+      egliseAddr:document.getElementById("fLogEgliseAddr").value.trim(),
+      egliseTime:document.getElementById("fLogEgliseTime").value,
+      laicAddr:document.getElementById("fLogLaicAddr").value.trim(),
+      laicTime:document.getElementById("fLogLaicTime").value,
+      revealTime:document.getElementById("fLogReveal").value,
+      vinTime:document.getElementById("fLogVin").value,
+      pieceTime:document.getElementById("fLogPiece").value
     }
   };
   if(id){ const ex=clientById(id); if(ex&&ex.photos) data.photos=ex.photos; Object.assign(ex,data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise à jour"); }
@@ -1559,9 +1619,19 @@ function openSeance(id){
     <div class="card">`;
   h+=kv("Quand",`${fmtDate(s.date)}${s.time?" à "+s.time.replace(":","h"):""}`);
   if(c) h+=kv("Client",`<a onclick="closeModal();openFiche('${c.id}')" style="cursor:pointer">${esc(c.name)}</a>`);
+  if(c&&c.tel) h+=kv("Téléphone",`<a href="tel:${esc(c.tel.replace(/\s/g,''))}">${esc(c.tel)}</a>`);
+  if(c&&c.email) h+=kv("Email",`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`);
+  if(c&&c.eventDate) h+=kv(eventLabel(s.brand),fmtDate(c.eventDate));
   if(s.place) h+=kvAddr("Lieu",s.place);
-  if(s.notes) h+=kv("Notes",esc(s.notes).replace(/\n/g,"<br>"));
-  h+=`</div>
+  if(s.notes) h+=kv("Notes séance",esc(s.notes).replace(/\n/g,"<br>"));
+  if(c&&c.notes) h+=kv("Notes client",esc(c.notes).replace(/\n/g,"<br>"));
+  if(c&&c.wishes) h+=kv(inspirationLabel(s.brand),esc(c.wishes).replace(/\n/g,"<br>"));
+  h+=`</div>`;
+  // logistique jour J complete (mariage) directement depuis la prestation
+  if(c && s.brand==="maison-lumiere" && hasLogistics(c.logistics)){
+    h+=`<div class="grouplab" style="margin-top:16px">Logistique jour J</div><div class="card">${logisticsHtml(c.logistics)}</div>`;
+  }
+  h+=`
     <div style="margin-top:14px">${gcalButton({
       title:(acc(s.type)||"Séance")+(c?" "+c.name:""),
       dateISO:s.date, time:s.time||"", durationMin:120,
