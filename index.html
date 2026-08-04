@@ -1356,24 +1356,30 @@ function kvHeure(k,t){ return t?`<div class="kv"><div class="k">${k}</div><div c
 /* true si au moins une info logistique est renseignee (compat ancien format) */
 function hasLogistics(L){
   if(!L) return false;
-  return ["domaineAddr","domaineTime","prepaAddr","prepaTime","mairieAddr","mairieTime","egliseAddr","egliseTime","laicAddr","laicTime","revealTime","vinTime","pieceTime","mairie","ceremonie","domaine"]
+  return ["domaineAddr","domaineTime","prepaAddr","prepaTime","prepa2Addr","prepa2Time","mairieAddr","mairieTime","egliseAddr","egliseTime","laicAddr","laicTime","revealTime","vinTime","pieceTime","mairie","ceremonie","domaine"]
     .some(k=>L[k]);
 }
-/* rendu des lignes de logistique jour J */
+/* rendu des lignes de logistique jour J, triees dans l'ordre CHRONOLOGIQUE des heures */
 function logisticsHtml(L){
   if(!L) return "";
   const dA=L.domaineAddr!=null?L.domaineAddr:L.domaine;
   const mA=L.mairieAddr!=null?L.mairieAddr:L.mairie;
   const eA=L.egliseAddr!=null?L.egliseAddr:L.ceremonie;
+  const items=[
+    {label:"Préparatifs",        addr:L.prepaAddr,  time:L.prepaTime,  kind:"addr"},
+    {label:"Préparatifs (2e lieu)", addr:L.prepa2Addr, time:L.prepa2Time, kind:"addr"},
+    {label:"Mairie",             addr:mA,           time:L.mairieTime, kind:"addr"},
+    {label:"Cérémonie église",   addr:eA,           time:L.egliseTime, kind:"addr"},
+    {label:"Cérémonie laïque",   addr:L.laicAddr,   time:L.laicTime,   kind:"addr"},
+    {label:"Domaine",            addr:dA,           time:L.domaineTime,kind:"addr"},
+    {label:"Reveal",             time:L.revealTime, kind:"time"},
+    {label:"Vin d'honneur",      time:L.vinTime,    kind:"time"},
+    {label:"Pièce montée",       time:L.pieceTime,  kind:"time"}
+  ].filter(it=> it.kind==="addr" ? (it.addr||it.time) : it.time );
+  // tri par heure ; les lignes sans heure passent en dernier
+  items.sort((a,b)=> (a.time||"99:99").localeCompare(b.time||"99:99"));
   let r="";
-  r+=kvAddrTime("Domaine",dA,L.domaineTime);
-  r+=kvAddrTime("Préparatifs",L.prepaAddr,L.prepaTime);
-  r+=kvAddrTime("Mairie",mA,L.mairieTime);
-  r+=kvAddrTime("Cérémonie église",eA,L.egliseTime);
-  r+=kvAddrTime("Cérémonie laïque",L.laicAddr,L.laicTime);
-  r+=kvHeure("Reveal",L.revealTime);
-  r+=kvHeure("Vin d'honneur",L.vinTime);
-  r+=kvHeure("Pièce montée",L.pieceTime);
+  items.forEach(it=>{ r += it.kind==="addr" ? kvAddrTime(it.label,it.addr,it.time) : kvHeure(it.label,it.time); });
   return r;
 }
 
@@ -1499,7 +1505,8 @@ function openClientEdit(id){
     <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
       <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
       ${logAddrRow("Domaine","fLogDomaineAddr","fLogDomaineTime","Adresse du domaine",lgv('domaineAddr','domaine'),lgv('domaineTime'))}
-      ${logAddrRow("Préparatifs","fLogPrepaAddr","fLogPrepaTime","Adresse des préparatifs",lgv('prepaAddr'),lgv('prepaTime'))}
+      ${logAddrRow("Préparatifs","fLogPrepaAddr","fLogPrepaTime","Adresse des préparatifs (ex. mariée)",lgv('prepaAddr'),lgv('prepaTime'))}
+      ${logAddrRow("Préparatifs (2e lieu)","fLogPrepa2Addr","fLogPrepa2Time","Adresse du 2e lieu (ex. marié)",lgv('prepa2Addr'),lgv('prepa2Time'))}
       ${logAddrRow("Mairie","fLogMairieAddr","fLogMairieTime","Adresse de la mairie",lgv('mairieAddr','mairie'),lgv('mairieTime'))}
       ${logAddrRow("Cérémonie église","fLogEgliseAddr","fLogEgliseTime","Adresse de l'église",lgv('egliseAddr','ceremonie'),lgv('egliseTime'))}
       ${logAddrRow("Cérémonie laïque","fLogLaicAddr","fLogLaicTime","Adresse de la cérémonie laïque",lgv('laicAddr'),lgv('laicTime'))}
@@ -1532,6 +1539,8 @@ function saveClient(id){
       domaineTime:document.getElementById("fLogDomaineTime").value,
       prepaAddr:document.getElementById("fLogPrepaAddr").value.trim(),
       prepaTime:document.getElementById("fLogPrepaTime").value,
+      prepa2Addr:document.getElementById("fLogPrepa2Addr").value.trim(),
+      prepa2Time:document.getElementById("fLogPrepa2Time").value,
       mairieAddr:document.getElementById("fLogMairieAddr").value.trim(),
       mairieTime:document.getElementById("fLogMairieTime").value,
       egliseAddr:document.getElementById("fLogEgliseAddr").value.trim(),
