@@ -28,6 +28,19 @@ const FALLBACK =
 const DAILY_MAX = 400;
 
 const TOOLS = [{
+  name: "noter_identite",
+  description: "Enregistre l'identite du visiteur des que tu la connais, pour que Matt sache a qui il parle. A appeler des que le visiteur donne son prenom, puis a nouveau s'il donne son nom, son telephone ou son email.",
+  input_schema: {
+    type: "object",
+    properties: {
+      prenom: { type: "string", description: "Le prenom du visiteur" },
+      nom:    { type: "string", description: "Son nom de famille, s'il le donne" },
+      tel:    { type: "string", description: "Son telephone, s'il le donne" },
+      email:  { type: "string", description: "Son email, s'il le donne" }
+    },
+    required: ["prenom"]
+  }
+}, {
   name: "prevenir_matt",
   description: "Envoie immediatement une notification sur le telephone de Matt (le photographe). A utiliser des qu'un visiteur souhaite etre rappele, parler a Matt, proposer un appel a un moment precis, ou pose une question qui merite que Matt reprenne la conversation en personne. Une seule fois par demande.",
   input_schema: {
@@ -51,8 +64,11 @@ async function saveConv(store, conv) {
   try { index = (await store.get(idxKey(brand), { type: "json" })) || []; } catch (e) {}
   index = index.filter(x => x.id !== conv.id);
   const last = conv.messages[conv.messages.length - 1];
+  const v = conv.visiteur || {};
   index.unshift({
     id: conv.id,
+    nom: [v.prenom, v.nom].filter(Boolean).join(" ").trim(),
+    tel: v.tel || "",
     updatedAt: conv.updatedAt,
     brand,
     mode: conv.mode,
@@ -168,39 +184,53 @@ export default async (request) => {
       messages: apiMessages
     });
 
-    // l'IA veut prevenir Matt -> notification push, puis reponse finale
-    if (response.stop_reason === "tool_use") {
-      const toolUse = response.content.find(b => b.type === "tool_use");
-      if (toolUse) {
-        const resume = String((toolUse.input && toolUse.input.resume) || "Demande de contact").slice(0, 120);
-        const quand = String((toolUse.input && toolUse.input.quand) || "").slice(0, 60);
-        conv.flagged = true;
-        try {
-          await notifyAll(
-            BRAND_LABEL[conv.brand] + " : un visiteur veut te parler",
-            resume + (quand ? " (" + quand + ")" : ""),
-            "/"
-          );
-        } catch (e) {}
-        response = await client.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 600,
-          system: systemPrompt,
-          tools: TOOLS,
-          messages: [
-            ...apiMessages,
-            { role: "assistant", content: response.content },
-            {
-              role: "user",
-              content: [{
-                type: "tool_result",
-                tool_use_id: toolUse.id,
-                content: "Matt a bien recu la notification sur son telephone. Il peut repondre directement dans cette conversation."
-              }]
-            }
-          ]
-        });
+    // Boucle d'outils : noter_identite (qui parle) et prevenir_matt (notification).
+    const fil = [...apiMessages];
+    let tours = 0;
+    while (response.stop_reason === "tool_use" && tours < 3) {
+      tours++;
+      const appels = response.content.filter(b => b.type === "tool_use");
+      if (!appels.length) break;
+      const resultats = [];
+
+      for (const t of appels) {
+        const inp = t.input || {};
+        if (t.name === "noter_identite") {
+          const v = conv.visiteur || {};
+          const prendre = (k, max) => {
+            const val = String(inp[k] || "").trim().slice(0, max);
+            if (val) v[k] = val;
+          };
+          prendre("prenom", 40); prendre("nom", 40); prendre("tel", 25); prendre("email", 80);
+          conv.visiteur = v;
+          resultats.push({ type: "tool_result", tool_use_id: t.id, content: "Identite enregistree, merci." });
+        } else if (t.name === "prevenir_matt") {
+          const resume = String(inp.resume || "Demande de contact").slice(0, 120);
+          const quand  = String(inp.quand || "").slice(0, 60);
+          conv.flagged = true;
+          const qui = conv.visiteur && conv.visiteur.prenom ? conv.visiteur.prenom + " : " : "";
+          try {
+            await notifyAll(
+              BRAND_LABEL[conv.brand] + " : un visiteur veut te parler",
+              qui + resume + (quand ? " (" + quand + ")" : ""),
+              "/"
+            );
+          } catch (e) {}
+          resultats.push({ type: "tool_result", tool_use_id: t.id, content: "Matt a bien recu la notification sur son telephone. Il peut repondre directement dans cette conversation." });
+        } else {
+          resultats.push({ type: "tool_result", tool_use_id: t.id, content: "ok" });
+        }
       }
+
+      fil.push({ role: "assistant", content: response.content });
+      fil.push({ role: "user", content: resultats });
+      response = await client.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 600,
+        system: systemPrompt,
+        tools: TOOLS,
+        messages: fil
+      });
     }
 
     const reply = response.content

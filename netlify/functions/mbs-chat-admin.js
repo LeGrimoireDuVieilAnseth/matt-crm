@@ -27,9 +27,12 @@ async function updateIndex(store, conv, removed) {
   index = index.filter(x => x.id !== conv.id);
   if (!removed) {
     const last = conv.messages[conv.messages.length - 1];
+    const v = conv.visiteur || {};
     index.unshift({
       id: conv.id,
       brand,
+      nom: [v.prenom, v.nom].filter(Boolean).join(" ").trim(),
+      tel: v.tel || "",
       updatedAt: conv.updatedAt,
       mode: conv.mode,
       flagged: !!conv.flagged,
