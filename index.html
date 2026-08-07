@@ -290,6 +290,19 @@
   .tab span{font-size:10.5px;font-weight:500;letter-spacing:.01em;}
   .tab.on{color:var(--ink);}
   .tab.on::before{content:"";position:absolute;top:0;width:26px;height:3px;border-radius:0 0 3px 3px;background:var(--ink);}
+  .tab-dot{position:absolute;top:9px;right:calc(50% - 17px);width:9px;height:9px;border-radius:50%;background:var(--danger);border:1.5px solid var(--tabbar-bg);}
+
+  /* chat du site (cote CRM) */
+  .crm-chat-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;}
+  .crm-chat-msgs{display:flex;flex-direction:column;gap:9px;padding:4px 0 12px;}
+  .cmsg{max-width:84%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;}
+  .cmsg.visiteur{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px;align-self:flex-start;}
+  .cmsg.ia{background:var(--fill);color:var(--fill-ink);border-bottom-right-radius:4px;align-self:flex-end;opacity:.92;}
+  .cmsg.matt{background:var(--ok);color:#fff;border-bottom-right-radius:4px;align-self:flex-end;}
+  .cmsg-who{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.7;margin-bottom:3px;}
+  .crm-chat-bar{position:sticky;bottom:calc(var(--tabh) + 8px);display:flex;gap:8px;background:var(--bg);padding:8px 0;}
+  .crm-chat-bar textarea{flex:1;resize:none;min-height:44px;max-height:120px;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;font-family:inherit;font-size:15px;background:var(--card);color:var(--ink);}
+  .crm-chat-bar .btn{flex:none;}
 
   /* modal */
   .modal-bg{position:fixed;inset:0;background:rgba(20,20,24,.4);z-index:60;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px);}
@@ -396,6 +409,23 @@
   <div id="demandesBody"></div>
 </section>
 
+<!-- ===================== CHAT DU SITE ===================== -->
+<section id="chat" class="view">
+  <div id="chatListWrap">
+    <div class="section-title"><h2>Conversations</h2><span class="count" id="chatCount"></span></div>
+    <div id="chatListBody"></div>
+  </div>
+  <div id="chatConvWrap" style="display:none">
+    <button class="backlink" onclick="openChatList()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Conversations</button>
+    <div class="crm-chat-mode" id="crmChatMode"></div>
+    <div class="crm-chat-msgs" id="crmChatMsgs"></div>
+    <div class="crm-chat-bar">
+      <textarea id="crmChatInput" rows="1" placeholder="Ta réponse au visiteur..."></textarea>
+      <button class="btn" id="crmChatSend" onclick="sendChatReply()">Envoyer</button>
+    </div>
+  </div>
+</section>
+
 <!-- ===================== FICHE CLIENT ===================== -->
 <section id="fiche" class="view">
   <button class="backlink" onclick="openClients()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Clients</button>
@@ -425,6 +455,10 @@
   </button>
   <button class="tab" data-view="demandes" onclick="openDemandes()">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><span>Demandes</span>
+  </button>
+  <button class="tab" data-view="chat" onclick="openChatList()">
+    <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg><span>Chat</span>
+    <span class="tab-dot" id="chatDot" style="display:none"></span>
   </button>
 </nav>
 
@@ -590,11 +624,12 @@ let FILTER="all";
 function passFilter(b){ return FILTER==="all"||b===FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",fiche:"Fiche client",reglages:"Réglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
 function setView(id){
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
   document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.view===id));
+  if(id!=="chat"){ try{ stopChatPoll(); }catch(e){} }
   const showFab=["home","clients","agenda","paiements","rappels","demandes"].includes(id);
   document.getElementById("fab").style.display=showFab?"grid":"none";
   window.scrollTo(0,0);
@@ -640,6 +675,147 @@ function deleteDemande(id){
   saveDB(); renderDemandes(); toast("Demande supprimée");
 }
 function openReglages(){ setView("reglages"); try{ renderReglages(); }catch(e){ console.error("renderReglages:",e); } }
+
+/* ============================================================
+   CHAT DU SITE (conversations de l'assistant IA Mybabyshoot)
+   Les conversations vivent dans le store mbs-chat, lues via
+   la fonction mbs-chat-admin (protegee par CRM_KEY).
+   ============================================================ */
+const CHAT_ADMIN="/.netlify/functions/mbs-chat-admin";
+let chatConvId=null, chatPoll=null;
+
+function chatWhen(t){
+  if(!t) return "";
+  const d=new Date(t), now=Date.now(), diff=(now-t)/60000;
+  if(diff<1) return "à l'instant";
+  if(diff<60) return Math.round(diff)+" min";
+  if(diff<1440) return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+  return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"});
+}
+
+async function openChatList(){
+  setView("chat");
+  document.getElementById("chatListWrap").style.display="";
+  document.getElementById("chatConvWrap").style.display="none";
+  chatConvId=null; stopChatPoll();
+  const box=document.getElementById("chatListBody");
+  box.innerHTML=`<div style="color:var(--ink-3);font-size:14px;padding:10px 2px">Chargement...</div>`;
+  if(!CLOUD){ box.innerHTML=`<div class="empty"><div class="t">Disponible en ligne</div><div class="s">Le chat du site se consulte depuis matt-crm.netlify.app.</div></div>`; return; }
+  try{
+    const r=await fetch(CHAT_ADMIN+"?list=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    const list=(j&&j.list)||[];
+    document.getElementById("chatCount").textContent=list.length||"";
+    updateChatDot(list);
+    if(!list.length){
+      box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg><div class="t">Aucune conversation</div><div class="s">Les discussions de l'assistant sur le site Mybabyshoot apparaîtront ici.</div></div>`;
+      return;
+    }
+    box.innerHTML=list.map(c=>`
+      <div class="row" data-b="mybabyshoot" onclick="openChatConv('${c.id}')">
+        <div class="avatar" data-b="mybabyshoot"><svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;stroke-width:2;fill:none"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></div>
+        <div class="row-main">
+          <div class="t">${c.flagged?"🔔 ":""}Visiteur du site${c.mode==="matt"?" · tu réponds":""}</div>
+          <div class="s">${esc(c.preview||"")}</div>
+        </div>
+        <div class="row-end">
+          ${c.unread?`<span class="badge danger">${c.unread}</span>`:""}
+          <span style="font-size:12px;color:var(--ink-3)">${chatWhen(c.updatedAt)}</span>
+        </div>
+      </div>`).join("");
+  }catch(e){
+    box.innerHTML=`<div style="color:var(--ink-3);font-size:14px;padding:10px 2px">Impossible de charger les conversations.</div>`;
+  }
+}
+
+async function openChatConv(id){
+  chatConvId=id;
+  setView("chat");
+  document.getElementById("chatListWrap").style.display="none";
+  document.getElementById("chatConvWrap").style.display="";
+  await loadChatConv();
+  startChatPoll();
+}
+
+async function loadChatConv(){
+  if(!chatConvId) return;
+  try{
+    const r=await fetch(CHAT_ADMIN+"?conv="+encodeURIComponent(chatConvId),{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j||!j.ok) return;
+    renderChatConv(j.conv);
+  }catch(e){}
+}
+
+function renderChatConv(conv){
+  const modeBox=document.getElementById("crmChatMode");
+  const manuel=conv.mode==="matt";
+  modeBox.innerHTML=
+    `<span>${manuel?"C'est <b>toi</b> qui réponds. L'assistant est en pause.":"L'<b>assistant</b> répond automatiquement."}</span>`
+    +`<button class="btn sm ghost" style="margin-left:auto" onclick="setChatMode('${manuel?"ia":"matt"}')">${manuel?"Rendre la main à l'assistant":"Reprendre la main"}</button>`
+    +`<button class="btn sm danger" onclick="deleteChatConv()">Supprimer</button>`;
+  const box=document.getElementById("crmChatMsgs");
+  box.innerHTML=(conv.messages||[]).map(m=>{
+    const cls=m.role==="user"?"visiteur":(m.role==="matt"?"matt":"ia");
+    const who=m.role==="user"?"Visiteur":(m.role==="matt"?"Toi":"Assistant");
+    return `<div class="cmsg ${cls}"><div class="cmsg-who">${who}</div>${esc(m.content).replace(/\n/g,"<br>")}</div>`;
+  }).join("");
+  box.scrollIntoView({block:"end"});
+}
+
+async function setChatMode(mode){
+  if(!chatConvId) return;
+  try{
+    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"mode",conv:chatConvId,mode})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){ renderChatConv(j.conv); toast(mode==="matt"?"Tu réponds maintenant":"L'assistant reprend"); }
+  }catch(e){ toast("Erreur réseau"); }
+}
+
+async function sendChatReply(){
+  const inp=document.getElementById("crmChatInput");
+  const text=inp.value.trim();
+  if(!text||!chatConvId) return;
+  inp.value="";
+  try{
+    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"reply",conv:chatConvId,text})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok) renderChatConv(j.conv);
+    else toast("Envoi impossible");
+  }catch(e){ toast("Erreur réseau"); inp.value=text; }
+}
+
+async function deleteChatConv(){
+  if(!chatConvId) return;
+  if(!confirm("Supprimer cette conversation ?")) return;
+  try{
+    await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"delete",conv:chatConvId})});
+    toast("Conversation supprimée"); openChatList();
+  }catch(e){ toast("Erreur réseau"); }
+}
+
+function startChatPoll(){ stopChatPoll(); chatPoll=setInterval(loadChatConv,6000); }
+function stopChatPoll(){ if(chatPoll){ clearInterval(chatPoll); chatPoll=null; } }
+
+/* pastille rouge sur l'onglet Chat */
+function updateChatDot(list){
+  const dot=document.getElementById("chatDot"); if(!dot) return;
+  const n=(list||[]).reduce((s,c)=>s+(c.unread||0),0);
+  dot.style.display=n?"block":"none";
+}
+async function checkChatUnread(){
+  if(!CLOUD||!authed) return;
+  try{
+    const r=await fetch(CHAT_ADMIN+"?list=1",{headers:apiHeaders(),cache:"no-store"});
+    if(!r.ok) return;
+    const j=await r.json();
+    updateChatDot((j&&j.list)||[]);
+  }catch(e){}
+}
 
 function toast(msg){
   const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on");
@@ -2411,6 +2587,8 @@ function onAuthenticated(){
   authed=true;
   hideLock();
   cloudPull();
+  checkChatUnread();
+  setInterval(checkChatUnread,60000);
 }
 
 /* ---------- empreinte digitale (WebAuthn) ---------- */
