@@ -7,6 +7,7 @@
 // - POST {action:"mode", conv, mode}  : bascule "ia" / "matt"
 // - POST {action:"delete", conv}      : supprime la conversation
 import { getStore } from "@netlify/blobs";
+import { normBrand, idxKey, consKey } from "../chat-brands.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -20,13 +21,15 @@ const REQUIRED = process.env.CRM_KEY || "";
 const authorized = (request) => !REQUIRED || (request.headers.get("x-crm-key") || "") === REQUIRED;
 
 async function updateIndex(store, conv, removed) {
+  const brand = normBrand(conv.brand);
   let index = [];
-  try { index = (await store.get("convindex", { type: "json" })) || []; } catch (e) {}
+  try { index = (await store.get(idxKey(brand), { type: "json" })) || []; } catch (e) {}
   index = index.filter(x => x.id !== conv.id);
   if (!removed) {
     const last = conv.messages[conv.messages.length - 1];
     index.unshift({
       id: conv.id,
+      brand,
       updatedAt: conv.updatedAt,
       mode: conv.mode,
       flagged: !!conv.flagged,
@@ -34,7 +37,7 @@ async function updateIndex(store, conv, removed) {
       preview: last ? String(last.content).slice(0, 90) : ""
     });
   }
-  await store.setJSON("convindex", index.slice(0, 100));
+  await store.setJSON(idxKey(brand), index.slice(0, 100));
 }
 
 export default async (request) => {
@@ -45,14 +48,15 @@ export default async (request) => {
 
   if (request.method === "GET") {
     const url = new URL(request.url);
+    const brandQ = normBrand(url.searchParams.get("brand"));
     if (url.searchParams.get("consignes")) {
       let txt = "";
-      try { txt = (await store.get("consignes")) || ""; } catch (e) {}
+      try { txt = (await store.get(consKey(brandQ))) || ""; } catch (e) {}
       return json({ ok: true, consignes: txt });
     }
     if (url.searchParams.get("list")) {
       let index = [];
-      try { index = (await store.get("convindex", { type: "json" })) || []; } catch (e) {}
+      try { index = (await store.get(idxKey(brandQ), { type: "json" })) || []; } catch (e) {}
       return json({ ok: true, list: index });
     }
     const id = (url.searchParams.get("conv") || "").replace(/[^a-z0-9]/gi, "");
@@ -78,7 +82,7 @@ export default async (request) => {
   // consignes ecrites par Matt : injectees dans le cerveau de l'assistant
   if (body.action === "consignes") {
     const txt = (typeof body.text === "string" ? body.text : "").slice(0, 6000);
-    await store.set("consignes", txt);
+    await store.set(consKey(normBrand(body.brand)), txt);
     return json({ ok: true });
   }
 

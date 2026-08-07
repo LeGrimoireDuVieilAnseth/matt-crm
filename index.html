@@ -235,6 +235,7 @@
   .seg.brands button[data-b="mybabyshoot"].on{background:var(--baby);border-color:var(--baby);}
   .seg.brands button[data-b="maison-lumiere"].on{background:var(--lumiere);border-color:var(--lumiere);}
   .seg.brands button[data-b="matt-la-photo"].on{background:var(--matt);border-color:var(--matt);}
+  .cb-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-left:6px;vertical-align:1px;}
 
   /* ---------- detail sheet ---------- */
   .sheet-head{display:flex;align-items:flex-start;gap:14px;margin:18px 0 6px;}
@@ -412,6 +413,7 @@
 <!-- ===================== CHAT DU SITE ===================== -->
 <section id="chat" class="view">
   <div id="chatListWrap">
+    <div class="seg brands" id="chatBrandBar" style="margin:14px 0 4px"></div>
     <div class="section-title"><h2>Conversations</h2><span class="count" id="chatCount"></span></div>
     <div id="chatListBody"></div>
   </div>
@@ -682,7 +684,22 @@ function openReglages(){ setView("reglages"); try{ renderReglages(); }catch(e){ 
    la fonction mbs-chat-admin (protegee par CRM_KEY).
    ============================================================ */
 const CHAT_ADMIN="/.netlify/functions/mbs-chat-admin";
+const CHAT_BRANDS=[["mybabyshoot","Mybabyshoot"],["maison-lumiere","Maison Lumière"]];
 let chatConvId=null, chatPoll=null;
+let chatBrand="mybabyshoot";
+try{ chatBrand=localStorage.getItem("studio_chat_brand")||"mybabyshoot"; }catch(e){}
+
+function renderChatBrandBar(){
+  const bar=document.getElementById("chatBrandBar"); if(!bar) return;
+  bar.innerHTML=CHAT_BRANDS.map(([id,nom])=>
+    `<button type="button" class="seg-btn${chatBrand===id?" on":""}" data-b="${id}" onclick="setChatBrand('${id}')">${nom}<span class="cb-dot" id="cbDot-${id}" style="display:none"></span></button>`
+  ).join("");
+}
+function setChatBrand(b){
+  chatBrand=b;
+  try{ localStorage.setItem("studio_chat_brand",b); }catch(e){}
+  openChatList();
+}
 
 function chatWhen(t){
   if(!t) return "";
@@ -698,23 +715,25 @@ async function openChatList(){
   document.getElementById("chatListWrap").style.display="";
   document.getElementById("chatConvWrap").style.display="none";
   chatConvId=null; stopChatPoll();
+  renderChatBrandBar();
   const box=document.getElementById("chatListBody");
   box.innerHTML=`<div style="color:var(--ink-3);font-size:14px;padding:10px 2px">Chargement...</div>`;
   if(!CLOUD){ box.innerHTML=`<div class="empty"><div class="t">Disponible en ligne</div><div class="s">Le chat du site se consulte depuis matt-crm.netlify.app.</div></div>`; return; }
   try{
-    const r=await fetch(CHAT_ADMIN+"?list=1",{headers:apiHeaders(),cache:"no-store"});
+    const r=await fetch(CHAT_ADMIN+"?list=1&brand="+encodeURIComponent(chatBrand),{headers:apiHeaders(),cache:"no-store"});
     if(r.status===401){ handleUnauthorized(); return; }
     const j=await r.json();
     const list=(j&&j.list)||[];
+    const nomMarque=(CHAT_BRANDS.find(x=>x[0]===chatBrand)||[,"ce site"])[1];
     document.getElementById("chatCount").textContent=list.length||"";
-    updateChatDot(list);
+    checkChatUnread();
     if(!list.length){
-      box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg><div class="t">Aucune conversation</div><div class="s">Les discussions de l'assistant sur le site Mybabyshoot apparaîtront ici.</div></div>`;
+      box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg><div class="t">Aucune conversation</div><div class="s">Les discussions de l'assistant sur le site ${esc(nomMarque)} apparaîtront ici.</div></div>`;
       return;
     }
     box.innerHTML=list.map(c=>`
-      <div class="row" data-b="mybabyshoot" onclick="openChatConv('${c.id}')">
-        <div class="avatar" data-b="mybabyshoot"><svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;stroke-width:2;fill:none"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></div>
+      <div class="row" data-b="${chatBrand}" onclick="openChatConv('${c.id}')">
+        <div class="avatar" data-b="${chatBrand}"><svg viewBox="0 0 24 24" style="width:19px;height:19px;stroke:#fff;stroke-width:2;fill:none"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg></div>
         <div class="row-main">
           <div class="t">${c.flagged?"🔔 ":""}Visiteur du site${c.mode==="matt"?" · tu réponds":""}</div>
           <div class="s">${esc(c.preview||"")}</div>
@@ -801,11 +820,25 @@ async function deleteChatConv(){
 function startChatPoll(){ stopChatPoll(); chatPoll=setInterval(loadChatConv,6000); }
 function stopChatPoll(){ if(chatPoll){ clearInterval(chatPoll); chatPoll=null; } }
 
-/* consignes de Matt : corrigent les reponses de l'assistant du site */
+/* consignes de Matt : corrigent les reponses de l'assistant, par site */
+let consBrand="mybabyshoot";
+function renderConsBrandBar(){
+  const bar=document.getElementById("consBrandBar"); if(!bar) return;
+  bar.innerHTML=CHAT_BRANDS.map(([id,nom])=>
+    `<button type="button" class="seg-btn${consBrand===id?" on":""}" data-b="${id}" onclick="setConsBrand('${id}')">${nom}</button>`
+  ).join("");
+  const n=document.getElementById("consBrandNom");
+  if(n) n.textContent=(CHAT_BRANDS.find(x=>x[0]===consBrand)||[,""])[1];
+}
+function setConsBrand(b){ consBrand=b; renderConsBrandBar(); loadConsignes(); }
+
 async function loadConsignes(){
-  const ta=document.getElementById("iaConsignes"); if(!ta||!CLOUD) return;
+  const ta=document.getElementById("iaConsignes"); if(!ta) return;
+  renderConsBrandBar();
+  if(!CLOUD) return;
+  const msg=document.getElementById("iaConsignesMsg"); if(msg) msg.textContent="";
   try{
-    const r=await fetch(CHAT_ADMIN+"?consignes=1",{headers:apiHeaders(),cache:"no-store"});
+    const r=await fetch(CHAT_ADMIN+"?consignes=1&brand="+encodeURIComponent(consBrand),{headers:apiHeaders(),cache:"no-store"});
     if(!r.ok) return;
     const j=await r.json();
     if(j&&j.ok) ta.value=j.consignes||"";
@@ -817,7 +850,7 @@ async function saveConsignes(){
   if(!CLOUD){ if(msg) msg.textContent="Disponible seulement en ligne."; return; }
   if(msg) msg.textContent="Enregistrement...";
   try{
-    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"consignes",text:ta.value})});
+    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"consignes",brand:consBrand,text:ta.value})});
     if(r.status===401){ handleUnauthorized(); return; }
     const j=await r.json();
     if(j&&j.ok){ if(msg) msg.textContent="Enregistré. L'assistant en tient compte tout de suite."; toast("Consignes enregistrées"); }
@@ -922,20 +955,22 @@ async function supprimerLotCoupons(id){
   }catch(e){ toast("Erreur réseau"); }
 }
 
-/* pastille rouge sur l'onglet Chat */
-function updateChatDot(list){
-  const dot=document.getElementById("chatDot"); if(!dot) return;
-  const n=(list||[]).reduce((s,c)=>s+(c.unread||0),0);
-  dot.style.display=n?"block":"none";
-}
+/* pastille rouge sur l'onglet Chat et sur chaque marque */
 async function checkChatUnread(){
   if(!CLOUD||!authed) return;
-  try{
-    const r=await fetch(CHAT_ADMIN+"?list=1",{headers:apiHeaders(),cache:"no-store"});
-    if(!r.ok) return;
-    const j=await r.json();
-    updateChatDot((j&&j.list)||[]);
-  }catch(e){}
+  let total=0;
+  for(const [id] of CHAT_BRANDS){
+    let n=0;
+    try{
+      const r=await fetch(CHAT_ADMIN+"?list=1&brand="+encodeURIComponent(id),{headers:apiHeaders(),cache:"no-store"});
+      if(r.ok){ const j=await r.json(); n=((j&&j.list)||[]).reduce((s,c)=>s+(c.unread||0),0); }
+    }catch(e){}
+    total+=n;
+    const d=document.getElementById("cbDot-"+id);
+    if(d) d.style.display=n?"inline-block":"none";
+  }
+  const dot=document.getElementById("chatDot");
+  if(dot) dot.style.display=total?"block":"none";
 }
 
 function toast(msg){
@@ -2339,11 +2374,12 @@ function renderReglages(){
     <div class="grouplab">Contacts & campagnes</div>
     <div class="card" style="padding:16px" id="contactsCard"></div>
 
-    <div class="grouplab">Assistant du site : corriger ses réponses</div>
+    <div class="grouplab">Assistants des sites : corriger leurs réponses</div>
     <div class="card" style="padding:16px">
+      <div class="seg brands" id="consBrandBar" style="margin-bottom:12px"></div>
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">
-        Écris ici tout ce que l'assistant doit savoir ou corriger. Une consigne par ligne, en français simple.
-        Ces consignes sont <b>prioritaires</b> : elles écrasent ce qu'il croyait savoir.<br>
+        Écris ici tout ce que l'assistant de <b id="consBrandNom">ce site</b> doit savoir ou corriger. Une consigne par ligne, en français simple.
+        Ces consignes sont <b>prioritaires</b> : elles écrasent ce qu'il croyait savoir. Chaque site a ses propres consignes.<br>
         Exemples : <i>Le studio est fermé le samedi. / L'album coûte 160 euros, pas 140. / Ne propose jamais de remise.</i>
       </div>
       <textarea id="iaConsignes" class="synccode" style="min-height:150px" placeholder="Ex : Les seances naissance se font a partir de 5 jours de vie, jamais avant."></textarea>
