@@ -172,6 +172,13 @@ export default async (request) => {
     return json({ ok: true, convId: conv.id, manual: true, total: conv.messages.length });
   }
 
+  // ---------- corrections ecrites par Matt dans le CRM ----------
+  let extra = "";
+  try { extra = (await store.get("consignes")) || ""; } catch (e) {}
+  const systemPrompt = extra.trim()
+    ? SYSTEM + "\n\nCONSIGNES DE MATT (PRIORITAIRES)\nCe qui suit a ete ecrit par Matt lui-meme. En cas de contradiction avec ce qui precede, ces consignes l'emportent TOUJOURS.\n" + extra.trim().slice(0, 6000)
+    : SYSTEM;
+
   // ---------- mode IA ----------
   if (!process.env.ANTHROPIC_API_KEY) {
     await saveConv(store, conv);
@@ -200,7 +207,7 @@ export default async (request) => {
     let response = await client.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 600,
-      system: SYSTEM,
+      system: systemPrompt,
       tools: TOOLS,
       messages: apiMessages
     });
@@ -222,7 +229,7 @@ export default async (request) => {
         response = await client.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 600,
-          system: SYSTEM,
+          system: systemPrompt,
           tools: TOOLS,
           messages: [
             ...apiMessages,

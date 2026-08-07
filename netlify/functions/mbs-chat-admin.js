@@ -45,6 +45,11 @@ export default async (request) => {
 
   if (request.method === "GET") {
     const url = new URL(request.url);
+    if (url.searchParams.get("consignes")) {
+      let txt = "";
+      try { txt = (await store.get("consignes")) || ""; } catch (e) {}
+      return json({ ok: true, consignes: txt });
+    }
     if (url.searchParams.get("list")) {
       let index = [];
       try { index = (await store.get("convindex", { type: "json" })) || []; } catch (e) {}
@@ -69,6 +74,13 @@ export default async (request) => {
   let body;
   try { body = await request.json(); }
   catch (e) { return json({ ok: false, error: "json" }, 400); }
+
+  // consignes ecrites par Matt : injectees dans le cerveau de l'assistant
+  if (body.action === "consignes") {
+    const txt = (typeof body.text === "string" ? body.text : "").slice(0, 6000);
+    await store.set("consignes", txt);
+    return json({ ok: true });
+  }
 
   const id = (typeof body.conv === "string" ? body.conv : "").replace(/[^a-z0-9]/gi, "");
   if (!id) return json({ ok: false, error: "conv" }, 400);

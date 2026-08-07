@@ -801,6 +801,30 @@ async function deleteChatConv(){
 function startChatPoll(){ stopChatPoll(); chatPoll=setInterval(loadChatConv,6000); }
 function stopChatPoll(){ if(chatPoll){ clearInterval(chatPoll); chatPoll=null; } }
 
+/* consignes de Matt : corrigent les reponses de l'assistant du site */
+async function loadConsignes(){
+  const ta=document.getElementById("iaConsignes"); if(!ta||!CLOUD) return;
+  try{
+    const r=await fetch(CHAT_ADMIN+"?consignes=1",{headers:apiHeaders(),cache:"no-store"});
+    if(!r.ok) return;
+    const j=await r.json();
+    if(j&&j.ok) ta.value=j.consignes||"";
+  }catch(e){}
+}
+async function saveConsignes(){
+  const ta=document.getElementById("iaConsignes"); if(!ta) return;
+  const msg=document.getElementById("iaConsignesMsg");
+  if(!CLOUD){ if(msg) msg.textContent="Disponible seulement en ligne."; return; }
+  if(msg) msg.textContent="Enregistrement...";
+  try{
+    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"consignes",text:ta.value})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){ if(msg) msg.textContent="Enregistré. L'assistant en tient compte tout de suite."; toast("Consignes enregistrées"); }
+    else if(msg) msg.textContent="Echec de l'enregistrement.";
+  }catch(e){ if(msg) msg.textContent="Erreur reseau."; }
+}
+
 /* pastille rouge sur l'onglet Chat */
 function updateChatDot(list){
   const dot=document.getElementById("chatDot"); if(!dot) return;
@@ -2218,6 +2242,20 @@ function renderReglages(){
     <div class="grouplab">Contacts & campagnes</div>
     <div class="card" style="padding:16px" id="contactsCard"></div>
 
+    <div class="grouplab">Assistant du site : corriger ses réponses</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">
+        Écris ici tout ce que l'assistant doit savoir ou corriger. Une consigne par ligne, en français simple.
+        Ces consignes sont <b>prioritaires</b> : elles écrasent ce qu'il croyait savoir.<br>
+        Exemples : <i>Le studio est fermé le samedi. / L'album coûte 160 euros, pas 140. / Ne propose jamais de remise.</i>
+      </div>
+      <textarea id="iaConsignes" class="synccode" style="min-height:150px" placeholder="Ex : Les seances naissance se font a partir de 5 jours de vie, jamais avant."></textarea>
+      <div style="display:flex;gap:9px;margin-top:10px;align-items:center">
+        <button class="btn" onclick="saveConsignes()">Enregistrer</button>
+        <span id="iaConsignesMsg" style="font-size:12.5px;color:var(--ink-3)"></span>
+      </div>
+    </div>
+
     <div class="grouplab">Sauvegarde manuelle</div>
     <div class="card" style="padding:16px">
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
@@ -2246,7 +2284,7 @@ function renderReglages(){
       Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
     </div>`;
   setSyncMsg("");
-  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); }
+  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
   renderNotifs();
