@@ -78,8 +78,8 @@ export default async (request) => {
     if (!conv) return json({ ok: false, error: "notfound" }, 404);
     return json({
       ok: true,
-      brand,
-    mode: conv.mode,
+      brand: normBrand(conv.brand),
+      mode: conv.mode,
       total: conv.messages.length,
       messages: conv.messages.slice(after).map(m => ({ role: m.role, content: m.content }))
     });
