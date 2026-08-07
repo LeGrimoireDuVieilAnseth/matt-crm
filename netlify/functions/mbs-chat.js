@@ -95,6 +95,8 @@ export default async (request) => {
     return json({
       ok: true,
       brand: normBrand(conv.brand),
+      // le prenom que le visiteur a lui-meme donne (sert au widget et au controle)
+      nom: [(conv.visiteur || {}).prenom, (conv.visiteur || {}).nom].filter(Boolean).join(" ").trim(),
       mode: conv.mode,
       total: conv.messages.length,
       messages: conv.messages.slice(after).map(m => ({ role: m.role, content: m.content }))
