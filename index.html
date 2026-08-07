@@ -825,6 +825,103 @@ async function saveConsignes(){
   }catch(e){ if(msg) msg.textContent="Erreur reseau."; }
 }
 
+/* ============================================================
+   CODES DE REDUCTION (-100 euros, usage unique)
+   ============================================================ */
+const CP_API="/.netlify/functions/mbs-coupon-admin";
+
+function cpMsg(t,err){ const m=document.getElementById("cpMsg"); if(m){ m.textContent=t||""; m.style.color=err?"var(--danger)":"var(--ink-3)"; } }
+
+async function loadLotsCoupons(){
+  const box=document.getElementById("cpLots"); if(!box||!CLOUD) return;
+  try{
+    const r=await fetch(CP_API+"?lots=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    const lots=(j&&j.lots)||[];
+    if(!lots.length){ box.innerHTML=`<div style="font-size:13px;color:var(--ink-3)">Aucun lot pour le moment.</div>`; return; }
+    box.innerHTML=`<div class="grouplab" style="margin:6px 2px 8px">Lots existants</div>`+lots.map(l=>{
+      const exp=l.expiresAt?new Date(l.expiresAt).toLocaleDateString("fr-FR"):"sans limite";
+      const restants=(l.count||0)-(l.utilises||0);
+      return `<div class="row" style="cursor:default">
+        <div class="row-main">
+          <div class="t">${esc(l.nom)}${l.disabled?' <span class="badge neutral">désactivé</span>':''}</div>
+          <div class="s">${l.utilises||0} utilisé(s) sur ${l.count} · ${restants} restant(s) · expire : ${exp}</div>
+        </div>
+        <div class="row-end" style="gap:6px">
+          <button class="btn sm ghost" style="padding:6px 9px" onclick="voirLotCoupons('${l.id}')">Codes</button>
+          <button class="btn sm ghost" style="padding:6px 9px" onclick="basculerLotCoupons('${l.id}',${l.disabled?'false':'true'})">${l.disabled?'Réactiver':'Désactiver'}</button>
+          <button class="btn sm danger" style="padding:6px 9px" onclick="supprimerLotCoupons('${l.id}')">Suppr.</button>
+        </div>
+      </div>`;
+    }).join("");
+  }catch(e){ box.innerHTML=`<div style="font-size:13px;color:var(--ink-3)">Chargement impossible.</div>`; }
+}
+
+async function creerLotCoupons(){
+  if(!CLOUD){ cpMsg("Disponible seulement en ligne.",true); return; }
+  const nom=document.getElementById("cpNom").value.trim()||"Lot";
+  const nombre=parseInt(document.getElementById("cpNb").value,10)||0;
+  const expiresAt=document.getElementById("cpExp").value||"";
+  if(nombre<1||nombre>500){ cpMsg("Indique un nombre entre 1 et 500.",true); return; }
+  if(!confirm("Générer "+nombre+" code(s) de 100 € pour \""+nom+"\" ?")) return;
+  cpMsg("Génération en cours, patiente...");
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"creer",nom,nombre,expiresAt})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){
+      cpMsg(j.codes.length+" code(s) généré(s).");
+      document.getElementById("cpNom").value="";
+      loadLotsCoupons();
+      voirLotCoupons(j.id);
+    } else cpMsg("Échec de la génération.",true);
+  }catch(e){ cpMsg("Erreur réseau.",true); }
+}
+
+async function voirLotCoupons(id){
+  try{
+    const r=await fetch(CP_API+"?lot="+encodeURIComponent(id),{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j||!j.ok) return;
+    const dispo=j.codes.filter(c=>!c.utilise), pris=j.codes.filter(c=>c.utilise);
+    const liste=c=>`<span style="display:inline-block;font-family:ui-monospace,monospace;font-size:12.5px;background:var(--fill);color:var(--fill-ink);padding:3px 7px;border-radius:6px;margin:2px 3px 2px 0${c.utilise?';opacity:.45;text-decoration:line-through':''}">${c.code}</span>`;
+    openModal(`<h2>${esc(j.lot.nom)}</h2>
+      <p class="hint" style="margin:0 0 12px">${j.codes.length} code(s) · ${pris.length} utilisé(s) · ${dispo.length} encore valable(s)</p>
+      <div style="max-height:40vh;overflow:auto;line-height:2">${j.codes.map(liste).join("")}</div>
+      <button class="btn wide" style="margin-top:14px" onclick='telechargerCoupons(${JSON.stringify(JSON.stringify({nom:j.lot.nom,codes:j.codes}))})'>Télécharger en CSV (pour le partenaire)</button>`);
+  }catch(e){ toast("Chargement impossible"); }
+}
+
+function telechargerCoupons(payload){
+  let d; try{ d=JSON.parse(payload); }catch(e){ return; }
+  const lignes=[["code","etat"]].concat(d.codes.map(c=>[c.code,c.utilise?"utilise":"valable"]));
+  const csv="﻿"+lignes.map(l=>l.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download="codes-"+d.nom.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".csv";
+  a.click(); URL.revokeObjectURL(a.href);
+  toast("CSV téléchargé");
+}
+
+async function basculerLotCoupons(id,off){
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"desactiver",lot:id,off})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    toast(off?"Lot désactivé":"Lot réactivé"); loadLotsCoupons();
+  }catch(e){ toast("Erreur réseau"); }
+}
+
+async function supprimerLotCoupons(id){
+  if(!confirm("Supprimer définitivement ce lot et tous ses codes ?")) return;
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"supprimer",lot:id})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    toast("Lot supprimé"); loadLotsCoupons();
+  }catch(e){ toast("Erreur réseau"); }
+}
+
 /* pastille rouge sur l'onglet Chat */
 function updateChatDot(list){
   const dot=document.getElementById("chatDot"); if(!dot) return;
@@ -2256,6 +2353,23 @@ function renderReglages(){
       </div>
     </div>
 
+    <div class="grouplab">Codes de réduction (-100 €)</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+        Génère des codes <b>uniques et à usage unique</b> pour tes partenaires (box, offres...).
+        Chaque code donne <b>100 € de remise</b> sur le total de la séance. Ton acompte reste le même,
+        c'est le solde du jour J qui baisse. Un code utilisé ne peut plus jamais resservir.
+      </div>
+      <div class="field"><label>Nom du lot</label><input id="cpNom" placeholder="Ex. Box jeunes parents 2026"></div>
+      <div class="field two"><label>Nombre de codes & expiration</label>
+        <input id="cpNb" type="number" min="1" max="500" value="100" inputmode="numeric">
+        <input id="cpExp" type="date">
+      </div>
+      <button class="btn wide" onclick="creerLotCoupons()">Générer les codes</button>
+      <div id="cpMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
+      <div id="cpLots" style="margin-top:14px"></div>
+    </div>
+
     <div class="grouplab">Sauvegarde manuelle</div>
     <div class="card" style="padding:16px">
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
@@ -2284,7 +2398,7 @@ function renderReglages(){
       Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
     </div>`;
   setSyncMsg("");
-  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} }
+  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
   renderNotifs();
