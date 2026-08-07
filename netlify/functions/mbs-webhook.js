@@ -8,6 +8,7 @@ import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "
 import { notifyAll } from "../push-lib.mjs";
 import nodemailer from "nodemailer";
 import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
+import { couponStore, consumeCoupon, prettyCode } from "../mbs-coupons.mjs";
 
 function frDate(iso){
   const p = String(iso).split("-");
@@ -123,7 +124,8 @@ export default async (request) => {
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: PLACE, status: "A venir",
-    notes: "Reservation en ligne. Total seance " + total + " euros, acompte " + acompte + " euros encaisse.",
+    notes: "Reservation en ligne. Total seance " + total + " euros, acompte " + acompte + " euros encaisse."
+      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " euros)." : ""),
     createdAt: now, stripeSession: session.id
   });
 
@@ -133,11 +135,18 @@ export default async (request) => {
     label: "Acompte reservation " + typeLbl,
     total: String(total), acompte: String(acompte), statut: "Acompte",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
-    notes: "Regle en ligne via Stripe.", stripeSession: session.id
+    notes: "Regle en ligne via Stripe."
+      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " euros (total plein " + md.totalPlein + ")." : ""),
+    stripeSession: session.id
   });
 
   // Liberation du verrou pose au checkout.
   if (md.lockId) data.mbsLocks = data.mbsLocks.filter(l => l.id !== md.lockId);
+
+  // Le code promo n'est brule qu'ici : paiement confirme, donc usage definitif.
+  if (md.coupon) {
+    try { await consumeCoupon(couponStore(), md.coupon, session.id, now); } catch (e) {}
+  }
 
   data.t = now;
   await store.setJSON("data", data);

@@ -8,6 +8,9 @@ import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
   acompteFor, typeLabelFr, LOCK_TTL_MS, uid, BRAND
 } from "../mbs-lib.mjs";
+import {
+  couponStore, checkCoupon, reasonLabel, discountFor, reserveCoupon, releaseCoupon
+} from "../mbs-coupons.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -44,11 +47,10 @@ export default async (request) => {
   // Total de la seance compose par le client (sert a l'acompte et au reste du).
   let total = Math.round(Number(body.total));
   if (!Number.isFinite(total) || total < 90 || total > 5000) total = 290;
-  // Acompte derive du total (190 des 590 euros, sinon 90), recalcule cote serveur.
-  const acompte = acompteFor(total);
 
   const store = crmStore();
   const now = Date.now();
+  const totalPlein = total;
 
   // 1) Verrou anti-doublon : on relit, on nettoie les verrous expires, on verifie le creneau.
   const data = await loadData(store);
@@ -61,6 +63,42 @@ export default async (request) => {
   const lockId = uid();
   data.mbsLocks.push({ id: lockId, date, time, expiresAt: now + LOCK_TTL_MS });
   await store.setJSON("data", data);
+
+  // 1bis) Code de reduction : verifie ET applique cote serveur (jamais depuis le navigateur).
+  //       Le code est seulement reserve ici ; il n'est consomme qu'au paiement confirme.
+  let remise = 0, couponCode = "";
+  if (body.coupon) {
+    const cstore = couponStore();
+    const chk = await checkCoupon(cstore, body.coupon, now);
+    const releaseLock = async () => {
+      try {
+        const d2 = await loadData(store);
+        d2.mbsLocks = d2.mbsLocks.filter(l => l.id !== lockId);
+        await store.setJSON("data", d2);
+      } catch (_) {}
+    };
+    if (!chk.ok) {
+      await releaseLock();
+      return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
+    }
+    remise = discountFor(total, chk.coupon.amount);
+    if (remise <= 0) {
+      await releaseLock();
+      return json({ ok: false, error: "coupon", message: "Ce code ne s'applique pas a cette formule." }, 400);
+    }
+    const pose = await reserveCoupon(cstore, chk.code, now + LOCK_TTL_MS);
+    if (!pose) {
+      await releaseLock();
+      return json({ ok: false, error: "coupon", message: "Ce code vient d'etre utilise." }, 409);
+    }
+    couponCode = chk.code;
+    total = total - remise;
+  }
+
+  // Acompte calcule sur le prix PLEIN (avant remise) : Matt encaisse le meme
+  // acompte qu'une reservation sans code, c'est le solde du jour J qui baisse.
+  // Garde-fou : l'acompte ne depasse jamais le total a payer.
+  const acompte = Math.min(acompteFor(totalPlein), total);
 
   // 2) Session Stripe Checkout pour l'acompte.
   try {
@@ -89,18 +127,20 @@ export default async (request) => {
       metadata: {
         app: "mybabyshoot", lockId, type, date, time,
         acompte: String(acompte), total: String(total),
+        coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
         prenom, nom, email, tel
       }
     });
 
     return json({ ok: true, url: session.url });
   } catch (e) {
-    // Echec Stripe : on relache le verrou pour ne pas bloquer le creneau inutilement.
+    // Echec Stripe : on relache le verrou et le code promo pour ne rien bloquer.
     try {
       const d2 = await loadData(store);
       d2.mbsLocks = d2.mbsLocks.filter(l => l.id !== lockId);
       await store.setJSON("data", d2);
     } catch (_) {}
+    if (couponCode) { try { await releaseCoupon(couponStore(), couponCode); } catch (_) {} }
     return json({ ok: false, error: "stripe_error", detail: String(e && e.message || e) }, 502);
   }
 };
