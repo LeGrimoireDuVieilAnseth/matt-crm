@@ -7,7 +7,43 @@
 // - POST {action:"mode", conv, mode}  : bascule "ia" / "matt"
 // - POST {action:"delete", conv}      : supprime la conversation
 import { getStore } from "@netlify/blobs";
+import Anthropic from "@anthropic-ai/sdk";
 import { normBrand, idxKey, consKey } from "../chat-brands.mjs";
+
+/* Retrouve le prenom dans une conversation deja commencee (anciennes
+   discussions, ou visiteur qui se presente au fil de l'echange).
+   Un seul essai par conversation, marque par conv.identTried. */
+async function retrouverIdentite(conv) {
+  if (!process.env.ANTHROPIC_API_KEY) return false;
+  const v = conv.visiteur || {};
+  if (v.prenom || conv.identTried) return false;
+  conv.identTried = true;
+  const fil = (conv.messages || [])
+    .filter(m => m.role === "user")
+    .map(m => String(m.content).slice(0, 300))
+    .join("\n");
+  if (!fil.trim()) return true;
+  try {
+    const client = new Anthropic();
+    const r = await client.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 200,
+      system: "Tu extrais l'identite d'un visiteur a partir de ses messages. Reponds UNIQUEMENT par un objet JSON, sans texte autour, au format {\"prenom\":\"\",\"nom\":\"\",\"tel\":\"\",\"email\":\"\"}. Laisse une valeur vide si l'information n'est pas donnee. N'invente jamais.",
+      messages: [{ role: "user", content: "Messages du visiteur :\n" + fil }]
+    });
+    const txt = r.content.filter(b => b.type === "text").map(b => b.text).join("").trim();
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) return true;
+    const d = JSON.parse(m[0]);
+    const net = {};
+    ["prenom", "nom", "tel", "email"].forEach(k => {
+      const val = String(d[k] || "").trim().slice(0, 80);
+      if (val) net[k] = val;
+    });
+    if (net.prenom) conv.visiteur = { ...v, ...net };
+  } catch (e) {}
+  return true;
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -66,7 +102,9 @@ export default async (request) => {
     if (!id) return json({ ok: false, error: "conv" }, 400);
     const conv = await store.get("conv-" + id, { type: "json" });
     if (!conv) return json({ ok: false, error: "notfound" }, 404);
-    if (conv.unread) {
+    // renommage automatique des conversations sans nom (une seule tentative)
+    const trouve = await retrouverIdentite(conv);
+    if (conv.unread || trouve) {
       conv.unread = 0;
       conv.updatedAt = conv.updatedAt || Date.now();
       await store.setJSON("conv-" + id, conv);
@@ -103,6 +141,23 @@ export default async (request) => {
     conv.unread = 0;
     conv.updatedAt = Date.now();
     if (conv.messages.length > 80) conv.messages = conv.messages.slice(-80);
+    await store.setJSON("conv-" + id, conv);
+    await updateIndex(store, conv);
+    return json({ ok: true, conv });
+  }
+
+  // renommage manuel depuis le CRM
+  if (body.action === "renommer") {
+    const v = conv.visiteur || {};
+    ["prenom", "nom", "tel", "email"].forEach(k => {
+      if (typeof body[k] === "string") {
+        const val = body[k].trim().slice(0, 80);
+        if (val) v[k] = val; else delete v[k];
+      }
+    });
+    conv.visiteur = v;
+    conv.identTried = true;
+    conv.updatedAt = Date.now();
     await store.setJSON("conv-" + id, conv);
     await updateIndex(store, conv);
     return json({ ok: true, conv });

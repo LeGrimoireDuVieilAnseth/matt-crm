@@ -686,7 +686,7 @@ function openReglages(){ setView("reglages"); try{ renderReglages(); }catch(e){ 
    ============================================================ */
 const CHAT_ADMIN="/.netlify/functions/mbs-chat-admin";
 const CHAT_BRANDS=[["mybabyshoot","Mybabyshoot"],["maison-lumiere","Maison Lumière"]];
-let chatConvId=null, chatPoll=null;
+let chatConvId=null, chatPoll=null, chatConvCache=null;
 let chatBrand="mybabyshoot";
 try{ chatBrand=localStorage.getItem("studio_chat_brand")||"mybabyshoot"; }catch(e){}
 
@@ -771,6 +771,7 @@ async function loadChatConv(){
 }
 
 function renderChatConv(conv){
+  chatConvCache=conv;
   const modeBox=document.getElementById("crmChatMode");
   const manuel=conv.mode==="matt";
   const v=conv.visiteur||{};
@@ -780,7 +781,8 @@ function renderChatConv(conv){
     const bits=[];
     if(v.tel) bits.push(`<a href="tel:${esc(String(v.tel).replace(/\s/g,''))}">${esc(v.tel)}</a>`);
     if(v.email) bits.push(`<a href="mailto:${esc(v.email)}">${esc(v.email)}</a>`);
-    ident.innerHTML=`<b>${nom?esc(nom):"Visiteur (nom non donné)"}</b>${bits.length?' <span style="color:var(--ink-3)">· '+bits.join(" · ")+'</span>':''}`;
+    ident.innerHTML=`<b>${nom?esc(nom):"Visiteur (nom non donné)"}</b>${bits.length?' <span style="color:var(--ink-3)">· '+bits.join(" · ")+'</span>':''}`
+      +` <button class="btn sm ghost" style="padding:4px 9px;margin-left:6px;font-size:12px" onclick="renommerChat()">Renommer</button>`;
   }
   modeBox.innerHTML=
     `<span>${manuel?"C'est <b>toi</b> qui réponds. L'assistant est en pause.":"L'<b>assistant</b> répond automatiquement."}</span>`
@@ -793,6 +795,24 @@ function renderChatConv(conv){
     return `<div class="cmsg ${cls}"><div class="cmsg-who">${who}</div>${esc(m.content).replace(/\n/g,"<br>")}</div>`;
   }).join("");
   box.scrollIntoView({block:"end"});
+}
+
+/* renommer une conversation a la main (si l'assistant n'a pas eu le nom) */
+async function renommerChat(){
+  if(!chatConvId) return;
+  const v=(chatConvCache&&chatConvCache.visiteur)||{};
+  const prenom=prompt("Prénom du visiteur :",v.prenom||"");
+  if(prenom===null) return;
+  const tel=prompt("Téléphone (facultatif) :",v.tel||"");
+  if(tel===null) return;
+  try{
+    const r=await fetch(CHAT_ADMIN,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"renommer",conv:chatConvId,prenom:prenom.trim(),tel:tel.trim()})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){ renderChatConv(j.conv); toast("Conversation renommée"); }
+    else toast("Renommage impossible");
+  }catch(e){ toast("Erreur réseau"); }
 }
 
 async function setChatMode(mode){
