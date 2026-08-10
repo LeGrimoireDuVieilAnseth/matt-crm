@@ -27,16 +27,22 @@ export default async (request) => {
 
   if (!chk.ok) return json({ ok: true, valide: false, message: reasonLabel(chk.reason) });
 
-  const remise = discountFor(total, chk.coupon.amount);
+  const kind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
+  const remise = discountFor(total, chk.coupon.amount, kind);
   if (remise <= 0) {
     return json({ ok: true, valide: false, message: "Ce code ne s'applique pas a cette formule." });
   }
+  const reste = total - remise;
   return json({
     ok: true, valide: true,
     code: prettyCode(chk.code),
-    remise,
-    nouveauTotal: total - remise,
-    message: "Code valide : " + remise + " euros de remise."
+    kind, remise,
+    nouveauTotal: reste,
+    message: kind === "cadeau"
+      ? (reste === 0
+          ? "Bon cadeau valide : la seance est entierement couverte, rien a payer."
+          : "Bon cadeau valide : " + remise + " euros deduits.")
+      : "Code valide : " + remise + " euros de remise."
   });
 };
 

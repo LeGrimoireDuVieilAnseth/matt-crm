@@ -969,6 +969,35 @@ function telechargerCoupons(payload){
   toast("CSV téléchargé");
 }
 
+/* bons cadeaux achetes sur le site (un par vente, montant libre) */
+async function loadBonsCadeaux(){
+  const box=document.getElementById("cpCadeaux"); if(!box||!CLOUD) return;
+  try{
+    const r=await fetch(CP_API+"?cadeaux=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    const list=(j&&j.cadeaux)||[];
+    if(!list.length){ box.innerHTML=`<div style="font-size:13px;color:var(--ink-3)">Aucun bon cadeau vendu pour le moment.</div>`; return; }
+    const total=list.reduce((s,c)=>s+(Number(c.montant)||0),0);
+    const enAttente=list.filter(c=>!c.utilise);
+    box.innerHTML=`<div class="grouplab" style="margin:6px 2px 8px">Bons cadeaux vendus</div>
+      <div style="font-size:13px;color:var(--ink-3);margin:0 2px 8px">${list.length} vendu(s) · ${total} € encaissés · ${enAttente.length} pas encore utilisé(s)</div>`
+      +list.map(c=>{
+        const achat=c.createdAt?new Date(c.createdAt).toLocaleDateString("fr-FR"):"";
+        const exp=c.expiresAt?new Date(c.expiresAt).toLocaleDateString("fr-FR"):"";
+        const etat=c.utilise
+          ? `<span class="badge neutral">utilisé le ${new Date(c.useAt).toLocaleDateString("fr-FR")}</span>`
+          : `<span class="badge ok">valable</span>`;
+        return `<div class="row" style="cursor:default">
+          <div class="row-main">
+            <div class="t" style="font-family:ui-monospace,monospace">${esc(c.code)} · ${c.montant} € ${etat}</div>
+            <div class="s">${esc(c.acheteur||"acheteur inconnu")}${c.beneficiaire?" → pour "+esc(c.beneficiaire):""} · acheté le ${achat} · expire le ${exp}</div>
+          </div>
+        </div>`;
+      }).join("");
+  }catch(e){ box.innerHTML=`<div style="font-size:13px;color:var(--ink-3)">Chargement impossible.</div>`; }
+}
+
 async function basculerLotCoupons(id,off){
   try{
     const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({action:"desactiver",lot:id,off})});
@@ -2437,6 +2466,16 @@ function renderReglages(){
       <div id="cpLots" style="margin-top:14px"></div>
     </div>
 
+    <div class="grouplab">Bons cadeaux</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+        Vendus directement sur le site : le client paie le montant en entier, reçoit son code par email,
+        et le bénéficiaire l'utilise au moment de réserver. La séance est alors <b>déjà réglée</b>,
+        rien à encaisser le jour J. Validité 18 mois.
+      </div>
+      <div id="cpCadeaux"></div>
+    </div>
+
     <div class="grouplab">Sauvegarde manuelle</div>
     <div class="card" style="padding:16px">
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
@@ -2465,7 +2504,7 @@ function renderReglages(){
       Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
     </div>`;
   setSyncMsg("");
-  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} }
+  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} try{ loadBonsCadeaux(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
   renderNotifs();

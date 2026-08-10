@@ -66,9 +66,56 @@ export function reasonLabel(reason) {
   }
 }
 
-/* Remise reellement applicable sur un total (jamais en dessous du plancher). */
-export function discountFor(total, amount = COUPON_AMOUNT) {
+/* Remise reellement applicable sur un total.
+   Code promo classique : jamais en dessous du plancher (il reste toujours a payer).
+   Bon cadeau : la personne a deja paye, le bon peut couvrir la totalite. */
+export function discountFor(total, amount = COUPON_AMOUNT, kind = "promo") {
+  if (kind === "cadeau") return Math.max(0, Math.min(amount, total));
   return Math.max(0, Math.min(amount, total - MIN_TOTAL));
+}
+
+/* ---------- Bons cadeaux ----------
+   Meme stockage que les codes promo, avec kind:"cadeau" et le montant reellement
+   paye par l'acheteur. Index dedie "gifts" pour le suivi cote CRM. */
+export const GIFT_VALIDITE_MOIS = 18;
+
+export async function createGiftCoupon(store, { amount, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
+  // on retente si le code tire existe deja (probabilite infime, cout nul)
+  let code = "";
+  for (let i = 0; i < 5; i++) {
+    const essai = "CADEAU" + makeCode(6);
+    const deja = await store.get("c-" + essai, { type: "json" }).catch(() => null);
+    if (!deja) { code = essai; break; }
+  }
+  if (!code) return null;
+
+  const exp = new Date(now);
+  exp.setMonth(exp.getMonth() + GIFT_VALIDITE_MOIS);
+  const coupon = {
+    code, kind: "cadeau", amount: Number(amount) || 0,
+    batchId: "", expiresAt: exp.getTime(), createdAt: now,
+    usedAt: 0, sessionId: "", reservedUntil: 0, disabled: false,
+    acheteur: acheteur || {}, beneficiaire: beneficiaire || "", message: message || "",
+    achatSession: sessionId || ""
+  };
+  await store.setJSON("c-" + code, coupon);
+
+  try {
+    const idx = (await store.get("gifts", { type: "json" })) || [];
+    idx.unshift({
+      code, amount: coupon.amount, createdAt: now, expiresAt: coupon.expiresAt,
+      acheteur: (acheteur && acheteur.nom) || "", email: (acheteur && acheteur.email) || "",
+      beneficiaire: coupon.beneficiaire
+    });
+    await store.setJSON("gifts", idx.slice(0, 500));
+  } catch (e) {}
+
+  return coupon;
+}
+
+export function frDateShort(ms) {
+  const d = new Date(ms);
+  return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
 }
 
 /* Pose une reservation temporaire (le temps du paiement). */

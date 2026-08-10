@@ -6,30 +6,13 @@
 import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
-import nodemailer from "nodemailer";
+import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
-import { couponStore, consumeCoupon, prettyCode } from "../mbs-coupons.mjs";
+import { couponStore, consumeCoupon, prettyCode, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 
 function frDate(iso){
   const p = String(iso).split("-");
   return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
-}
-
-/* Envoi SMTP generique (identifiants dans Netlify). Ne fait jamais echouer l'appelant. */
-async function sendMail({ to, subject, html, attachments }) {
-  const host = process.env.MBS_SMTP_HOST;
-  const user = process.env.MBS_SMTP_USER;
-  const pass = process.env.MBS_SMTP_PASS;
-  const from = process.env.MBS_FROM_EMAIL || user;
-  if (!host || !user || !pass || !to) return false; // SMTP non configure : on n'envoie rien
-  const port = Number(process.env.MBS_SMTP_PORT || 465);
-  const secure = process.env.MBS_SMTP_SECURE ? (process.env.MBS_SMTP_SECURE === "true") : (port === 465);
-  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
-  try {
-    const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-    await transport.sendMail({ from, to, bcc, subject, html, attachments: attachments || [] });
-    return true;
-  } catch (e) { return false; }
 }
 
 async function sendClientEmail(m){
@@ -56,6 +39,97 @@ async function sendClientEmail(m){
     subject: "Votre reservation est confirmee . Mybabyshoot",
     html, attachments
   });
+}
+
+/* Bon cadeau paye : on cree le code, on l'envoie a l'acheteur (bon a imprimer
+   ou a transferer), on previent Matt et on trace l'encaissement dans le CRM. */
+async function traiterBonCadeau(session, md) {
+  const store = crmStore();
+  const data  = await loadData(store);
+  const now   = Date.now();
+
+  // idempotence : un seul bon par session Stripe
+  if ((data.paiements || []).some(p => p.stripeSession === session.id))
+    return;
+
+  const montant = Number(md.montant) || Math.round((session.amount_total || 0) / 100);
+  const prenom  = md.prenom || "";
+  const nom     = md.nom || "";
+  const email   = (md.email || session.customer_email || "").trim();
+  const tel     = (md.tel || "").trim();
+  const name    = [prenom, nom].filter(Boolean).join(" ").trim() || "Acheteur bon cadeau";
+
+  const coupon = await createGiftCoupon(couponStore(), {
+    amount: montant,
+    acheteur: { nom: name, email, tel },
+    beneficiaire: md.pour || "",
+    message: md.mot || "",
+    sessionId: session.id, now
+  });
+  if (!coupon) throw new Error("code_non_cree");
+
+  // Fiche acheteur dans le CRM (c'est un contact, pas encore une seance).
+  let client = data.clients.find(c =>
+    c.brand === BRAND &&
+    ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
+     (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, "")))
+  );
+  const ligne = "Bon cadeau " + prettyCode(coupon.code) + " de " + montant + " euros achete le "
+    + new Date(now).toLocaleDateString("fr-FR")
+    + (md.pour ? " pour " + md.pour : "") + ". Valable jusqu'au " + frDateShort(coupon.expiresAt) + ".";
+  if (!client) {
+    client = {
+      id: uid(), brand: BRAND, name, status: "Prospect", type: "Bon cadeau",
+      tel, email, insta: "", source: "Bon cadeau", notes: ligne,
+      fromSite: true, createdAt: now
+    };
+    data.clients.push(client);
+  } else {
+    client.notes = (client.notes ? client.notes + "\n" : "") + ligne;
+  }
+
+  data.paiements.push({
+    id: uid(), brand: BRAND, clientId: client.id,
+    label: "Bon cadeau " + prettyCode(coupon.code),
+    total: String(montant), acompte: String(montant), statut: "Solde",
+    date: new Date(now).toISOString().slice(0, 10), dueDate: "",
+    notes: "Encaisse en ligne via Stripe. " + ligne,
+    stripeSession: session.id
+  });
+
+  data.t = now;
+  await store.setJSON("data", data);
+
+  try {
+    await notifyAll(
+      "Bon cadeau vendu",
+      name + " . " + montant + " euros" + (md.pour ? " pour " + md.pour : ""),
+      "/"
+    );
+  } catch (e) {}
+
+  if (email) {
+    const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const html =
+      "<p>Bonjour " + prenom + ",</p>" +
+      "<p>Merci beaucoup. Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", pret a etre offert.</p>" +
+      "<div style=\"border:2px solid #5E4430;border-radius:16px;padding:24px;text-align:center;font-family:Georgia,serif;max-width:420px\">" +
+        "<div style=\"letter-spacing:3px;font-size:12px;color:#8a7a6a\">MYBABYSHOOT</div>" +
+        "<div style=\"font-size:22px;margin:10px 0 4px\">Bon cadeau</div>" +
+        "<div style=\"font-size:34px;font-weight:bold;color:#5E4430\">" + montant + " euros</div>" +
+        (md.pour ? "<div style=\"margin-top:8px\">Pour " + md.pour + "</div>" : "") +
+        (md.mot ? "<div style=\"margin-top:8px;font-style:italic\">" + md.mot + "</div>" : "") +
+        "<div style=\"margin:18px 0 4px;font-size:12px;color:#8a7a6a\">CODE A UTILISER</div>" +
+        "<div style=\"font-size:26px;letter-spacing:4px;font-weight:bold\">" + prettyCode(coupon.code) + "</div>" +
+        "<div style=\"margin-top:14px;font-size:12px;color:#8a7a6a\">Valable jusqu'au " + frDateShort(coupon.expiresAt) + "</div>" +
+      "</div>" +
+      "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
+      + "choisissez la formule et le creneau, puis saisissez le code au moment de la reservation. Le montant du bon est deduit automatiquement.</p>" +
+      "<p>Ce bon est a usage unique et nominatif au code : gardez-le precieusement.</p>" +
+      "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
+      "<p>A tres vite,<br>Matteo . Mybabyshoot</p>";
+    await sendMail({ to: email, subject: "Votre bon cadeau Mybabyshoot", html });
+  }
 }
 
 /* Reservation commencee mais jamais payee : on cree un prospect dans le CRM,
@@ -151,6 +225,15 @@ export default async (request) => {
 
   const session = event.data.object;
   const md = session.metadata || {};
+
+  // ---------- Achat d'un bon cadeau ----------
+  if (md.app === "mbs-gift") {
+    if (estAbandon || session.payment_status !== "paid")
+      return new Response(JSON.stringify({ received: true, ignored: "gift_unpaid" }), { status: 200 });
+    try { await traiterBonCadeau(session, md); } catch (e) {}
+    return new Response(JSON.stringify({ received: true, gift: true }), { status: 200 });
+  }
+
   if (md.app !== "mybabyshoot")
     return new Response(JSON.stringify({ received: true, ignored: "other_app" }), { status: 200 });
 

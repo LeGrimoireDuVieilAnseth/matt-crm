@@ -3,8 +3,8 @@
 // L'album (140 euros) se vend beaucoup mieux juste apres la seance,
 // quand la cliente vient de decouvrir ses photos.
 // Chaque seance n'est relancee QU'UNE SEULE FOIS (champ albumMailAt).
-import nodemailer from "nodemailer";
 import { crmStore, loadData, BRAND } from "../mbs-lib.mjs";
+import { sendMail } from "../mbs-mail.mjs";
 
 const JOURS_APRES = 4;      // on relance 4 jours apres la seance
 const FENETRE     = 10;     // on ne remonte pas au-dela de 10 jours (rattrapage)
@@ -20,22 +20,6 @@ function joursEcoules(iso) {
   const t = new Date();
   const auj = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
   return Math.round((auj - d) / 86400000);
-}
-
-async function sendMail({ to, subject, html }) {
-  const host = process.env.MBS_SMTP_HOST;
-  const user = process.env.MBS_SMTP_USER;
-  const pass = process.env.MBS_SMTP_PASS;
-  const from = process.env.MBS_FROM_EMAIL || user;
-  if (!host || !user || !pass || !to) return false;
-  const port = Number(process.env.MBS_SMTP_PORT || 465);
-  const secure = process.env.MBS_SMTP_SECURE ? (process.env.MBS_SMTP_SECURE === "true") : (port === 465);
-  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
-  try {
-    const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-    await transport.sendMail({ from, to, bcc, subject, html });
-    return true;
-  } catch (e) { return false; }
 }
 
 export default async () => {

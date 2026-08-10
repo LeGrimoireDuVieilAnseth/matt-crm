@@ -29,6 +29,24 @@ export default async (request) => {
 
   if (request.method === "GET") {
     const url = new URL(request.url);
+    // bons cadeaux vendus sur le site (etat lu code par code)
+    if (url.searchParams.get("cadeaux")) {
+      let idx = [];
+      try { idx = (await store.get("gifts", { type: "json" })) || []; } catch (e) {}
+      const cadeaux = [];
+      for (const g of idx.slice(0, 200)) {
+        let c = null;
+        try { c = await store.get("c-" + g.code, { type: "json" }); } catch (e) {}
+        cadeaux.push({
+          code: prettyCode(g.code), brut: g.code,
+          montant: g.amount, createdAt: g.createdAt, expiresAt: g.expiresAt,
+          acheteur: g.acheteur || "", email: g.email || "", beneficiaire: g.beneficiaire || "",
+          utilise: !!(c && c.usedAt), useAt: (c && c.usedAt) || 0,
+          disabled: !!(c && c.disabled)
+        });
+      }
+      return json({ ok: true, cadeaux });
+    }
     if (url.searchParams.get("lots")) {
       let lots = [];
       try { lots = (await store.get("batches", { type: "json" })) || []; } catch (e) {}

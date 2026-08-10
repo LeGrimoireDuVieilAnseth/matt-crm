@@ -6,11 +6,14 @@
 import Stripe from "stripe";
 import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
-  acompteFor, typeLabelFr, LOCK_TTL_MS, uid, BRAND
+  acompteFor, typeLabelFr, LOCK_TTL_MS, uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import {
-  couponStore, checkCoupon, reasonLabel, discountFor, reserveCoupon, releaseCoupon
+  couponStore, checkCoupon, reasonLabel, discountFor,
+  reserveCoupon, releaseCoupon, consumeCoupon, prettyCode
 } from "../mbs-coupons.mjs";
+import { notifyAll } from "../push-lib.mjs";
+import { sendMail } from "../mbs-mail.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +23,90 @@ const cors = {
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
+
+function frDate(iso) {
+  const p = String(iso).split("-");
+  return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+}
+
+/* Bon cadeau couvrant la totalite : il n'y a aucun paiement en ligne, donc pas
+   de webhook Stripe. On enregistre nous-memes la reservation dans le CRM,
+   on brule le bon, on previent Matt et on confirme au client. */
+async function confirmerSansPaiement({ store, lockId, now, md }) {
+  const data = await loadData(store);
+  pruneLocks(data, now);
+
+  const typeLbl = typeLabelFr(md.type);
+  const name = [md.prenom, md.nom].filter(Boolean).join(" ").trim() || "Client Mybabyshoot";
+  const email = (md.email || "").trim();
+  const tel   = (md.tel || "").trim();
+
+  let client = data.clients.find(c =>
+    c.brand === BRAND &&
+    ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
+     (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, "")))
+  );
+  if (!client) {
+    client = {
+      id: uid(), brand: BRAND, name, status: "Client", type: typeLbl,
+      tel, email, insta: "", source: "Bon cadeau",
+      notes: "", fromSite: true, createdAt: now
+    };
+    data.clients.push(client);
+  } else {
+    client.tel = client.tel || tel;
+    client.email = client.email || email;
+    client.status = "Client";
+  }
+
+  const detail = "Bon cadeau " + prettyCode(md.coupon) + " (-" + md.remise + " euros, seance " + md.totalPlein + " euros).";
+  data.seances.push({
+    id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
+    date: md.date, time: md.time, place: PLACE, status: "A venir",
+    notes: "Reservation en ligne reglee avec un bon cadeau. " + detail + " Rien a encaisser le jour J.",
+    createdAt: now, giftCode: md.coupon
+  });
+  data.paiements.push({
+    id: uid(), brand: BRAND, clientId: client.id,
+    label: "Seance reglee par bon cadeau",
+    total: String(md.totalPlein), acompte: String(md.totalPlein), statut: "Solde",
+    date: new Date(now).toISOString().slice(0, 10), dueDate: md.date,
+    notes: detail + " Deja paye par l'acheteur du bon.",
+    giftCode: md.coupon
+  });
+
+  data.mbsLocks = data.mbsLocks.filter(l => l.id !== lockId);
+  data.t = now;
+  await store.setJSON("data", data);
+
+  // Le bon est brule maintenant : la seance est confirmee.
+  try { await consumeCoupon(couponStore(), md.coupon, "cadeau-" + md.date + "-" + md.time, now); } catch (e) {}
+
+  try {
+    await notifyAll(
+      "Nouvelle reservation (bon cadeau)",
+      name + " . " + typeLbl + " le " + frDate(md.date) + " a " + md.time + " . rien a encaisser",
+      "/"
+    );
+  } catch (e) {}
+
+  if (email) {
+    const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const html =
+      "<p>Bonjour " + (md.prenom || "") + ",</p>" +
+      "<p>Votre reservation est confirmee. Merci et a tres vite au studio.</p>" +
+      "<ul>" +
+      "<li><b>Seance :</b> " + typeLbl + "</li>" +
+      "<li><b>Date :</b> " + frDate(md.date) + " a " + md.time + "</li>" +
+      "<li><b>Lieu :</b> " + PLACE + "</li>" +
+      "<li><b>Reglement :</b> integralement couvert par votre bon cadeau " + prettyCode(md.coupon) + "</li>" +
+      "<li><b>A regler le jour de la seance :</b> rien</li>" +
+      "</ul>" +
+      "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
+      "<p>Mybabyshoot . <a href=\"" + site + "\">" + site.replace(/^https?:\/\//, "") + "</a></p>";
+    await sendMail({ to: email, subject: "Votre reservation est confirmee . Mybabyshoot", html });
+  }
+}
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -64,24 +151,27 @@ export default async (request) => {
   data.mbsLocks.push({ id: lockId, date, time, expiresAt: now + LOCK_TTL_MS });
   await store.setJSON("data", data);
 
-  // 1bis) Code de reduction : verifie ET applique cote serveur (jamais depuis le navigateur).
-  //       Le code est seulement reserve ici ; il n'est consomme qu'au paiement confirme.
-  let remise = 0, couponCode = "";
+  const releaseLock = async () => {
+    try {
+      const d2 = await loadData(store);
+      d2.mbsLocks = d2.mbsLocks.filter(l => l.id !== lockId);
+      await store.setJSON("data", d2);
+    } catch (_) {}
+  };
+
+  // 1bis) Code de reduction ou bon cadeau : verifie ET applique cote serveur
+  //       (jamais depuis le navigateur). Le code est seulement reserve ici ;
+  //       il n'est consomme qu'au paiement confirme.
+  let remise = 0, couponCode = "", couponKind = "promo";
   if (body.coupon) {
     const cstore = couponStore();
     const chk = await checkCoupon(cstore, body.coupon, now);
-    const releaseLock = async () => {
-      try {
-        const d2 = await loadData(store);
-        d2.mbsLocks = d2.mbsLocks.filter(l => l.id !== lockId);
-        await store.setJSON("data", d2);
-      } catch (_) {}
-    };
     if (!chk.ok) {
       await releaseLock();
       return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
     }
-    remise = discountFor(total, chk.coupon.amount);
+    couponKind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
+    remise = discountFor(total, chk.coupon.amount, couponKind);
     if (remise <= 0) {
       await releaseLock();
       return json({ ok: false, error: "coupon", message: "Ce code ne s'applique pas a cette formule." }, 400);
@@ -99,6 +189,25 @@ export default async (request) => {
   // acompte qu'une reservation sans code, c'est le solde du jour J qui baisse.
   // Garde-fou : l'acompte ne depasse jamais le total a payer.
   const acompte = Math.min(acompteFor(totalPlein), total);
+
+  // Cas bon cadeau couvrant toute la seance : plus rien a payer en ligne.
+  // Stripe ne sait pas encaisser 0 euro, on confirme donc la reservation ici.
+  if (total <= 0) {
+    try {
+      await confirmerSansPaiement({
+        store, lockId, now,
+        md: {
+          type, date, time, prenom, nom, email, tel,
+          coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein)
+        }
+      });
+      return json({ ok: true, gratuit: true });
+    } catch (e) {
+      await releaseLock();
+      if (couponCode) { try { await releaseCoupon(couponStore(), couponCode); } catch (_) {} }
+      return json({ ok: false, error: "server", detail: String(e && e.message || e) }, 500);
+    }
+  }
 
   // 2) Session Stripe Checkout pour l'acompte.
   try {
