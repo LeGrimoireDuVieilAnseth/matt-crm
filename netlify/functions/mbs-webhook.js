@@ -11,8 +11,8 @@ import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 
 const SEANCE_TXT = {
-  grossesse: "Seance grossesse",
-  naissance: "Seance naissance",
+  grossesse: "Séance grossesse",
+  naissance: "Séance naissance",
   duo:       "Grossesse et naissance"
 };
 
@@ -50,23 +50,23 @@ async function sendClientEmail(m){
   const reste = Math.max(0, Number(m.total) - Number(m.acompte));
   const html =
     "<p>Bonjour " + (m.prenom || "") + ",</p>" +
-    "<p>Votre reservation est confirmee. Merci et a tres vite au studio.</p>" +
+    "<p>Votre réservation est confirmée. Merci, et à très vite au studio.</p>" +
     "<ul>" +
-    "<li><b>Seance :</b> " + typeLabelFr(m.type) + "</li>" +
-    "<li><b>Date :</b> " + frDate(m.date) + " a " + m.time + "</li>" +
+    "<li><b>Séance :</b> " + typeLabelFr(m.type) + "</li>" +
+    "<li><b>Date :</b> " + frDate(m.date) + " à " + m.time + "</li>" +
     "<li><b>Lieu :</b> " + PLACE + "</li>" +
-    "<li><b>Acompte regle :</b> " + m.acompte + " euros</li>" +
-    "<li><b>Solde le jour de la seance :</b> " + reste + " euros</li>" +
+    "<li><b>Acompte réglé :</b> " + m.acompte + " €</li>" +
+    "<li><b>Solde le jour de la séance :</b> " + reste + " €</li>" +
     "</ul>" +
-    (m.invPdf ? "<p>Votre facture d'acompte est en piece jointe.</p>" : "") +
-    "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
+    (m.invPdf ? "<p>Votre facture d'acompte est en pièce jointe.</p>" : "") +
+    "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
     "<p>Mybabyshoot</p>";
   const attachments = m.invPdf
     ? [{ filename: "Facture-" + (m.invNum || "acompte") + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
     : [];
   await sendMail({
     to: m.email,
-    subject: "Votre reservation est confirmee . Mybabyshoot",
+    subject: "Votre réservation est confirmée · Mybabyshoot",
     html, attachments
   });
 }
@@ -106,8 +106,8 @@ async function traiterBonCadeau(session, md) {
     ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
      (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, "")))
   );
-  const ligne = "Bon cadeau " + prettyGift(coupon.code) + " . " + (md.label || "") + " " + SEANCE_TXT[coupon.seance]
-    + " . " + montant + " euros achete le " + new Date(now).toLocaleDateString("fr-FR")
+  const ligne = "Bon cadeau " + prettyGift(coupon.code) + " · " + (md.label || "") + " " + SEANCE_TXT[coupon.seance]
+    + " · " + montant + " € acheté le " + new Date(now).toLocaleDateString("fr-FR")
     + (md.pour ? " pour " + md.pour : "") + ". Valable jusqu'au " + frDateShort(coupon.expiresAt) + ".";
   if (!client) {
     client = {
@@ -125,7 +125,7 @@ async function traiterBonCadeau(session, md) {
     label: "Bon cadeau " + prettyGift(coupon.code),
     total: String(montant), acompte: String(montant), statut: "Solde",
     date: new Date(now).toISOString().slice(0, 10), dueDate: "",
-    notes: "Encaisse en ligne via Stripe. " + ligne,
+    notes: "Encaissé en ligne via Stripe. " + ligne,
     stripeSession: session.id
   });
 
@@ -135,7 +135,7 @@ async function traiterBonCadeau(session, md) {
   try {
     await notifyAll(
       "Bon cadeau vendu",
-      name + " . " + montant + " euros" + (md.pour ? " pour " + md.pour : ""),
+      name + " · " + montant + " €" + (md.pour ? " pour " + md.pour : ""),
       "/"
     );
   } catch (e) {}
@@ -145,26 +145,28 @@ async function traiterBonCadeau(session, md) {
     const lien = site + "/bon.html?code=" + coupon.code;
     const html =
       "<p>Bonjour " + prenom + ",</p>" +
-      "<p>Merci beaucoup. Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", pret a etre offert.</p>" +
+      "<p>Merci beaucoup. Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", prêt à être offert.</p>" +
       "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">Voir et imprimer le bon cadeau</a></p>" +
-      "<p>Ce lien ouvre votre bon en grand : vous pouvez le <b>telecharger en image</b> pour l'imprimer et l'offrir en main propre, ou simplement transmettre le code.</p>" +
+      "<p>Ce lien ouvre votre bon en grand : vous pouvez le <b>télécharger en image</b> pour l'imprimer et l'offrir en main propre, ou simplement transmettre le code.</p>" +
       "<div style=\"border:2px solid #5E4430;border-radius:16px;padding:24px;text-align:center;font-family:Georgia,serif;max-width:420px\">" +
         "<div style=\"letter-spacing:3px;font-size:12px;color:#8a7a6a\">MYBABYSHOOT</div>" +
         "<div style=\"font-size:22px;margin:10px 0 4px\">Bon cadeau</div>" +
         "<div style=\"font-size:18px;font-weight:bold\">" + (md.label || "") + "</div>" +
-        "<div style=\"font-size:14px;color:#8a7a6a;margin-bottom:6px\">" + SEANCE_TXT[coupon.seance] + "</div>" +
-        "<div style=\"font-size:34px;font-weight:bold;color:#5E4430\">" + montant + " euros</div>" +
+        "<div style=\"font-size:15px;color:#8a7a6a;margin-bottom:14px\">" + SEANCE_TXT[coupon.seance] + "</div>" +
         (md.pour ? "<div style=\"margin-top:8px\">Pour " + md.pour + "</div>" : "") +
         (md.mot ? "<div style=\"margin-top:8px;font-style:italic\">" + md.mot + "</div>" : "") +
-        "<div style=\"margin:18px 0 4px;font-size:12px;color:#8a7a6a\">CODE A UTILISER</div>" +
+        "<div style=\"margin:18px 0 4px;font-size:12px;color:#8a7a6a\">CODE À UTILISER</div>" +
         "<div style=\"font-size:26px;letter-spacing:4px;font-weight:bold\">" + prettyGift(coupon.code) + "</div>" +
         "<div style=\"margin-top:14px;font-size:12px;color:#8a7a6a\">Valable jusqu'au " + frDateShort(coupon.expiresAt) + "</div>" +
       "</div>" +
+      // Le montant reste hors du bon : celui qui le recoit n'a pas a decouvrir
+      // le prix du cadeau, meme si l'email lui est transfere.
+      "<p style=\"font-size:13px;color:#888\">Montant réglé : " + montant + " €. Le prix n'apparaît nulle part sur le bon.</p>" +
       "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
-      + "choisissez la formule et le creneau, puis saisissez le code au moment de la reservation. Le montant du bon est deduit automatiquement.</p>" +
-      "<p>Ce bon est a usage unique : gardez le code precieusement.</p>" +
-      "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
-      "<p>A tres vite,<br>Matteo . Mybabyshoot</p>";
+      + "choisissez la date et le créneau, puis saisissez le code au moment de la réservation. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
+      "<p>Ce bon est à usage unique : gardez le code précieusement.</p>" +
+      "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
+      "<p>À très vite,<br>Matteo · Mybabyshoot</p>";
     await sendMail({ to: email, subject: "Votre bon cadeau Mybabyshoot", html });
   }
 }
@@ -185,8 +187,8 @@ async function traiterAbandon(session, md) {
   const tel    = md.tel || "";
   const typeLbl = typeLabelFr(md.type || "grossesse");
   const nomComplet = [prenom, nom].filter(Boolean).join(" ").trim() || "Prospect";
-  const ligne = "Reservation commencee le " + new Date(now).toLocaleDateString("fr-FR")
-    + " (" + typeLbl + " le " + frDate(md.date) + " a " + md.time + ", " + (md.total || "?") + " euros) mais paiement non finalise.";
+  const ligne = "Réservation commencée le " + new Date(now).toLocaleDateString("fr-FR")
+    + " (" + typeLbl + " le " + frDate(md.date) + " à " + md.time + ", " + (md.total || "?") + " €) mais paiement non finalisé.";
 
   // fiche existante (meme email ou meme telephone) sinon nouveau prospect
   const dup = (data.clients || []).find(c =>
@@ -202,7 +204,7 @@ async function traiterAbandon(session, md) {
     data.clients.push({
       id: uid(), brand: BRAND, name: nomComplet, status: "Prospect",
       type: typeLbl, tel, email, insta: "",
-      source: "Reservation abandonnee", notes: ligne,
+      source: "Réservation abandonnée", notes: ligne,
       fromSite: true, abandonSession: session.id, createdAt: now
     });
   }
@@ -211,8 +213,8 @@ async function traiterAbandon(session, md) {
 
   try {
     await notifyAll(
-      "Reservation non finalisee",
-      nomComplet + " . " + typeLbl + " le " + frDate(md.date) + (tel ? " . " + tel : ""),
+      "Réservation non finalisée",
+      nomComplet + " · " + typeLbl + " le " + frDate(md.date) + (tel ? " · " + tel : ""),
       "/"
     );
   } catch (e) {}
@@ -222,16 +224,16 @@ async function traiterAbandon(session, md) {
     const site = siteClient(md);
     const html =
       "<p>Bonjour " + (prenom || "") + ",</p>" +
-      "<p>Vous avez commence a reserver une <b>" + typeLbl.toLowerCase() + "</b> au studio, et la reservation n'est pas allee au bout. Aucun souci : votre creneau a simplement ete libere.</p>" +
+      "<p>Vous avez commencé à réserver une <b>séance " + typeLbl.toLowerCase() + "</b> au studio, et la réservation n'est pas allée au bout. Aucun souci : votre créneau a simplement été libéré.</p>" +
       "<p>Si vous souhaitez toujours venir, tout est encore possible :</p>" +
       "<p><a href=\"" + site + "/#composer\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
-      "<p>Et si vous avez la moindre question (deroulement, tenues, meilleur moment pour la seance), repondez simplement a cet email ou appelez-moi au <b>06 47 76 54 17</b>. Je reponds toujours avec plaisir.</p>" +
-      "<p>A tres vite,<br>Matteo . Mybabyshoot</p>" +
-      "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une reservation a ete commencee avec cette adresse. Si ce n'etait pas vous, ignorez simplement cet email.</p>";
+      "<p>Et si vous avez la moindre question (déroulement, tenues, meilleur moment pour la séance), répondez simplement à cet email ou appelez-moi au <b>06 47 76 54 17</b>. Je réponds toujours avec plaisir.</p>" +
+      "<p>À très vite,<br>Matteo · Mybabyshoot</p>" +
+      "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une réservation a été commencée avec cette adresse. Si ce n'était pas vous, ignorez simplement cet email.</p>";
     try {
       await sendMail({
         to: email,
-        subject: "Votre reservation au studio est restee en attente",
+        subject: "Votre réservation au studio est restée en attente",
         html
       });
     } catch (e) {}
@@ -314,7 +316,7 @@ export default async (request) => {
   if (!client) {
     client = {
       id: uid(), brand: BRAND, name, status: "Client", type: typeLbl,
-      tel, email, insta: "", source: "Reservation site Mybabyshoot",
+      tel, email, insta: "", source: "Réservation site Mybabyshoot",
       notes: "", fromSite: true, createdAt: now
     };
     data.clients.push(client);
@@ -328,19 +330,19 @@ export default async (request) => {
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: PLACE, status: "A venir",
-    notes: "Reservation en ligne. Total seance " + total + " euros, acompte " + acompte + " euros encaisse."
-      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " euros)." : ""),
+    notes: "Réservation en ligne. Total séance " + total + " €, acompte " + acompte + " € encaissé."
+      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " €)." : ""),
     createdAt: now, stripeSession: session.id
   });
 
   // Paiement (acompte encaisse ; le CRM affiche le reste du).
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
-    label: "Acompte reservation " + typeLbl,
+    label: "Acompte réservation " + typeLbl,
     total: String(total), acompte: String(acompte), statut: "Acompte",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
-    notes: "Regle en ligne via Stripe."
-      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " euros (total plein " + md.totalPlein + ")." : ""),
+    notes: "Réglé en ligne via Stripe."
+      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : ""),
     stripeSession: session.id
   });
 
@@ -358,8 +360,8 @@ export default async (request) => {
   // Notification push a Matt.
   try {
     await notifyAll(
-      "Nouvelle reservation Mybabyshoot",
-      name + " . " + typeLbl + " le " + frDate(date) + " a " + time + " . acompte " + acompte + " euros",
+      "Nouvelle réservation Mybabyshoot",
+      name + " · " + typeLbl + " le " + frDate(date) + " à " + time + " · acompte " + acompte + " €",
       "/"
     );
   } catch (e) { /* non bloquant */ }

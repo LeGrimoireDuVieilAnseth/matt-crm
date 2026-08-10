@@ -5,9 +5,9 @@ import Stripe from "stripe";
 import { offreCadeau } from "../mbs-coupons.mjs";
 
 const SEANCE_LABEL = {
-  grossesse: "Séance grossesse",
-  naissance: "Séance naissance",
-  duo:       "Grossesse et naissance"
+  grossesse: "Séance photo grossesse",
+  naissance: "Séance photo naissance",
+  duo:       "Séances photo grossesse et naissance"
 };
 
 const cors = {
@@ -64,8 +64,8 @@ export default async (request) => {
           currency: "eur",
           unit_amount: montant * 100,
           product_data: {
-            name: "Bon cadeau Mybabyshoot . " + label,
-            description: (SEANCE_LABEL[seance] || "") + " . valable 18 mois au studio (La Mulatiere)."
+            name: "Bon cadeau Mybabyshoot · formule " + label,
+            description: (SEANCE_LABEL[seance] || "") + " · valable 18 mois au studio, à La Mulatière."
           }
         }
       }],

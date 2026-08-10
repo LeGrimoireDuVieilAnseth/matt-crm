@@ -47,16 +47,16 @@ export default async (request) => {
     });
     const html =
       "<p>Bonjour " + (client.name || "") + ",</p>" +
-      "<p>Merci pour votre confiance. Vous trouverez votre facture (solde regle) en piece jointe.</p>" +
+      "<p>Merci pour votre confiance. Vous trouverez votre facture (solde réglé) en pièce jointe.</p>" +
       "<ul>" +
-      "<li><b>Seance :</b> " + typeLabel + (seanceDateFr ? " du " + seanceDateFr : "") + "</li>" +
-      "<li><b>Total :</b> " + total + " euros</li>" +
-      "<li><b>Acompte deja verse :</b> " + acompte + " euros</li>" +
-      "<li><b>Solde regle :</b> " + solde + " euros</li>" +
+      "<li><b>Séance :</b> " + typeLabel + (seanceDateFr ? " du " + seanceDateFr : "") + "</li>" +
+      "<li><b>Total :</b> " + total + " €</li>" +
+      "<li><b>Acompte déjà versé :</b> " + acompte + " €</li>" +
+      "<li><b>Solde réglé :</b> " + solde + " €</li>" +
       "</ul>" +
-      "<p>A tres vite,<br>Mybabyshoot</p>";
+      "<p>À très vite,<br>Mybabyshoot</p>";
     const sent = await sendInvoiceMail({
-      to: email, subject: "Votre facture . Mybabyshoot",
+      to: email, subject: "Votre facture · Mybabyshoot",
       html, pdf, pdfName: "Facture-" + number + ".pdf"
     });
     return json({ ok: true, number, sent });

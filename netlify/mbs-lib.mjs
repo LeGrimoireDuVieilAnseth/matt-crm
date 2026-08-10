@@ -7,7 +7,7 @@ import { getStore } from "@netlify/blobs";
 export const STORE_NAME = "studio-crm";
 export const DATA_KEY   = "data";
 export const BRAND      = "mybabyshoot";
-export const PLACE      = "Studio, 16 chemin du Buisset, 69350 La Mulatiere";
+export const PLACE      = "Studio, 16 chemin du Buisset, 69350 La Mulatière";
 
 // Ouverture : lundi (1) au samedi (6). Dimanche (0) ferme.
 export const OPEN_DAYS = [1, 2, 3, 4, 5, 6];

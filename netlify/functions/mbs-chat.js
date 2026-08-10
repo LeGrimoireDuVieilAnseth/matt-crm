@@ -22,7 +22,7 @@ const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
 const FALLBACK =
-  "Je ne suis pas disponible pour le moment. Vous pouvez joindre Matt directement au 06 47 76 54 17, ou laisser un message via le formulaire de contact du site : il vous repondra tres vite !";
+  "Je ne suis pas disponible pour le moment. Vous pouvez joindre Matt directement au 06 47 76 54 17, ou laisser un message via le formulaire de contact du site : il vous répondra très vite !";
 
 // Garde-fou : nombre maximum de reponses IA par jour (protege le budget)
 const DAILY_MAX = 400;
@@ -218,7 +218,7 @@ export default async (request) => {
               "/"
             );
           } catch (e) {}
-          resultats.push({ type: "tool_result", tool_use_id: t.id, content: "Matt a bien recu la notification sur son telephone. Il peut repondre directement dans cette conversation." });
+          resultats.push({ type: "tool_result", tool_use_id: t.id, content: "Matt a bien reçu la notification sur son téléphone. Il peut répondre directement dans cette conversation." });
         } else {
           resultats.push({ type: "tool_result", tool_use_id: t.id, content: "ok" });
         }

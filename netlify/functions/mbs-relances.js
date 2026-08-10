@@ -52,15 +52,15 @@ export default async () => {
     const prenom = String(client.name || "").split(" ")[0] || "";
     const html =
       "<p>Bonjour " + prenom + ",</p>" +
-      "<p>J'espere que vous avez passe un bon moment au studio le " + frDate(s.date) + " et que vos photos vous plaisent.</p>" +
-      "<p>Beaucoup de familles me demandent, une fois la galerie decouverte, s'il est possible d'avoir leurs images <b>imprimees</b>. La reponse est oui : je propose un <b>album photo imprime a 140 euros</b>, qui reunit vos plus belles images dans un bel objet a garder et a feuilleter, bien plus vivant qu'un ecran.</p>" +
+      "<p>J'espère que vous avez passé un bon moment au studio le " + frDate(s.date) + " et que vos photos vous plaisent.</p>" +
+      "<p>Beaucoup de familles me demandent, une fois la galerie découverte, s'il est possible d'avoir leurs images <b>imprimées</b>. La réponse est oui : je propose un <b>album photo imprimé à 140 €</b>, qui réunit vos plus belles images dans un bel objet à garder et à feuilleter, bien plus vivant qu'un écran.</p>" +
       "<p>C'est aussi le cadeau qui touche le plus les grands-parents.</p>" +
-      "<p>Si cela vous tente, repondez simplement a cet email ou appelez-moi au <b>06 47 76 54 17</b>, je m'occupe de tout.</p>" +
-      "<p>Encore merci de votre confiance,<br>Matteo . Mybabyshoot<br><a href=\"" + site + "\">" + site.replace(/^https?:\/\//, "") + "</a></p>";
+      "<p>Si cela vous tente, répondez simplement à cet email ou appelez-moi au <b>06 47 76 54 17</b>, je m'occupe de tout.</p>" +
+      "<p>Encore merci de votre confiance,<br>Matteo · Mybabyshoot<br><a href=\"" + site + "\">" + site.replace(/^https?:\/\//, "") + "</a></p>";
 
     const ok = await sendMail({
       to: client.email,
-      subject: "Vos photos en album imprime ?",
+      subject: "Vos photos en album imprimé ?",
       html
     });
     s.albumMailAt = now;          // marque dans tous les cas : jamais deux fois

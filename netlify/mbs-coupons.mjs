@@ -59,9 +59,9 @@ export function reasonLabel(reason) {
     case "vide":         return "Entrez un code.";
     case "inconnu":      return "Ce code n'existe pas.";
     case "desactive":    return "Ce code n'est plus valable.";
-    case "deja_utilise": return "Ce code a deja ete utilise.";
-    case "expire":       return "Ce code a expire.";
-    case "en_cours":     return "Ce code est en cours d'utilisation. Reessayez dans quelques minutes.";
+    case "deja_utilise": return "Ce code a déjà été utilisé.";
+    case "expire":       return "Ce code a expiré.";
+    case "en_cours":     return "Ce code est en cours d'utilisation. Réessayez dans quelques minutes.";
     default:             return "Ce code n'est pas valable.";
   }
 }

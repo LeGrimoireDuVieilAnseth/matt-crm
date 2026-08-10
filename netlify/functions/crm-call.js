@@ -51,7 +51,7 @@ export default async (request) => {
   const stamp = new Date(now).toLocaleDateString("fr-FR");
 
   const noteLine = "Demande d'appel du " + stamp
-    + (creneau ? " | creneau : " + creneau : "")
+    + (creneau ? " | créneau : " + creneau : "")
     + (objet ? " | objet : " + objet : "")
     + (mariage ? " | mariage le " + frDate(mariage) : "")
     + (lieu ? " | lieu : " + lieu : "")

@@ -57,7 +57,7 @@ export default async (request) => {
       brand: "mybabyshoot",
       name: nom,
       status: "Prospect",
-      type: typeDem || "Seance",
+      type: typeDem || "Séance",
       tel, email, insta: "",
       source: "Contact site Mybabyshoot",
       notes: ligne,

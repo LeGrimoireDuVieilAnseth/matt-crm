@@ -2,7 +2,7 @@
 // Verification d'un code de reduction depuis le site (avant paiement).
 // Ne consomme rien : la remise n'est appliquee (et le code brule) que
 // cote serveur dans mbs-checkout / mbs-webhook.
-import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode } from "../mbs-coupons.mjs";
+import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode, prettyGift } from "../mbs-coupons.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -35,14 +35,15 @@ export default async (request) => {
   const reste = total - remise;
   return json({
     ok: true, valide: true,
-    code: prettyCode(chk.code),
+    // un bon cadeau s'affiche brut, prettyCode le decouperait par groupes de 4
+    code: kind === "cadeau" ? prettyGift(chk.code) : prettyCode(chk.code),
     kind, remise,
     nouveauTotal: reste,
     message: kind === "cadeau"
       ? (reste === 0
-          ? "Bon cadeau valide : la seance est entierement couverte, rien a payer."
-          : "Bon cadeau valide : " + remise + " euros deduits.")
-      : "Code valide : " + remise + " euros de remise."
+          ? "Bon cadeau validé : la séance est entièrement couverte, il n'y a rien à payer."
+          : "Bon cadeau validé : " + remise + " € déduits.")
+      : "Code valide : " + remise + " € de remise."
   });
 };
 
