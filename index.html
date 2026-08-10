@@ -645,7 +645,35 @@ function nomMarqueActive(){ return FILTER==="all"?"Toutes les marques":(BRANDS[F
 
 /* ---------- navigation ---------- */
 const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
+/* ============================================================
+   BOUTON RETOUR DU TELEPHONE
+   Sans entree d'historique, le retour d'Android quittait l'application
+   (et redemandait l'empreinte). Chaque vue ouverte et chaque modale
+   empilent maintenant une entree : le retour ramene a l'accueil, ou
+   ferme la modale ouverte.
+   ============================================================ */
+let vueCourante="home";
+let retourEnCours=false;   // evite d'empiler pendant qu'on depile
+
+function empiler(etat){
+  if(retourEnCours) return;
+  try{ history.pushState(etat,""); }catch(e){}
+}
+function modaleOuverte(){
+  const bg=document.getElementById("modalBg");
+  return !!(bg&&bg.classList.contains("on"));
+}
+window.addEventListener("popstate",(e)=>{
+  retourEnCours=true;
+  try{
+    // une modale ouverte se ferme d'abord, sans quitter la vue
+    if(modaleOuverte()){ closeModal(); return; }
+    const cible=(e.state&&e.state.vue)||"home";
+    if(cible==="home") goHome(); else setView(cible);
+  }finally{ retourEnCours=false; }
+});
 function setView(id){
+  if(id!==vueCourante){ empiler({vue:id}); vueCourante=id; }
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
   document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
   try{ majBandeauMarque(); }catch(e){}
@@ -1071,13 +1099,20 @@ function toast(msg){
 
 /* ---------- modal ---------- */
 function openModal(html){
+  // une modale deja ouverte ne rempile pas : on remplace juste son contenu
+  const dejaOuverte=modaleOuverte();
   document.getElementById("modalContent").innerHTML=html;
   document.getElementById("modalBg").classList.add("on");
   document.body.style.overflow="hidden";
+  if(!dejaOuverte) empiler({vue:vueCourante,modale:true});
 }
 function closeModal(){
+  const parRetour=retourEnCours;
   document.getElementById("modalBg").classList.remove("on");
   document.body.style.overflow="";
+  // fermeture par la croix : on consomme l'entree empilee a l'ouverture,
+  // sinon un appui sur retour serait perdu a ne rien faire
+  if(!parRetour && history.state && history.state.modale){ try{ history.back(); }catch(e){} }
 }
 
 /* ============================================================
@@ -3101,6 +3136,9 @@ async function submitPassword(){
 }
 function onAuthenticated(){
   authed=true;
+  // premiere entree d'historique : c'est elle qui sert de retour a l'accueil
+  vueCourante="home";
+  try{ history.replaceState({vue:"home"},""); }catch(e){}
   hideLock();
   cloudPull();
   checkChatUnread();
