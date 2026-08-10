@@ -5,7 +5,7 @@
 // - POST {action:"creer", nom, nombre, expiresAt}  : genere un lot de codes
 // - POST {action:"desactiver", lot, off}           : (re)active un lot entier
 // - POST {action:"supprimer", lot}                 : supprime le lot et ses codes
-import { couponStore, makeCode, prettyCode, prettyGift, COUPON_AMOUNT } from "../mbs-coupons.mjs";
+import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT } from "../mbs-coupons.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -79,6 +79,33 @@ export default async (request) => {
   let body;
   try { body = await request.json(); }
   catch (e) { return json({ ok: false, error: "json" }, 400); }
+
+  // ---------- un bon cadeau precis ----------
+  // Deux gestes differents : "annuler" rend le code inutilisable mais garde la
+  // trace de la vente (c'est une vraie recette, elle a une facture) ;
+  // "supprimer" efface tout, pour nettoyer les bons de test.
+  if (body.action === "cadeau-annuler" || body.action === "cadeau-supprimer") {
+    const code = normalizeCode(body.code);
+    if (!code) return json({ ok: false, error: "code" }, 400);
+    let c = null;
+    try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
+    if (!c || c.kind !== "cadeau") return json({ ok: false, error: "introuvable" }, 404);
+
+    if (body.action === "cadeau-annuler") {
+      c.disabled = !!body.off;
+      await store.setJSON("c-" + code, c);
+      return json({ ok: true, disabled: c.disabled });
+    }
+
+    // suppression definitive : le code, le lien avec la session, et l'index
+    try { await store.delete("c-" + code); } catch (e) {}
+    if (c.achatSession) { try { await store.delete("sess-" + c.achatSession); } catch (e) {} }
+    try {
+      const idx = (await store.get("gifts", { type: "json" })) || [];
+      await store.setJSON("gifts", idx.filter(g => g.code !== code));
+    } catch (e) {}
+    return json({ ok: true, supprime: true });
+  }
 
   // ---------- creation d'un lot ----------
   if (body.action === "creer") {
