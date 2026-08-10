@@ -79,14 +79,17 @@ export function discountFor(total, amount = COUPON_AMOUNT, kind = "promo") {
    paye par l'acheteur. Index dedie "gifts" pour le suivi cote CRM. */
 export const GIFT_VALIDITE_MOIS = 18;
 
-/* Les 5 offres achetables en bon cadeau. Le prix vient TOUJOURS d'ici,
-   jamais du navigateur. Doit rester identique a OFFRES_CADEAU de js/bon.js. */
+/* Les offres achetables en bon cadeau : exactement les formules du site,
+   puisque l'acheteur choisit sa formule dans le configurateur avant de
+   cliquer sur "Offrir un bon cadeau". Le prix vient TOUJOURS d'ici, jamais
+   du navigateur. Doit rester identique a OFFRES_CADEAU de js/bon.js. */
 export const GIFT_OFFRES = [
-  { id: "essentielle",  nom: "Essentielle",  prix: 290, duo: false },
-  { id: "confort",      nom: "Confort",      prix: 390, duo: false },
-  { id: "prestige",     nom: "Prestige",     prix: 490, duo: false },
-  { id: "duo-confort",  nom: "Duo Confort",  prix: 690, duo: true  },
-  { id: "duo-prestige", nom: "Duo Prestige", prix: 890, duo: true  }
+  { id: "essentielle",   nom: "Essentielle",   prix: 290, duo: false },
+  { id: "confort",       nom: "Confort",       prix: 390, duo: false },
+  { id: "prestige",      nom: "Prestige",      prix: 490, duo: false },
+  { id: "duo-essentiel", nom: "Duo Essentiel", prix: 590, duo: true  },
+  { id: "duo-confort",   nom: "Duo Confort",   prix: 690, duo: true  },
+  { id: "duo-prestige",  nom: "Duo Prestige",  prix: 890, duo: true  }
 ];
 
 export function offreCadeau(id) {
