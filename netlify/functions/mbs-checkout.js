@@ -119,7 +119,7 @@ export default async (request) => {
   try { body = await request.json(); }
   catch (e) { return json({ ok: false, error: "json" }, 400); }
 
-  const type   = String(body.type || "grossesse");
+  let   type   = String(body.type || "grossesse");
   const date   = String(body.date || "");
   const time   = String(body.time || "");
   const client = body.client || {};
@@ -137,7 +137,7 @@ export default async (request) => {
 
   const store = crmStore();
   const now = Date.now();
-  const totalPlein = total;
+  let totalPlein = total;
 
   // 1) Verrou anti-doublon : on relit, on nettoie les verrous expires, on verifie le creneau.
   const data = await loadData(store);
@@ -171,6 +171,16 @@ export default async (request) => {
       return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
     }
     couponKind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
+
+    // Reservation faite AVEC un bon cadeau seul : la prestation et sa valeur
+    // viennent du bon, jamais du navigateur (la personne ne choisit que sa date).
+    if (couponKind === "cadeau" && body.giftOnly) {
+      const val = Number(chk.coupon.amount);
+      if (Number.isFinite(val) && val > 0) { total = val; totalPlein = val; }
+      const s = chk.coupon.seance;
+      type = (s === "duo" || s === "naissance") ? s : "grossesse";
+    }
+
     remise = discountFor(total, chk.coupon.amount, couponKind);
     if (remise <= 0) {
       await releaseLock();
