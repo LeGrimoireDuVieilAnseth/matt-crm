@@ -28,7 +28,7 @@ export async function nextInvoiceNumber(){
   return "MBS-" + year + "-" + String(s.n).padStart(3, "0");
 }
 
-function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " EUR"; }
+function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " €"; }
 
 // inv : { number, dateStr, client:{name,email}, typeLabel, seanceDateFr, time, acompte, total }
 export async function makeInvoicePdf(inv){
@@ -45,11 +45,11 @@ export async function makeInvoicePdf(inv){
   T(M, 84, ISSUER.nom, 10, font, soft);
   T(M, 98, ISSUER.adresse, 10, font, soft);
   T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
-  T(M, 126, ISSUER.tel + "   " + ISSUER.email, 10, font, soft);
+  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
 
   // Bloc facture (droite)
   T(360, 62, "FACTURE D'ACOMPTE", 15, bold);
-  T(360, 84, "Facture n " + inv.number, 10, font, soft);
+  T(360, 84, "Facture n° " + inv.number, 10, font, soft);
   T(360, 98, "Date : " + inv.dateStr, 10, font, soft);
 
   // separateur
@@ -85,7 +85,71 @@ export async function makeInvoicePdf(inv){
   T(M, yTable + 176, "Solde de " + eur(reste) + " à régler le jour de la séance.", 10, font);
 
   // Pied de page
-  T(M, 800, ISSUER.enseigne + " . " + ISSUER.nom + " . SIRET " + ISSUER.siret + " . " + ISSUER.mentionTva, 8, font, soft);
+  T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);
+
+  const bytes = await pdf.save();
+  return Buffer.from(bytes);
+}
+
+/* Facture d'un bon cadeau : regle en totalite a l'achat, rien a encaisser
+   ensuite. Le beneficiaire n'est pas nomme sur la facture, elle appartient
+   a l'acheteur.
+   inv : { number, dateStr, client:{name,email}, formule, seanceLabel, code, montant } */
+export async function makeGiftInvoicePdf(inv){
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]); // A4
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const H = 842, M = 50;
+  const ink = rgb(0.16, 0.12, 0.07), soft = rgb(0.45, 0.40, 0.33), line = rgb(0.85, 0.80, 0.72);
+  const T = (x, yTop, str, size, f, c) => page.drawText(String(str), { x, y: H - yTop, size, font: f || font, color: c || ink });
+
+  // Emetteur
+  T(M, 62, ISSUER.enseigne, 22, bold);
+  T(M, 84, ISSUER.nom, 10, font, soft);
+  T(M, 98, ISSUER.adresse, 10, font, soft);
+  T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
+  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
+
+  // Bloc facture (droite)
+  T(360, 62, "FACTURE", 15, bold);
+  T(360, 84, "Facture n° " + inv.number, 10, font, soft);
+  T(360, 98, "Date : " + inv.dateStr, 10, font, soft);
+
+  page.drawLine({ start: { x: M, y: H - 150 }, end: { x: 545, y: H - 150 }, thickness: 1, color: line });
+
+  // Client
+  T(M, 182, "Facturé à", 10, bold, soft);
+  T(M, 198, inv.client.name || "Client", 12, bold);
+  if (inv.client.email) T(M, 214, inv.client.email, 10, font, soft);
+
+  // Tableau
+  const yTable = 262;
+  T(M, yTable, "Description", 10, bold, soft);
+  T(430, yTable, "Montant", 10, bold, soft);
+  page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
+
+  T(M, yTable + 30, "Bon cadeau - " + (inv.seanceLabel || "Séance photo"), 11, font);
+  T(M, yTable + 46, "Formule " + (inv.formule || "") + " (studio, La Mulatière)", 9.5, font, soft);
+  T(M, yTable + 62, "Code du bon : " + (inv.code || ""), 9.5, font, soft);
+  T(430, yTable + 30, eur(inv.montant), 11, bold);
+
+  page.drawLine({ start: { x: M, y: H - (yTable + 82) }, end: { x: 545, y: H - (yTable + 82) }, thickness: 0.8, color: line });
+
+  // Total
+  T(300, yTable + 108, "Total réglé", 11, bold);
+  T(430, yTable + 108, eur(inv.montant), 12, bold);
+
+  // Mention TVA
+  T(M, yTable + 146, ISSUER.mentionTva, 9.5, font, soft);
+
+  // Notes
+  T(M, yTable + 176, "Réglé en totalité le " + inv.dateStr + " par carte bancaire.", 10, font);
+  T(M, yTable + 192, "Bon valable 18 mois, à usage unique. La séance sera réservée par son", 10, font);
+  T(M, yTable + 208, "bénéficiaire sur mybabyshoot.fr, sans aucun paiement supplémentaire.", 10, font);
+
+  // Pied de page
+  T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);
@@ -106,10 +170,10 @@ export async function makeFinalInvoicePdf(inv){
   T(M, 84, ISSUER.nom, 10, font, soft);
   T(M, 98, ISSUER.adresse, 10, font, soft);
   T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
-  T(M, 126, ISSUER.tel + "   " + ISSUER.email, 10, font, soft);
+  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
 
   T(360, 62, "FACTURE", 15, bold);
-  T(360, 84, "Facture n " + inv.number, 10, font, soft);
+  T(360, 84, "Facture n° " + inv.number, 10, font, soft);
   T(360, 98, "Date : " + inv.dateStr, 10, font, soft);
 
   page.drawLine({ start: { x: M, y: H - 150 }, end: { x: 545, y: H - 150 }, thickness: 1, color: line });
@@ -138,7 +202,7 @@ export async function makeFinalInvoicePdf(inv){
   T(M, yTable + 158, ISSUER.mentionTva, 9.5, font, soft);
   T(M, yTable + 188, "Prestation réglée intégralement. Merci de votre confiance.", 10, font);
 
-  T(M, 800, ISSUER.enseigne + " . " + ISSUER.nom + " . SIRET " + ISSUER.siret + " . " + ISSUER.mentionTva, 8, font, soft);
+  T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);

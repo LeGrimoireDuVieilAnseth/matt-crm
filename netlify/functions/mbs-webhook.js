@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
-import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
+import { makeInvoicePdf, makeGiftInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 
 const SEANCE_TXT = {
@@ -120,13 +120,29 @@ async function traiterBonCadeau(session, md) {
     client.notes = (client.notes ? client.notes + "\n" : "") + ligne;
   }
 
+  // Facture du bon (PDF) : meme numerotation continue que les autres factures.
+  // Non bloquant : une facture ratee ne doit pas faire perdre la vente.
+  let invNum = null, invPdf = null;
+  try {
+    invNum = await nextInvoiceNumber();
+    invPdf = await makeGiftInvoicePdf({
+      number: invNum,
+      dateStr: new Date(now).toLocaleDateString("fr-FR"),
+      client: { name, email },
+      formule: md.label || "",
+      seanceLabel: SEANCE_TXT[coupon.seance] || "",
+      code: prettyGift(coupon.code),
+      montant
+    });
+  } catch (e) { /* non bloquant */ }
+
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
     label: "Bon cadeau " + prettyGift(coupon.code),
     total: String(montant), acompte: String(montant), statut: "Solde",
     date: new Date(now).toISOString().slice(0, 10), dueDate: "",
-    notes: "Encaissé en ligne via Stripe. " + ligne,
-    stripeSession: session.id
+    notes: "Encaissé en ligne via Stripe. " + ligne + (invNum ? " Facture " + invNum + "." : ""),
+    stripeSession: session.id, invoiceNumber: invNum || ""
   });
 
   data.t = now;
@@ -161,13 +177,22 @@ async function traiterBonCadeau(session, md) {
       "</div>" +
       // Le montant reste hors du bon : celui qui le recoit n'a pas a decouvrir
       // le prix du cadeau, meme si l'email lui est transfere.
-      "<p style=\"font-size:13px;color:#888\">Montant réglé : " + montant + " €. Le prix n'apparaît nulle part sur le bon.</p>" +
+      "<p style=\"font-size:13px;color:#888\">Montant réglé : " + montant + " €"
+      + (invPdf ? ", votre facture est en pièce jointe" : "")
+      + ". Le prix n'apparaît nulle part sur le bon.</p>" +
       "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
       + "choisissez la date et le créneau, puis saisissez le code au moment de la réservation. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
       "<p>Ce bon est à usage unique : gardez le code précieusement.</p>" +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
       "<p>À très vite,<br>Matteo · Mybabyshoot</p>";
-    await sendMail({ to: email, subject: "Votre bon cadeau Mybabyshoot", html });
+    await sendMail({
+      to: email,
+      subject: "Votre bon cadeau Mybabyshoot",
+      html,
+      attachments: invPdf
+        ? [{ filename: "Facture-" + (invNum || "bon-cadeau") + ".pdf", content: invPdf, contentType: "application/pdf" }]
+        : []
+    });
   }
 }
 
