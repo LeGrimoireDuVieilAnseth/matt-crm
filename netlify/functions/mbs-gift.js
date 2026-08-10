@@ -2,6 +2,13 @@
 // Achat d'un bon cadeau Mybabyshoot : l'acheteur paie la totalite tout de suite,
 // le code n'est cree qu'au paiement confirme (dans mbs-webhook).
 import Stripe from "stripe";
+import { offreCadeau } from "../mbs-coupons.mjs";
+
+const SEANCE_LABEL = {
+  grossesse: "Séance grossesse",
+  naissance: "Séance naissance",
+  duo:       "Grossesse et naissance"
+};
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -11,10 +18,6 @@ const cors = {
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
-
-// Montants proposes : les formules du studio, plus un montant libre encadre.
-export const GIFT_MIN = 90;
-export const GIFT_MAX = 1500;
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -27,9 +30,14 @@ export default async (request) => {
   try { body = await request.json(); }
   catch (e) { return json({ ok: false, error: "json" }, 400); }
 
-  const montant = Math.round(Number(body.montant));
-  if (!Number.isFinite(montant) || montant < GIFT_MIN || montant > GIFT_MAX)
-    return json({ ok: false, error: "montant" }, 400);
+  // L'offre fixe le prix cote serveur : le navigateur n'envoie qu'un identifiant.
+  const offre = offreCadeau(body.offre);
+  if (!offre) return json({ ok: false, error: "offre" }, 400);
+  const montant = offre.prix;
+
+  // Un duo couvre les deux seances ; sinon le client choisit grossesse ou naissance.
+  const demande = String(body.seance || "");
+  const seance = offre.duo ? "duo" : (demande === "naissance" ? "naissance" : "grossesse");
 
   const prenom = String(body.prenom || "").trim().slice(0, 60);
   const nom    = String(body.nom || "").trim().slice(0, 60);
@@ -37,7 +45,7 @@ export default async (request) => {
   const tel    = String(body.tel || "").trim().slice(0, 30);
   const pour   = String(body.pour || "").trim().slice(0, 60);      // prenom du beneficiaire
   const mot    = String(body.message || "").trim().slice(0, 200);  // petit mot sur le bon
-  const label  = String(body.label || "").trim().slice(0, 80);     // formule choisie, pour info
+  const label  = offre.nom;
 
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
 
@@ -56,8 +64,8 @@ export default async (request) => {
           currency: "eur",
           unit_amount: montant * 100,
           product_data: {
-            name: "Bon cadeau Mybabyshoot" + (label ? " . " + label : ""),
-            description: "Valable 18 mois sur toutes les seances du studio (La Mulatiere)."
+            name: "Bon cadeau Mybabyshoot . " + label,
+            description: (SEANCE_LABEL[seance] || "") + " . valable 18 mois au studio (La Mulatiere)."
           }
         }
       }],
@@ -65,7 +73,8 @@ export default async (request) => {
       cancel_url: site + "/?cadeau=annule",
       metadata: {
         app: "mbs-gift", montant: String(montant),
-        prenom, nom, email, tel, pour, mot, label
+        offre: offre.id, seance, label,
+        prenom, nom, email, tel, pour, mot
       }
     });
 

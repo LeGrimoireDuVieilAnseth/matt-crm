@@ -988,9 +988,12 @@ async function loadBonsCadeaux(){
         const etat=c.utilise
           ? `<span class="badge neutral">utilisé le ${new Date(c.useAt).toLocaleDateString("fr-FR")}</span>`
           : `<span class="badge ok">valable</span>`;
+        const SEA={grossesse:"grossesse",naissance:"naissance",duo:"grossesse + naissance"};
+        const offre=[c.formule,SEA[c.seance]].filter(Boolean).join(" · ");
         return `<div class="row" style="cursor:default">
           <div class="row-main">
             <div class="t" style="font-family:ui-monospace,monospace">${esc(c.code)} · ${c.montant} € ${etat}</div>
+            ${offre?`<div class="s" style="color:var(--ink-2)">${esc(offre)}</div>`:""}
             <div class="s">${esc(c.acheteur||"acheteur inconnu")}${c.beneficiaire?" → pour "+esc(c.beneficiaire):""} · acheté le ${achat} · expire le ${exp}</div>
           </div>
         </div>`;

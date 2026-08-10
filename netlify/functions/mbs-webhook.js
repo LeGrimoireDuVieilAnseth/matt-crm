@@ -8,7 +8,13 @@ import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
-import { couponStore, consumeCoupon, prettyCode, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
+import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
+
+const SEANCE_TXT = {
+  grossesse: "Seance grossesse",
+  naissance: "Seance naissance",
+  duo:       "Grossesse et naissance"
+};
 
 function frDate(iso){
   const p = String(iso).split("-");
@@ -61,6 +67,8 @@ async function traiterBonCadeau(session, md) {
 
   const coupon = await createGiftCoupon(couponStore(), {
     amount: montant,
+    formule: md.label || "",
+    seance: md.seance || "grossesse",
     acheteur: { nom: name, email, tel },
     beneficiaire: md.pour || "",
     message: md.mot || "",
@@ -74,8 +82,8 @@ async function traiterBonCadeau(session, md) {
     ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
      (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, "")))
   );
-  const ligne = "Bon cadeau " + prettyCode(coupon.code) + " de " + montant + " euros achete le "
-    + new Date(now).toLocaleDateString("fr-FR")
+  const ligne = "Bon cadeau " + prettyGift(coupon.code) + " . " + (md.label || "") + " " + SEANCE_TXT[coupon.seance]
+    + " . " + montant + " euros achete le " + new Date(now).toLocaleDateString("fr-FR")
     + (md.pour ? " pour " + md.pour : "") + ". Valable jusqu'au " + frDateShort(coupon.expiresAt) + ".";
   if (!client) {
     client = {
@@ -90,7 +98,7 @@ async function traiterBonCadeau(session, md) {
 
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
-    label: "Bon cadeau " + prettyCode(coupon.code),
+    label: "Bon cadeau " + prettyGift(coupon.code),
     total: String(montant), acompte: String(montant), statut: "Solde",
     date: new Date(now).toISOString().slice(0, 10), dueDate: "",
     notes: "Encaisse en ligne via Stripe. " + ligne,
@@ -110,22 +118,27 @@ async function traiterBonCadeau(session, md) {
 
   if (email) {
     const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const lien = site + "/bon.html?code=" + coupon.code;
     const html =
       "<p>Bonjour " + prenom + ",</p>" +
       "<p>Merci beaucoup. Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", pret a etre offert.</p>" +
+      "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">Voir et imprimer le bon cadeau</a></p>" +
+      "<p>Ce lien ouvre votre bon en grand : vous pouvez le <b>telecharger en image</b> pour l'imprimer et l'offrir en main propre, ou simplement transmettre le code.</p>" +
       "<div style=\"border:2px solid #5E4430;border-radius:16px;padding:24px;text-align:center;font-family:Georgia,serif;max-width:420px\">" +
         "<div style=\"letter-spacing:3px;font-size:12px;color:#8a7a6a\">MYBABYSHOOT</div>" +
         "<div style=\"font-size:22px;margin:10px 0 4px\">Bon cadeau</div>" +
+        "<div style=\"font-size:18px;font-weight:bold\">" + (md.label || "") + "</div>" +
+        "<div style=\"font-size:14px;color:#8a7a6a;margin-bottom:6px\">" + SEANCE_TXT[coupon.seance] + "</div>" +
         "<div style=\"font-size:34px;font-weight:bold;color:#5E4430\">" + montant + " euros</div>" +
         (md.pour ? "<div style=\"margin-top:8px\">Pour " + md.pour + "</div>" : "") +
         (md.mot ? "<div style=\"margin-top:8px;font-style:italic\">" + md.mot + "</div>" : "") +
         "<div style=\"margin:18px 0 4px;font-size:12px;color:#8a7a6a\">CODE A UTILISER</div>" +
-        "<div style=\"font-size:26px;letter-spacing:4px;font-weight:bold\">" + prettyCode(coupon.code) + "</div>" +
+        "<div style=\"font-size:26px;letter-spacing:4px;font-weight:bold\">" + prettyGift(coupon.code) + "</div>" +
         "<div style=\"margin-top:14px;font-size:12px;color:#8a7a6a\">Valable jusqu'au " + frDateShort(coupon.expiresAt) + "</div>" +
       "</div>" +
       "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
       + "choisissez la formule et le creneau, puis saisissez le code au moment de la reservation. Le montant du bon est deduit automatiquement.</p>" +
-      "<p>Ce bon est a usage unique et nominatif au code : gardez-le precieusement.</p>" +
+      "<p>Ce bon est a usage unique : gardez le code precieusement.</p>" +
       "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
       "<p>A tres vite,<br>Matteo . Mybabyshoot</p>";
     await sendMail({ to: email, subject: "Votre bon cadeau Mybabyshoot", html });

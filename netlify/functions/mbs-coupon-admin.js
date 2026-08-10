@@ -5,7 +5,7 @@
 // - POST {action:"creer", nom, nombre, expiresAt}  : genere un lot de codes
 // - POST {action:"desactiver", lot, off}           : (re)active un lot entier
 // - POST {action:"supprimer", lot}                 : supprime le lot et ses codes
-import { couponStore, makeCode, prettyCode, COUPON_AMOUNT } from "../mbs-coupons.mjs";
+import { couponStore, makeCode, prettyCode, prettyGift, COUPON_AMOUNT } from "../mbs-coupons.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -38,8 +38,9 @@ export default async (request) => {
         let c = null;
         try { c = await store.get("c-" + g.code, { type: "json" }); } catch (e) {}
         cadeaux.push({
-          code: prettyCode(g.code), brut: g.code,
-          montant: g.amount, createdAt: g.createdAt, expiresAt: g.expiresAt,
+          code: prettyGift(g.code), brut: g.code,
+          montant: g.amount, formule: g.formule || "", seance: g.seance || "",
+          createdAt: g.createdAt, expiresAt: g.expiresAt,
           acheteur: g.acheteur || "", email: g.email || "", beneficiaire: g.beneficiaire || "",
           utilise: !!(c && c.usedAt), useAt: (c && c.usedAt) || 0,
           disabled: !!(c && c.disabled)

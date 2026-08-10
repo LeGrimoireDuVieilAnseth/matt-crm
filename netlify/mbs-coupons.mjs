@@ -79,7 +79,28 @@ export function discountFor(total, amount = COUPON_AMOUNT, kind = "promo") {
    paye par l'acheteur. Index dedie "gifts" pour le suivi cote CRM. */
 export const GIFT_VALIDITE_MOIS = 18;
 
-export async function createGiftCoupon(store, { amount, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
+/* Les 5 offres achetables en bon cadeau. Le prix vient TOUJOURS d'ici,
+   jamais du navigateur. Doit rester identique a OFFRES_CADEAU de js/bon.js. */
+export const GIFT_OFFRES = [
+  { id: "essentielle",  nom: "Essentielle",  prix: 290, duo: false },
+  { id: "confort",      nom: "Confort",      prix: 390, duo: false },
+  { id: "prestige",     nom: "Prestige",     prix: 490, duo: false },
+  { id: "duo-confort",  nom: "Duo Confort",  prix: 690, duo: true  },
+  { id: "duo-prestige", nom: "Duo Prestige", prix: 890, duo: true  }
+];
+
+export function offreCadeau(id) {
+  return GIFT_OFFRES.find(o => o.id === String(id || "")) || null;
+}
+
+/* Un bon cadeau s'affiche CADEAU-XXX-XXX (les tirets sont ignores a la saisie). */
+export function prettyGift(code) {
+  const c = String(code || "");
+  if (!c.startsWith("CADEAU") || c.length !== 12) return prettyCode(c);
+  return "CADEAU-" + c.slice(6, 9) + "-" + c.slice(9);
+}
+
+export async function createGiftCoupon(store, { amount, formule, seance, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
   // on retente si le code tire existe deja (probabilite infime, cout nul)
   let code = "";
   for (let i = 0; i < 5; i++) {
@@ -93,6 +114,7 @@ export async function createGiftCoupon(store, { amount, acheteur, beneficiaire, 
   exp.setMonth(exp.getMonth() + GIFT_VALIDITE_MOIS);
   const coupon = {
     code, kind: "cadeau", amount: Number(amount) || 0,
+    formule: formule || "", seance: seance || "grossesse",
     batchId: "", expiresAt: exp.getTime(), createdAt: now,
     usedAt: 0, sessionId: "", reservedUntil: 0, disabled: false,
     acheteur: acheteur || {}, beneficiaire: beneficiaire || "", message: message || "",
@@ -100,10 +122,14 @@ export async function createGiftCoupon(store, { amount, acheteur, beneficiaire, 
   };
   await store.setJSON("c-" + code, coupon);
 
+  // permet a la page de retour de retrouver le code juste apres le paiement
+  if (sessionId) { try { await store.setJSON("sess-" + sessionId, { code }); } catch (e) {} }
+
   try {
     const idx = (await store.get("gifts", { type: "json" })) || [];
     idx.unshift({
-      code, amount: coupon.amount, createdAt: now, expiresAt: coupon.expiresAt,
+      code, amount: coupon.amount, formule: coupon.formule, seance: coupon.seance,
+      createdAt: now, expiresAt: coupon.expiresAt,
       acheteur: (acheteur && acheteur.nom) || "", email: (acheteur && acheteur.email) || "",
       beneficiaire: coupon.beneficiaire
     });
