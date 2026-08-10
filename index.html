@@ -111,6 +111,13 @@
 
   /* ---------- brand filter ---------- */
   .brandbar{display:flex;gap:8px;overflow-x:auto;margin:16px 0 4px;padding-bottom:2px;scrollbar-width:none;}
+  /* rappel de la marque active, sous le titre du bandeau */
+  .topbrand{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-3);margin-top:1px;display:flex;align-items:center;gap:6px;}
+  .topbrand::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ink-4);flex:none;}
+  .topbrand[data-b="mybabyshoot"]::before{background:var(--baby);}
+  .topbrand[data-b="maison-lumiere"]::before{background:var(--lumiere);}
+  .topbrand[data-b="matt-la-photo"]::before{background:var(--matt);}
   .brandbar::-webkit-scrollbar{display:none;}
   .bchip{
     flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
@@ -359,6 +366,7 @@
     </div>
     <div style="flex:1;min-width:0;">
       <h1 id="topTitle">Aujourd'hui</h1>
+      <div class="topbrand" id="topBrand"></div>
     </div>
     <button class="icon-btn" onclick="openReglages()" aria-label="Réglages">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -374,7 +382,7 @@
 
 <!-- ===================== CLIENTS ===================== -->
 <section id="clients" class="view">
-  <div class="brandbar" id="clientBrandTabs" style="margin-top:14px"></div>
+  <div class="brandbar" id="clientsBrandbar" style="margin-top:14px"></div>
   <div class="subtabs" id="mlSubtabs" style="display:none"></div>
   <div class="search">
     <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -393,6 +401,7 @@
 
 <!-- ===================== PAIEMENTS ===================== -->
 <section id="paiements" class="view">
+  <div class="brandbar" id="payBrandbar"></div>
   <div class="stat-grid" id="payStats"></div>
   <div class="pill-row" id="payPills"></div>
   <div class="section-title"><h2>Paiements</h2><span class="count" id="payCount"></span></div>
@@ -406,6 +415,7 @@
 </section>
 
 <section id="demandes" class="view">
+  <div class="brandbar" id="demandesBrandbar"></div>
   <div class="section-title"><h2>Demandes</h2><span class="count" id="demandeCount"></span></div>
   <div id="demandesBody"></div>
 </section>
@@ -519,7 +529,9 @@ const BRANDS = {
   "maison-lumiere":{ name:"Maison Lumière",  short:"Lumière", color:"var(--lumiere)", badge:"lumiere", tag:"Mariage" },
   "matt-la-photo": { name:"Matt la photo",   short:"Matt",    color:"var(--matt)",    badge:"matt",    tag:"Contenu & street" }
 };
-const BRAND_ORDER = ["mybabyshoot","maison-lumiere","matt-la-photo"];
+/* Marques proposees dans les selecteurs. "matt-la-photo" en a ete retiree a la
+   demande de Matt : les fiches qui la portent restent visibles sous "Tout". */
+const BRAND_ORDER = ["mybabyshoot","maison-lumiere"];
 
 const CLIENT_STATUS = ["Prospect","Devis envoye","Confirme","Seance faite","Livre","Archive"];
 const STATUS_STYLE = {
@@ -623,14 +635,20 @@ function paysOfClient(id){ return DB.paiements.filter(p=>p.clientId===id); }
 function brandBadge(b){ const br=BRANDS[b]; return br?`<span class="badge ${br.badge}"><span class="dotm"></span>${br.name}</span>`:""; }
 
 /* ---------- filtre marque global ---------- */
+/* Marque active : une seule pour tout le CRM, retenue d'une session a l'autre.
+   L'agenda est le seul ecran qui l'ignore (Matt veut y voir tout son planning). */
+const MARQUE_STORE="studio_marque";
 let FILTER="all";
+try{ FILTER=localStorage.getItem(MARQUE_STORE)||"all"; }catch(e){}
 function passFilter(b){ return FILTER==="all"||b===FILTER; }
+function nomMarqueActive(){ return FILTER==="all"?"Toutes les marques":(BRANDS[FILTER]||{}).name||FILTER; }
 
 /* ---------- navigation ---------- */
 const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
 function setView(id){
   document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id));
   document.getElementById("topTitle").textContent=TITLES[id]||"Studio";
+  try{ majBandeauMarque(); }catch(e){}
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.view===id));
   if(id!=="chat"){ try{ stopChatPoll(); }catch(e){} }
   const showFab=["home","clients","agenda","paiements","rappels","demandes"].includes(id);
@@ -643,12 +661,22 @@ function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
 function openRappels(){ renderRappels(); setView("rappels"); }
 function openDemandes(){ renderDemandes(); setView("demandes"); }
+/* Une demande = quelqu'un qui attend une reponse de Matt (formulaire de
+   contact, demande de rappel). Une reservation payee, une reservation
+   abandonnee et une vente de bon cadeau ne sont PAS des demandes : elles
+   vivent dans Clients et Paiements. */
+const PAS_DES_DEMANDES=[/^r[ée]servation site/i, /^r[ée]servation abandonn/i, /^bon cadeau/i];
+function estDemande(c){
+  if(!c || !c.fromSite) return false;
+  const src=String(c.source||"");
+  return !PAS_DES_DEMANDES.some(r=>r.test(src));
+}
 function renderDemandes(){
   const box=document.getElementById("demandesBody");
-  const list=DB.clients.filter(c=>c.fromSite && passFilter(c.brand)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const list=DB.clients.filter(c=>estDemande(c) && passFilter(c.brand)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   document.getElementById("demandeCount").textContent=list.length||"";
   if(!list.length){
-    box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><div class="t">Aucune demande</div><div class="s">Les demandes envoyees depuis tes formulaires (site Mybabyshoot, Maison Lumiere) apparaitront ici.</div></div>`;
+    box.innerHTML=`<div class="empty"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><div class="t">Aucune demande</div><div class="s">Les messages et demandes de rappel envoyés depuis tes formulaires apparaîtront ici. Les réservations et les bons cadeaux, eux, vont directement dans Clients et Paiements.</div></div>`;
     return;
   }
   box.innerHTML=list.map(c=>{
@@ -1055,15 +1083,37 @@ function closeModal(){
 /* ============================================================
    FILTRE MARQUE (bande du haut de l'accueil)
    ============================================================ */
+/* La meme barre est dessinee sur toutes les vues qui filtrent par marque,
+   pour qu'on sache toujours dans quelle marque on se trouve. */
+const BARRES_MARQUE=["brandbar","clientsBrandbar","payBrandbar","demandesBrandbar"];
 function buildBrandbar(){
-  const bar=document.getElementById("brandbar");
   let h=`<button class="bchip ${FILTER==="all"?"on":""}" onclick="setFilter('all')"><span class="d"></span>Tout</button>`;
   BRAND_ORDER.forEach(b=>{
     h+=`<button class="bchip ${FILTER===b?"on":""}" data-b="${b}" onclick="setFilter('${b}')"><span class="d"></span>${BRANDS[b].name}</button>`;
   });
-  bar.innerHTML=h;
+  BARRES_MARQUE.forEach(id=>{ const bar=document.getElementById(id); if(bar) bar.innerHTML=h; });
 }
-function setFilter(b){ FILTER=b; buildHome(); }
+/* Rappel de la marque active sous le titre, sauf sur l'agenda qui montre tout. */
+function majBandeauMarque(){
+  const el=document.getElementById("topBrand");
+  if(!el) return;
+  const vueAgenda=!!document.querySelector("#agenda.view.active");
+  if(vueAgenda){ el.textContent="Toutes marques"; el.dataset.b=""; return; }
+  el.textContent=nomMarqueActive();
+  el.dataset.b = FILTER==="all" ? "" : FILTER;
+}
+function setFilter(b){
+  FILTER=b;
+  try{ localStorage.setItem(MARQUE_STORE,b); }catch(e){}
+  clientStatusFilter="all"; mlView="clients";
+  buildBrandbar();
+  majBandeauMarque();
+  // on redessine la vue ouverte, pour que le changement soit immediat
+  if(document.querySelector("#clients.view.active")) renderClients();
+  else if(document.querySelector("#paiements.view.active")) renderPaiements();
+  else if(document.querySelector("#demandes.view.active")) renderDemandes();
+  else buildHome();
+}
 
 /* ============================================================
    ACCUEIL - tableau de bord "Aujourd'hui"
@@ -1072,7 +1122,9 @@ function buildHome(){
   buildBrandbar();
   const body=document.getElementById("homeBody");
   const clients=DB.clients.filter(c=>passFilter(c.brand)&&c.status!=="Archive");
-  const seances=DB.seances.filter(s=>passFilter(s.brand)&&s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo");
+  // Les seances a venir de l'accueil suivent la meme regle que l'agenda :
+  // toutes marques, pour ne jamais rater un mariage en etant sur Mybabyshoot.
+  const seances=DB.seances.filter(s=>s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo");
   const pays=DB.paiements.filter(p=>passFilter(p.brand));
   const taches=DB.taches.filter(t=>!t.done);
 
@@ -1253,7 +1305,8 @@ function taskRow(t){
    CLIENTS
    ============================================================ */
 let clientStatusFilter="all";
-let clientBrand="all";   // categorie de marque propre a la vue Clients
+/* La vue Clients suivait sa propre marque : elle utilise desormais la marque
+   commune (FILTER), pour qu'on ne puisse plus etre sur deux marques a la fois. */
 let contactsBrand="all"; // filtre marque de la carte Contacts & campagnes
 let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
 
@@ -1291,16 +1344,11 @@ function countdown(dateStr){
 
 function renderClients(){
   // onglets de marque (les 3 categories)
-  const tabs=document.getElementById("clientBrandTabs");
-  let th=`<button class="bchip ${clientBrand==="all"?"on":""}" onclick="setClientBrand('all')"><span class="d"></span>Tous</button>`;
-  BRAND_ORDER.forEach(b=>{
-    th+=`<button class="bchip ${clientBrand===b?"on":""}" data-b="${b}" onclick="setClientBrand('${b}')"><span class="d"></span>${BRANDS[b].name}</button>`;
-  });
-  tabs.innerHTML=th;
+  buildBrandbar();
 
   // sous-rubrique Maison Lumiere : Clients / RDV telephonique
   const subWrap=document.getElementById("mlSubtabs");
-  if(clientBrand==="maison-lumiere"){
+  if(FILTER==="maison-lumiere"){
     const nbRdv=DB.seances.filter(s=>s.type==="RDV telephonique").length;
     subWrap.style.display="flex";
     subWrap.innerHTML=`
@@ -1311,7 +1359,7 @@ function renderClients(){
   }
 
   // vue RDV telephonique (rubrique dediee)
-  if(clientBrand==="maison-lumiere" && mlView==="rdv"){
+  if(FILTER==="maison-lumiere" && mlView==="rdv"){
     renderRdvList();
     return;
   }
@@ -1325,10 +1373,10 @@ function renderClients(){
 
   // titre = nom de la categorie active
   const titleEl=document.querySelector("#clients .section-title h2");
-  if(titleEl) titleEl.textContent = clientBrand==="all"?"Clients":("Clients "+BRANDS[clientBrand].name);
+  if(titleEl) titleEl.textContent = FILTER==="all"?"Clients":("Clients "+BRANDS[FILTER].name);
 
   const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
-  let list=DB.clients.filter(c=>clientBrand==="all"||c.brand===clientBrand);
+  let list=DB.clients.filter(c=>FILTER==="all"||c.brand===FILTER);
   if(clientStatusFilter!=="all") list=list.filter(c=>c.status===clientStatusFilter);
   if(q) list=list.filter(c=>{
     const blob=[c.name,c.tel,c.email,c.insta,c.notes,c.type].join(" ").toLowerCase();
@@ -1336,7 +1384,7 @@ function renderClients(){
   });
 
   // tri : mariages tries par date d'evenement, sinon par nom
-  if(clientBrand==="maison-lumiere"){
+  if(FILTER==="maison-lumiere"){
     list.sort((a,b)=>{
       const ea=a.eventDate||"9999", eb=b.eventDate||"9999";
       if(ea!==eb) return ea.localeCompare(eb);
@@ -1485,7 +1533,8 @@ function saveRdv(id){
   if(s){ Object.assign(s,data); } else { data.id=uid(); data.createdAt=Date.now(); DB.seances.push(data); }
   saveDB(); closeModal(); repaintAfterRdv(cid); toast(s?"RDV mis à jour":"RDV ajouté");
 }
-function setClientBrand(b){ clientBrand=b; clientStatusFilter="all"; mlView="clients"; renderClients(); }
+/* conserve pour compatibilite : tout passe desormais par setFilter */
+function setClientBrand(b){ setFilter(b); }
 function setClientStatus(s){ clientStatusFilter=s; renderClients(); }
 function setMlView(v){ mlView=v; renderClients(); }
 
@@ -2111,7 +2160,9 @@ function renderAgenda(){
   const opts=[["upcoming","À venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passées"],["all","Tout"]];
   pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
 
-  let list=DB.seances.filter(s=>passFilter(s.brand)&&s.type!=="Indispo");
+  // L'agenda montre TOUTES les marques : c'est le seul endroit ou Matt veut
+  // voir son planning complet d'un coup d'oeil (les pastilles distinguent).
+  let list=DB.seances.filter(s=>s.type!=="Indispo");
   const t=todayStr();
   if(agendaFilter==="upcoming") list=list.filter(s=>s.date>=t&&s.status!=="Annulee");
   else if(agendaFilter==="today") list=list.filter(s=>s.date===t);
