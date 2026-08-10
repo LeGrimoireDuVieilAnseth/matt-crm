@@ -74,6 +74,9 @@ export default async (request) => {
       metadata: {
         app: "mbs-gift", montant: String(montant),
         offre: offre.id, seance, label,
+        // Le site reellement utilise pour l'achat : c'est lui qui sert bon.html.
+        // Sans ca l'email pointerait vers mybabyshoot.fr, encore chez Wix.
+        site,
         prenom, nom, email, tel, pour, mot
       }
     });

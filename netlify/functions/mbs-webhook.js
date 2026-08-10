@@ -16,6 +16,30 @@ const SEANCE_TXT = {
   duo:       "Grossesse et naissance"
 };
 
+/* Hotes autorises dans les liens envoyes par email. L'origine vient du
+   navigateur de l'acheteur : on ne la suit que si elle est dans cette liste,
+   pour qu'une requete forgee ne puisse pas glisser son propre lien. */
+const SITES_OK = [
+  "mybabyshoot.fr",
+  "www.mybabyshoot.fr",
+  "sparkly-stroopwafel-d583f1.netlify.app"
+];
+
+/* Le site qui sert reellement les pages publiques (bon.html notamment).
+   Ordre : le site utilise pour l'achat, puis la variable Netlify, puis
+   le site en ligne aujourd'hui. A la migration Wix, mybabyshoot.fr prendra
+   le relais tout seul puisque l'achat s'y fera. */
+function siteClient(md) {
+  for (const c of [md && md.site, process.env.MBS_SITE_URL]) {
+    if (!c) continue;
+    try {
+      const u = new URL(String(c));
+      if (SITES_OK.includes(u.host)) return u.origin;
+    } catch (e) { /* valeur inutilisable, on passe a la suivante */ }
+  }
+  return "https://sparkly-stroopwafel-d583f1.netlify.app";
+}
+
 function frDate(iso){
   const p = String(iso).split("-");
   return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
@@ -117,7 +141,7 @@ async function traiterBonCadeau(session, md) {
   } catch (e) {}
 
   if (email) {
-    const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const site = siteClient(md);
     const lien = site + "/bon.html?code=" + coupon.code;
     const html =
       "<p>Bonjour " + prenom + ",</p>" +
@@ -195,7 +219,7 @@ async function traiterAbandon(session, md) {
 
   // email doux au prospect (uniquement s'il a laisse son email)
   if (email) {
-    const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const site = siteClient(md);
     const html =
       "<p>Bonjour " + (prenom || "") + ",</p>" +
       "<p>Vous avez commence a reserver une <b>" + typeLbl.toLowerCase() + "</b> au studio, et la reservation n'est pas allee au bout. Aucun souci : votre creneau a simplement ete libere.</p>" +

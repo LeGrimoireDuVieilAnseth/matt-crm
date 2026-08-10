@@ -246,7 +246,7 @@ export default async (request) => {
       // expiration a 2 h : passe ce delai, Stripe previent et on relance le prospect
       expires_at: Math.floor(now / 1000) + 2 * 60 * 60,
       metadata: {
-        app: "mybabyshoot", lockId, type, date, time,
+        app: "mybabyshoot", lockId, type, date, time, site,
         acompte: String(acompte), total: String(total),
         coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
         prenom, nom, email, tel
