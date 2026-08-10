@@ -30,6 +30,38 @@ export async function nextInvoiceNumber(){
 
 function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " €"; }
 
+/* ---------- Archivage ----------
+   Les factures etaient generees puis envoyees par email, et perdues ensuite.
+   On garde desormais chaque PDF dans le store "mbs-invoices" (cle pdf-<numero>)
+   avec un index consultable. Non bloquant : un archivage rate ne doit jamais
+   empecher l'envoi de la facture au client. */
+export function invoiceStore(){
+  return getStore({ name: "mbs-invoices", consistency: "strong" });
+}
+
+export async function saveInvoice({ number, kind, pdf, client, montant, dateStr, detail }){
+  if (!number || !pdf) return false;
+  try {
+    const store = invoiceStore();
+    await store.set("pdf-" + number, pdf);
+    const idx = (await store.get("index", { type: "json" })) || [];
+    if (!idx.some(e => e.number === number)) {
+      idx.unshift({
+        number,
+        kind: kind || "acompte",              // acompte | solde | cadeau
+        dateStr: dateStr || new Date().toLocaleDateString("fr-FR"),
+        createdAt: Date.now(),
+        client: (client && client.name) || "",
+        email: (client && client.email) || "",
+        montant: Number(montant) || 0,
+        detail: detail || ""
+      });
+      await store.setJSON("index", idx.slice(0, 2000));
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
 // inv : { number, dateStr, client:{name,email}, typeLabel, seanceDateFr, time, acompte, total }
 export async function makeInvoicePdf(inv){
   const pdf = await PDFDocument.create();

@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
-import { makeInvoicePdf, makeGiftInvoicePdf, nextInvoiceNumber } from "../mbs-invoice.mjs";
+import { makeInvoicePdf, makeGiftInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 
 const SEANCE_TXT = {
@@ -133,6 +133,12 @@ async function traiterBonCadeau(session, md) {
       seanceLabel: SEANCE_TXT[coupon.seance] || "",
       code: prettyGift(coupon.code),
       montant
+    });
+    await saveInvoice({
+      number: invNum, kind: "cadeau", pdf: invPdf,
+      client: { name, email }, montant,
+      dateStr: new Date(now).toLocaleDateString("fr-FR"),
+      detail: "Bon cadeau " + prettyGift(coupon.code) + " · " + (md.label || "")
     });
   } catch (e) { /* non bloquant */ }
 
@@ -402,6 +408,12 @@ export default async (request) => {
       typeLabel: typeLbl,
       seanceDateFr: frDate(date),
       time, acompte, total
+    });
+    await saveInvoice({
+      number: invNum, kind: "acompte", pdf: invPdf,
+      client: { name, email }, montant: acompte,
+      dateStr: new Date(now).toLocaleDateString("fr-FR"),
+      detail: "Acompte " + typeLbl + " du " + frDate(date) + " a " + time
     });
   } catch (e) { /* non bloquant : une facture ratee ne doit pas casser la reservation */ }
 

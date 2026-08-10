@@ -45,6 +45,11 @@ export default async (request) => {
       number, dateStr, client: { name: client.name, email },
       typeLabel, seanceDateFr, total, acompte
     });
+    await saveInvoice({
+      number, kind: "solde", pdf,
+      client: { name: client.name, email }, montant: solde, dateStr,
+      detail: "Solde " + typeLabel + (seanceDateFr ? " du " + seanceDateFr : "")
+    });
     const html =
       "<p>Bonjour " + (client.name || "") + ",</p>" +
       "<p>Merci pour votre confiance. Vous trouverez votre facture (solde réglé) en pièce jointe.</p>" +
