@@ -1105,7 +1105,7 @@ function majBandeauMarque(){
 function setFilter(b){
   FILTER=b;
   try{ localStorage.setItem(MARQUE_STORE,b); }catch(e){}
-  clientStatusFilter="all"; mlView="clients";
+  clientStatusFilter="all"; mlView="clients"; mbsView="clients";
   buildBrandbar();
   majBandeauMarque();
   // on redessine la vue ouverte, pour que le changement soit immediat
@@ -1309,6 +1309,7 @@ let clientStatusFilter="all";
    commune (FILTER), pour qu'on ne puisse plus etre sur deux marques a la fois. */
 let contactsBrand="all"; // filtre marque de la carte Contacts & campagnes
 let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
+let mbsView="clients";   // sous-vue Mybabyshoot : clients | resa | cadeaux
 
 /* libelle de la date d'evenement selon la marque */
 function eventLabel(brand){
@@ -1348,7 +1349,14 @@ function renderClients(){
 
   // sous-rubrique Maison Lumiere : Clients / RDV telephonique
   const subWrap=document.getElementById("mlSubtabs");
-  if(FILTER==="maison-lumiere"){
+  if(FILTER==="mybabyshoot"){
+    const nbResa=DB.seances.filter(x=>x.brand==="mybabyshoot"&&x.type!=="Indispo"&&x.status!=="Annulee"&&x.date>=todayStr()).length;
+    subWrap.style.display="flex";
+    subWrap.innerHTML=`
+      <button class="${mbsView==='clients'?'on':''}" onclick="setMbsView('clients')">Fiches clients</button>
+      <button class="${mbsView==='resa'?'on':''}" onclick="setMbsView('resa')">Réservations${nbResa?" ("+nbResa+")":""}</button>
+      <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>`;
+  } else if(FILTER==="maison-lumiere"){
     const nbRdv=DB.seances.filter(s=>s.type==="RDV telephonique").length;
     subWrap.style.display="flex";
     subWrap.innerHTML=`
@@ -1363,6 +1371,8 @@ function renderClients(){
     renderRdvList();
     return;
   }
+  if(FILTER==="mybabyshoot" && mbsView==="resa"){ renderResaList(); return; }
+  if(FILTER==="mybabyshoot" && mbsView==="cadeaux"){ renderCadeauxList(); return; }
 
   // pills statut
   const pills=document.getElementById("clientStatusPills");
@@ -1435,6 +1445,194 @@ function renderClients(){
 }
 
 /* liste des RDV telephoniques (rubrique Maison Lumiere) */
+/* ============================================================
+   MYBABYSHOOT - RESERVATIONS
+   Tout se gere d'ici : appeler, ecrire, decaler, modifier,
+   supprimer, et bloquer un creneau.
+   ============================================================ */
+function renderResaList(){
+  document.getElementById("clientStatusPills").style.display="none";
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent="Réservations";
+
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  let list=DB.seances.filter(s=>s.brand==="mybabyshoot"&&s.type!=="Indispo");
+  if(q) list=list.filter(s=>{
+    const c=clientById(s.clientId)||{};
+    return [c.name,c.tel,c.email,s.type,s.notes,s.date].join(" ").toLowerCase().includes(q);
+  });
+  list.sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  const t=todayStr();
+  const avenir=list.filter(s=>s.date>=t&&s.status!=="Annulee");
+  const passees=list.filter(s=>s.date<t||s.status==="Annulee").reverse();
+
+  document.getElementById("clientCount").textContent=avenir.length+" à venir";
+
+  const outils=`<div style="display:flex;gap:9px;margin:2px 0 14px">
+      <button class="btn sm ghost" style="flex:1" onclick="openBlockEdit()">Bloquer un créneau</button>
+      <button class="btn sm ghost" style="flex:1" onclick="openBlocksList()">Créneaux bloqués</button>
+    </div>`;
+
+  const box=document.getElementById("clientsList");
+  if(!list.length){
+    box.innerHTML=outils+`<div class="empty">
+      <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>
+      <div class="t">Aucune réservation</div>
+      <div class="s">Les séances réservées depuis le site Mybabyshoot apparaîtront ici.</div>
+    </div>`;
+    return;
+  }
+
+  const ligne=s=>{
+    const c=clientById(s.clientId);
+    const nom=c?c.name:"Sans client";
+    const heure=s.time?s.time.replace(":","h"):"";
+    const quand=`${relDay(s.date)}${heure?" · "+heure:""}`;
+    const tel=c&&c.tel?c.tel.replace(/\s/g,""):"";
+    return `<div class="row" data-b="mybabyshoot" onclick="openSeance('${s.id}')">
+      <div class="avatar" data-b="mybabyshoot">${esc(initials(nom))}</div>
+      <div class="row-main">
+        <div class="t">${esc(nom)}</div>
+        <div class="s">${esc(acc(s.type)||"Séance")} · ${esc(quand)}</div>
+      </div>
+      <div class="row-end" style="gap:6px">
+        <span class="badge ${SEANCE_STYLE[s.status]||"neutral"}">${esc(acc(s.status))}</span>
+        ${tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(tel)}" onclick="event.stopPropagation()">Appeler</a>`:""}
+      </div>
+    </div>`;
+  };
+
+  let h=outils;
+  if(avenir.length){ h+=`<div class="grouplab">À venir</div>`; avenir.forEach(s=>h+=ligne(s)); }
+  if(passees.length){ h+=`<div class="grouplab">Passées et annulées</div>`; passees.forEach(s=>h+=ligne(s)); }
+  box.innerHTML=h;
+}
+
+/* ============================================================
+   MYBABYSHOOT - BONS CADEAUX
+   L'etat des bons vient du serveur ; le telephone de l'acheteur
+   vient de sa fiche dans le CRM (le serveur ne le stocke pas).
+   ============================================================ */
+let cadeauxCache=null;
+function renderCadeauxList(){
+  document.getElementById("clientStatusPills").style.display="none";
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent="Bons cadeaux";
+  const box=document.getElementById("clientsList");
+  if(cadeauxCache) { dessinerCadeaux(cadeauxCache); return; }
+  box.innerHTML=`<div class="empty"><div class="t">Chargement des bons cadeaux...</div></div>`;
+  chargerCadeaux();
+}
+
+async function chargerCadeaux(){
+  const box=document.getElementById("clientsList");
+  if(!CLOUD){
+    box.innerHTML=`<div class="empty"><div class="t">Disponible seulement en ligne</div><div class="s">Les bons cadeaux sont stockés sur le serveur.</div></div>`;
+    return;
+  }
+  try{
+    const r=await fetch(CP_API+"?cadeaux=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    cadeauxCache=(j&&j.cadeaux)||[];
+    dessinerCadeaux(cadeauxCache);
+  }catch(e){
+    box.innerHTML=`<div class="empty"><div class="t">Chargement impossible</div><div class="s">Vérifie ta connexion, puis reviens sur cet onglet.</div></div>`;
+  }
+}
+
+/* Retrouve la fiche CRM de l'acheteur, pour recuperer son telephone. */
+function clientDuBon(b){
+  const mail=String(b.email||"").toLowerCase();
+  if(mail){
+    const c=DB.clients.find(x=>x.brand==="mybabyshoot"&&x.email&&x.email.toLowerCase()===mail);
+    if(c) return c;
+  }
+  const nom=String(b.acheteur||"").toLowerCase();
+  return nom?DB.clients.find(x=>x.brand==="mybabyshoot"&&String(x.name||"").toLowerCase()===nom):null;
+}
+
+const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",duo:"Grossesse + naissance"};
+
+function dessinerCadeaux(list){
+  const box=document.getElementById("clientsList");
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  let l=list.slice();
+  if(q) l=l.filter(b=>{
+    const c=clientDuBon(b)||{};
+    return [b.code,b.acheteur,b.email,b.beneficiaire,b.formule,c.tel].join(" ").toLowerCase().includes(q);
+  });
+
+  const valables=l.filter(b=>!b.utilise&&!b.disabled);
+  const total=l.reduce((s,b)=>s+(Number(b.montant)||0),0);
+  document.getElementById("clientCount").textContent=l.length+" bon(s)";
+
+  if(!l.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/></svg>
+      <div class="t">Aucun bon cadeau</div>
+      <div class="s">Les bons vendus sur le site apparaîtront ici, avec les coordonnées de l'acheteur.</div>
+    </div>`;
+    return;
+  }
+
+  const stats=`<div class="stat-grid" style="margin-bottom:12px">
+      <div class="stat"><div class="lab">Vendus</div><div class="num">${l.length}</div><div class="foot">${euros(total)} encaissés</div></div>
+      <div class="stat"><div class="lab">Encore valables</div><div class="num">${valables.length}</div><div class="foot">${l.length-valables.length} utilisé(s)</div></div>
+    </div>`;
+
+  const ligne=b=>{
+    const c=clientDuBon(b);
+    const tel=c&&c.tel?c.tel.replace(/\s/g,""):"";
+    const etat=b.utilise
+      ? `<span class="badge neutral">utilisé</span>`
+      : (b.disabled?`<span class="badge danger">annulé</span>`:`<span class="badge ok">valable</span>`);
+    const quoi=[b.formule,SEANCE_CADEAU[b.seance]].filter(Boolean).join(" · ");
+    return `<div class="row" data-b="mybabyshoot" onclick="openBonCadeau('${esc(b.brut||b.code)}')">
+      <div class="avatar" data-b="mybabyshoot">${esc(initials(b.acheteur||"?"))}</div>
+      <div class="row-main">
+        <div class="t">${esc(b.acheteur||"Acheteur inconnu")} ${etat}</div>
+        <div class="s" style="font-family:ui-monospace,monospace">${esc(b.code)} · ${b.montant} €${quoi?" · "+esc(quoi):""}</div>
+      </div>
+      <div class="row-end" style="gap:6px">
+        ${tel?`<a class="btn sm" style="padding:6px 10px" href="tel:${esc(tel)}" onclick="event.stopPropagation()">Appeler</a>`:""}
+      </div>
+    </div>`;
+  };
+  box.innerHTML=stats+l.map(ligne).join("");
+}
+
+function openBonCadeau(brut){
+  const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
+  const c=clientDuBon(b);
+  const achat=b.createdAt?new Date(b.createdAt).toLocaleDateString("fr-FR"):"";
+  const exp=b.expiresAt?new Date(b.expiresAt).toLocaleDateString("fr-FR"):"";
+  const etat=b.utilise?("Utilisé"+(b.useAt?" le "+new Date(b.useAt).toLocaleDateString("fr-FR"):"")):(b.disabled?"Annulé":"Valable");
+  let h=`<h2>Bon cadeau</h2>
+    <div class="meta" style="margin:0 0 14px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("mybabyshoot")}<span class="badge ${b.utilise?"neutral":(b.disabled?"danger":"ok")}">${esc(etat)}</span></div>
+    <div class="card">`;
+  h+=kv("Code",`<span style="font-family:ui-monospace,monospace;font-size:16px;font-weight:700">${esc(b.code)}</span>`);
+  h+=kv("Montant",b.montant+" €");
+  if(b.formule) h+=kv("Formule",esc(b.formule));
+  if(b.seance) h+=kv("Séance",esc(SEANCE_CADEAU[b.seance]||b.seance));
+  if(b.beneficiaire) h+=kv("Offert à",esc(b.beneficiaire));
+  h+=kv("Acheté le",esc(achat));
+  h+=kv("Valable jusqu'au",esc(exp));
+  h+=`</div><div class="grouplab" style="margin-top:16px">Acheteur</div><div class="card">`;
+  h+=kv("Nom",esc(b.acheteur||"inconnu"));
+  if(b.email) h+=kv("Email",`<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>`);
+  if(c&&c.tel) h+=kv("Téléphone",`<a href="tel:${esc(c.tel.replace(/\s/g,''))}">${esc(c.tel)}</a>`);
+  else h+=kv("Téléphone",`<span style="color:var(--ink-3)">non renseigné</span>`);
+  h+=`</div>`;
+  h+=`<div style="display:flex;gap:9px;margin-top:14px">
+      ${c&&c.tel?`<a class="btn" style="flex:1" href="tel:${esc(c.tel.replace(/\s/g,''))}">Appeler</a>`:""}
+      ${b.email?`<a class="btn ghost" style="flex:1" href="mailto:${esc(b.email)}">Écrire</a>`:""}
+    </div>`;
+  if(c&&c.tel) h+=`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`;
+  if(c) h+=`<button class="btn ghost wide" style="margin-top:9px" onclick="closeModal();openFiche('${c.id}')">Ouvrir la fiche client</button>`;
+  openModal(h);
+}
+
 function renderRdvList(){
   document.getElementById("clientStatusPills").style.display="none";
   const titleEl=document.querySelector("#clients .section-title h2");
@@ -1537,6 +1735,11 @@ function saveRdv(id){
 function setClientBrand(b){ setFilter(b); }
 function setClientStatus(s){ clientStatusFilter=s; renderClients(); }
 function setMlView(v){ mlView=v; renderClients(); }
+function setMbsView(v){
+  mbsView=v;
+  if(v==="cadeaux") cadeauxCache=null;   // on relit l'etat des bons a chaque visite
+  renderClients();
+}
 
 /* ---------- fiche client (detail) ---------- */
 function openFiche(id){
@@ -2101,7 +2304,8 @@ function openSeance(id){
       ${c?`<button class="btn ghost" style="flex:1" onclick="openClientEdit('${c.id}')">Modifier la fiche client</button>`:""}
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier la séance</button>
     </div>
-    ${c&&c.tel?`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}`;
+    ${c&&c.tel?`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
+    <button class="btn danger wide" style="margin-top:14px" onclick="deleteSeance('${id}')">Supprimer la séance</button>`;
   openModal(h);
 }
 
