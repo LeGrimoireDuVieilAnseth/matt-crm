@@ -15,15 +15,25 @@ function frDate(iso){
   return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
 }
 
-async function sendClientEmail(m){
-  // Envoi "maison" via SMTP de la boite mail de Matt (identifiants dans Netlify).
+/* Envoi SMTP generique (identifiants dans Netlify). Ne fait jamais echouer l'appelant. */
+async function sendMail({ to, subject, html, attachments }) {
   const host = process.env.MBS_SMTP_HOST;
   const user = process.env.MBS_SMTP_USER;
   const pass = process.env.MBS_SMTP_PASS;
   const from = process.env.MBS_FROM_EMAIL || user;
-  if (!host || !user || !pass || !m.email) return; // SMTP non configure : on n'envoie rien
+  if (!host || !user || !pass || !to) return false; // SMTP non configure : on n'envoie rien
   const port = Number(process.env.MBS_SMTP_PORT || 465);
   const secure = process.env.MBS_SMTP_SECURE ? (process.env.MBS_SMTP_SECURE === "true") : (port === 465);
+  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
+  try {
+    const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+    await transport.sendMail({ from, to, bcc, subject, html, attachments: attachments || [] });
+    return true;
+  } catch (e) { return false; }
+}
+
+async function sendClientEmail(m){
+  if (!m.email) return;
   const reste = Math.max(0, Number(m.total) - Number(m.acompte));
   const html =
     "<p>Bonjour " + (m.prenom || "") + ",</p>" +
@@ -38,16 +48,83 @@ async function sendClientEmail(m){
     (m.invPdf ? "<p>Votre facture d'acompte est en piece jointe.</p>" : "") +
     "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
     "<p>Mybabyshoot</p>";
-  const bcc = process.env.MBS_INVOICE_EMAIL || "mybabyshoot.contact@gmail.com";
   const attachments = m.invPdf
     ? [{ filename: "Facture-" + (m.invNum || "acompte") + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
     : [];
-  try {
-    const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-    await transport.sendMail({
-      from, to: m.email, bcc, subject: "Votre reservation est confirmee . Mybabyshoot", html, attachments
+  await sendMail({
+    to: m.email,
+    subject: "Votre reservation est confirmee . Mybabyshoot",
+    html, attachments
+  });
+}
+
+/* Reservation commencee mais jamais payee : on cree un prospect dans le CRM,
+   on previent Matt, et on envoie un email doux avec le lien pour reprendre. */
+async function traiterAbandon(session, md) {
+  const store = crmStore();
+  const data  = await loadData(store);
+  const now   = Date.now();
+
+  // idempotence : une seule relance par session Stripe
+  if ((data.clients || []).some(c => c.abandonSession === session.id)) return;
+
+  const prenom = md.prenom || "";
+  const nom    = md.nom || "";
+  const email  = (md.email || session.customer_email || "").trim();
+  const tel    = md.tel || "";
+  const typeLbl = typeLabelFr(md.type || "grossesse");
+  const nomComplet = [prenom, nom].filter(Boolean).join(" ").trim() || "Prospect";
+  const ligne = "Reservation commencee le " + new Date(now).toLocaleDateString("fr-FR")
+    + " (" + typeLbl + " le " + frDate(md.date) + " a " + md.time + ", " + (md.total || "?") + " euros) mais paiement non finalise.";
+
+  // fiche existante (meme email ou meme telephone) sinon nouveau prospect
+  const dup = (data.clients || []).find(c =>
+    c.brand === BRAND &&
+    ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
+     (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, ""))));
+
+  if (dup) {
+    dup.notes = (dup.notes ? dup.notes + "\n" : "") + ligne;
+    dup.abandonSession = session.id;
+    dup.fromSite = true;
+  } else {
+    data.clients.push({
+      id: uid(), brand: BRAND, name: nomComplet, status: "Prospect",
+      type: typeLbl, tel, email, insta: "",
+      source: "Reservation abandonnee", notes: ligne,
+      fromSite: true, abandonSession: session.id, createdAt: now
     });
-  } catch (e) { /* non bloquant : l'email ne doit jamais faire echouer la reservation */ }
+  }
+  data.t = now;
+  await store.setJSON("data", data);
+
+  try {
+    await notifyAll(
+      "Reservation non finalisee",
+      nomComplet + " . " + typeLbl + " le " + frDate(md.date) + (tel ? " . " + tel : ""),
+      "/"
+    );
+  } catch (e) {}
+
+  // email doux au prospect (uniquement s'il a laisse son email)
+  if (email) {
+    const site = (process.env.MBS_SITE_URL || "https://mybabyshoot.fr").replace(/\/+$/, "");
+    const html =
+      "<p>Bonjour " + (prenom || "") + ",</p>" +
+      "<p>Vous avez commence a reserver une <b>" + typeLbl.toLowerCase() + "</b> au studio, et la reservation n'est pas allee au bout. Aucun souci : votre creneau a simplement ete libere.</p>" +
+      "<p>Si vous souhaitez toujours venir, tout est encore possible :</p>" +
+      "<p><a href=\"" + site + "/#composer\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
+      "<p>Et si vous avez la moindre question (deroulement, tenues, meilleur moment pour la seance), repondez simplement a cet email ou appelez-moi au <b>06 47 76 54 17</b>. Je reponds toujours avec plaisir.</p>" +
+      "<p>A tres vite,<br>Matteo . Mybabyshoot</p>" +
+      "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une reservation a ete commencee avec cette adresse. Si ce n'etait pas vous, ignorez simplement cet email.</p>";
+    try {
+      await sendMail({
+        to: email,
+        subject: "Votre reservation au studio est restee en attente",
+        html
+      });
+    } catch (e) {}
+  }
 }
 
 export default async (request) => {
@@ -68,13 +145,20 @@ export default async (request) => {
     return new Response("signature invalide", { status: 400 });
   }
 
-  if (event.type !== "checkout.session.completed")
+  const estAbandon = event.type === "checkout.session.expired";
+  if (event.type !== "checkout.session.completed" && !estAbandon)
     return new Response(JSON.stringify({ received: true, ignored: event.type }), { status: 200 });
 
   const session = event.data.object;
   const md = session.metadata || {};
   if (md.app !== "mybabyshoot")
     return new Response(JSON.stringify({ received: true, ignored: "other_app" }), { status: 200 });
+
+  // ---------- Reservation abandonnee : on garde le contact, on relance ----------
+  if (estAbandon) {
+    try { await traiterAbandon(session, md); } catch (e) {}
+    return new Response(JSON.stringify({ received: true, abandon: true }), { status: 200 });
+  }
   if (session.payment_status !== "paid")
     return new Response(JSON.stringify({ received: true, unpaid: true }), { status: 200 });
 

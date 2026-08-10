@@ -124,6 +124,8 @@ export default async (request) => {
       }],
       success_url: site + "/?reservation=ok&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/?reservation=annulee",
+      // expiration a 2 h : passe ce delai, Stripe previent et on relance le prospect
+      expires_at: Math.floor(now / 1000) + 2 * 60 * 60,
       metadata: {
         app: "mybabyshoot", lockId, type, date, time,
         acompte: String(acompte), total: String(total),
