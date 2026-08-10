@@ -96,18 +96,20 @@ export function offreCadeau(id) {
   return GIFT_OFFRES.find(o => o.id === String(id || "")) || null;
 }
 
-/* Un bon cadeau s'affiche CADEAU-XXX-XXX (les tirets sont ignores a la saisie). */
+/* Un bon cadeau s'affiche tel quel : 6 caracteres, sans prefixe ni tiret.
+   (Les bons de la toute premiere version commencaient par CADEAU : ils
+   restent valables, on les affiche simplement sans decoupage.) */
 export function prettyGift(code) {
-  const c = String(code || "");
-  if (!c.startsWith("CADEAU") || c.length !== 12) return prettyCode(c);
-  return "CADEAU-" + c.slice(6, 9) + "-" + c.slice(9);
+  return String(code || "");
 }
 
 export async function createGiftCoupon(store, { amount, formule, seance, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
-  // on retente si le code tire existe deja (probabilite infime, cout nul)
+  // 6 caracteres, sans prefixe ni tiret (choix de Matt : plus simple a recopier).
+  // Les codes promo font 8 caracteres : aucune confusion possible entre les deux.
+  // On retente si le code tire existe deja (probabilite infime, cout nul).
   let code = "";
-  for (let i = 0; i < 5; i++) {
-    const essai = "CADEAU" + makeCode(6);
+  for (let i = 0; i < 8; i++) {
+    const essai = makeCode(6);
     const deja = await store.get("c-" + essai, { type: "json" }).catch(() => null);
     if (!deja) { code = essai; break; }
   }

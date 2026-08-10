@@ -10,7 +10,7 @@ import {
 } from "../mbs-lib.mjs";
 import {
   couponStore, checkCoupon, reasonLabel, discountFor,
-  reserveCoupon, releaseCoupon, consumeCoupon, prettyCode
+  reserveCoupon, releaseCoupon, consumeCoupon, prettyGift
 } from "../mbs-coupons.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
@@ -59,7 +59,7 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
     client.status = "Client";
   }
 
-  const detail = "Bon cadeau " + prettyCode(md.coupon) + " (-" + md.remise + " euros, seance " + md.totalPlein + " euros).";
+  const detail = "Bon cadeau " + prettyGift(md.coupon) + " (-" + md.remise + " euros, seance " + md.totalPlein + " euros).";
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date: md.date, time: md.time, place: PLACE, status: "A venir",
@@ -99,8 +99,8 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
       "<li><b>Seance :</b> " + typeLbl + "</li>" +
       "<li><b>Date :</b> " + frDate(md.date) + " a " + md.time + "</li>" +
       "<li><b>Lieu :</b> " + PLACE + "</li>" +
-      "<li><b>Reglement :</b> integralement couvert par votre bon cadeau " + prettyCode(md.coupon) + "</li>" +
-      "<li><b>A regler le jour de la seance :</b> rien</li>" +
+      // Reglee par un bon cadeau : on ne parle ni de reglement ni de solde,
+      // la personne n'a rien a payer et n'a pas a revoir le code ici.
       "</ul>" +
       "<p>Une question ? Repondez a cet email ou appelez le 06 47 76 54 17.</p>" +
       "<p>Mybabyshoot . <a href=\"" + site + "\">" + site.replace(/^https?:\/\//, "") + "</a></p>";
