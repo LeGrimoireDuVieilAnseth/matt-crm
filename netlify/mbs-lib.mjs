@@ -86,13 +86,33 @@ export function pruneLocks(data, now = Date.now()){
 }
 
 // Un creneau (date, time) est-il deja pris par une seance confirmee Mybabyshoot ?
+// Duree pendant laquelle une seance occupe le studio. Les creneaux du site
+// sont espaces d'au moins 3h30, donc une seance posee sur l'un d'eux n'en
+// bloquera jamais deux.
+export const DUREE_SEANCE_MIN = 120;
+
+export function minutesDe(t){
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ""));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+// Un creneau est-il deja pris par une seance ?
+// L'heure d'une seance saisie a la main dans le CRM ne tombe pas forcement
+// sur un creneau du site (une reservation reprise d'un ancien agenda, par
+// exemple) : on bloque donc tout creneau qui chevauche la seance, et pas
+// seulement celui qui a exactement la meme heure. Sans heure, c'est la
+// journee entiere qui est prise, comme pour un blocage.
+// Les "Indispo" sont laissees a isBlocked, qui gere aussi les periodes.
 export function isBooked(data, date, time){
-  return data.seances.some(s =>
-    s.brand === BRAND &&
-    s.date === date &&
-    s.time === time &&
-    s.status !== "Annulee"
-  );
+  const debutCreneau = minutesDe(time);
+  return data.seances.some(s => {
+    if (s.brand !== BRAND || s.date !== date) return false;
+    if (s.status === "Annulee" || s.type === "Indispo") return false;
+    const debutSeance = minutesDe(s.time);
+    if (debutSeance === null) return true;
+    if (debutCreneau === null) return false;
+    return Math.abs(debutSeance - debutCreneau) < DUREE_SEANCE_MIN;
+  });
 }
 
 // Un creneau est-il verrouille (paiement en cours) et non expire ?

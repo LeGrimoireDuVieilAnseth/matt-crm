@@ -538,6 +538,17 @@ const STATUS_STYLE = {
   "Prospect":"info","Devis envoye":"warn","Confirme":"ok","Seance faite":"neutral","Livre":"ok","Archive":"neutral"
 };
 const SEANCE_STATUS = ["A venir","Confirmee","Faite","Annulee"];
+/* Creneaux proposes a la reservation sur mybabyshoot.fr. */
+const MBS_SLOTS = ["10:30","14:30","18:00"];
+/* Quels creneaux du site une seance a cette heure va-t-elle occuper ?
+   Meme regle que le serveur (mbs-lib.mjs) : chevauchement de moins de 2 h.
+   Sans heure, la journee entiere est prise. */
+function creneauxBloques(time){
+  const min=t=>{ const m=/^(\d{1,2}):(\d{2})$/.exec(String(t||"")); return m?Number(m[1])*60+Number(m[2]):null; };
+  const t=min(time);
+  if(t===null) return MBS_SLOTS.slice();
+  return MBS_SLOTS.filter(s=>Math.abs(min(s)-t)<120);
+}
 const SEANCE_STYLE = {"A venir":"info","Confirmee":"ok","Faite":"neutral","Annulee":"danger"};
 const PAY_STATUS = ["En attente","Acompte recu","Solde"];
 const PAY_STYLE = {"En attente":"warn","Acompte recu":"info","Solde":"ok"};
@@ -2306,6 +2317,11 @@ function pickBrand(b){
   if(lg) lg.style.display = (b==="maison-lumiere") ? "block" : "none";
   const wl=document.getElementById("wishesLabel");
   if(wl) wl.textContent=inspirationLabel(b);
+  // formulaire seance : la liste des types et l'info creneau dependent aussi
+  // de la marque choisie
+  const stp=document.getElementById("sType");
+  if(stp) fillTypeOptions(stp,b,stp.value);
+  try{ majInfoCreneau(); }catch(e){}
 }
 function fillTypeOptions(sel,brand,current){
   const list=TYPES[brand]||[];
@@ -2433,9 +2449,10 @@ function deleteClient(id){
 /* ============================================================
    SEANCES
    ============================================================ */
-function clientPicker(id,sel,brandForFilter){
+function clientPicker(id,sel,brandForFilter,avecNouveau){
   const list=DB.clients.filter(c=>c.status!=="Archive").sort((a,b)=>a.name.localeCompare(b.name,"fr"));
-  return `<select id="${id}">${sel?"":'<option value="">Sans client...</option>'}${list.map(c=>`<option value="${c.id}" data-b="${c.brand}" ${sel===c.id?"selected":""}>${esc(c.name)} (${BRANDS[c.brand].short})</option>`).join("")}</select>`;
+  const neuf=avecNouveau?'<option value="__new">+ Créer une nouvelle fiche client</option>':"";
+  return `<select id="${id}">${sel?"":'<option value="">Sans client...</option>'}${neuf}${list.map(c=>`<option value="${c.id}" data-b="${c.brand}" ${sel===c.id?"selected":""}>${esc(c.name)} (${BRANDS[c.brand].short})</option>`).join("")}</select>`;
 }
 function openSeanceEdit(id,clientId){
   const s=id?DB.seances.find(x=>x.id===id):null;
@@ -2444,11 +2461,27 @@ function openSeanceEdit(id,clientId){
   editBrandTmp=s?s.brand:(preC?preC.brand:(FILTER!=="all"?FILTER:"mybabyshoot"));
   let h=`<h2>${s?"Modifier la seance":"Nouvelle seance"}</h2>
     <div class="field"><label>Marque</label>${brandSeg(editBrandTmp)}</div>
-    <div class="field"><label>Client</label>${clientPicker("sClient",preClient)}</div>
+    <div class="field"><label>Client</label>${clientPicker("sClient",preClient,null,!s)}</div>
+    <div id="sNewBox" style="display:none">
+      <div class="field"><label>Nom du client *</label><input id="sNewName" placeholder="Ex. Sophie Martin"></div>
+      <div class="field two"><label>Contact</label>
+        <input id="sNewTel" placeholder="Téléphone" inputmode="tel">
+        <input id="sNewEmail" placeholder="Email" inputmode="email">
+      </div>
+      <div class="field"><label>Vient de</label>
+        <select id="sNewSource">${["","Instagram","TikTok","Bouche à oreille","Google","Site web","Ancien client","Salon / événement","Autre"].map(x=>`<option value="${x}">${x||"Source du contact..."}</option>`).join("")}</select>
+      </div>
+    </div>
     <div class="field"><label>Type de séance</label><select id="sType"></select></div>
     <div class="field two"><label>Date & heure</label>
       <input id="sDate" type="date" value="${s?s.date:todayStr()}">
       <input id="sTime" type="time" value="${s?s.time||"":""}">
+    </div>
+    <div id="sSlotWrap" style="display:none;margin:-6px 0 14px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+        ${MBS_SLOTS.map(t=>`<button type="button" class="btn ghost" style="padding:6px 12px;font-size:13px" onclick="setSeanceTime('${t}')">${t.replace(":","h")}</button>`).join("")}
+      </div>
+      <div class="hint" id="sSlotInfo"></div>
     </div>
     <div class="field"><label>Lieu</label><input id="sPlace" value="${s?esc(s.place||""):""}" placeholder="Studio, domicile, extérieur..."></div>
     <div class="field"><label>Statut</label>
@@ -2463,7 +2496,42 @@ function openSeanceEdit(id,clientId){
   document.getElementById("sClient").addEventListener("change",e=>{
     const opt=e.target.selectedOptions[0]; const b=opt?opt.dataset.b:null;
     if(b){ pickBrand(b); }
+    majNouveauClient();
   });
+  document.getElementById("sTime").addEventListener("input",majInfoCreneau);
+  document.getElementById("sTime").addEventListener("change",majInfoCreneau);
+  document.getElementById("sStatus").addEventListener("change",majInfoCreneau);
+  majNouveauClient();
+  majInfoCreneau();
+}
+/* Affiche les champs de la nouvelle fiche quand "Créer une nouvelle fiche"
+   est choisi dans la liste. */
+function majNouveauClient(){
+  const box=document.getElementById("sNewBox"); if(!box) return;
+  const sel=document.getElementById("sClient");
+  box.style.display=(sel&&sel.value==="__new")?"block":"none";
+}
+function setSeanceTime(t){
+  const el=document.getElementById("sTime"); if(!el) return;
+  el.value=t; majInfoCreneau();
+}
+/* Dit noir sur blanc ce que la seance va bloquer sur le site, pour qu'une
+   heure inhabituelle ne laisse pas un creneau ouvert sans qu'on le voie. */
+function majInfoCreneau(){
+  const wrap=document.getElementById("sSlotWrap"); if(!wrap) return;
+  const info=document.getElementById("sSlotInfo");
+  if(editBrandTmp!=="mybabyshoot"){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  const stat=document.getElementById("sStatus");
+  if(stat&&stat.value==="Annulee"){
+    info.textContent="Séance annulée : le créneau reste proposé à la réservation.";
+    return;
+  }
+  const t=document.getElementById("sTime").value;
+  const b=creneauxBloques(t);
+  if(!t){ info.textContent="Sans heure, la journée entière sera bloquée sur le site."; return; }
+  if(!b.length){ info.textContent="Attention : cette heure ne recouvre aucun créneau, le site continuera à proposer 10h30, 14h30 et 18h00 ce jour-là."; return; }
+  info.textContent="Le site ne proposera plus : "+b.map(x=>x.replace(":","h")).join(", ")+".";
 }
 function saveSeance(id){
   const s=id?DB.seances.find(x=>x.id===id):null;
@@ -2475,6 +2543,21 @@ function saveSeance(id){
     notes:document.getElementById("sNotes").value.trim()
   };
   if(!data.date){ toast("Choisis une date"); return; }
+  // "Créer une nouvelle fiche client" : on fabrique la fiche puis on y
+  // rattache la seance, pour n'avoir qu'une saisie a faire.
+  if(data.clientId==="__new"){
+    const nom=(document.getElementById("sNewName").value||"").trim();
+    if(!nom){ toast("Indique le nom du client"); return; }
+    const nc={
+      id:uid(), brand:editBrandTmp, name:nom, status:"Client", type:data.type||"",
+      tel:(document.getElementById("sNewTel").value||"").trim(),
+      email:(document.getElementById("sNewEmail").value||"").trim(),
+      insta:"", source:document.getElementById("sNewSource").value||"",
+      notes:"", createdAt:Date.now()
+    };
+    DB.clients.push(nc);
+    data.clientId=nc.id;
+  }
   if(s){ Object.assign(s,data); saveDB(); closeModal(); openSeance(id); toast("Séance mise à jour"); }
   else { const ns=Object.assign({id:uid()},data); DB.seances.push(ns); saveDB(); closeModal();
     if(data.clientId) openFiche(data.clientId); else openAgenda(); toast("Séance ajoutée"); }
@@ -2841,7 +2924,7 @@ function openBlocksList(){
 }
 function openBlockEdit(id){
   const s=id?DB.seances.find(x=>x.id===id):null;
-  const slots=["","10:30","14:30","18:00"];
+  const slots=[""].concat(MBS_SLOTS);
   let h=`<h2>${s?"Modifier le blocage":"Bloquer une date"}</h2>
     <div class="field"><label>Date (ou début de période)</label><input id="blkDate" type="date" value="${s?s.date:todayStr()}"></div>
     <div class="field"><label>Jusqu'au (optionnel, pour une période / des vacances)</label><input id="blkEnd" type="date" value="${s&&s.dateEnd?s.dateEnd:""}"></div>
