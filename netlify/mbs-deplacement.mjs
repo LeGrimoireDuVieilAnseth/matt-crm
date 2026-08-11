@@ -12,8 +12,10 @@ export const STUDIO = { lat: 45.72309, lon: 4.80384 };  // 16 chemin du Buisset,
 export const RAYON_OFFERT_KM = 20;      // deplacement offert jusqu'a cette distance
 export const PRIX_CARBURANT   = 2;      // euros le litre
 export const CONSO_L_100KM    = 7;      // consommation moyenne du vehicule
+export const PEAGE_PAR_KM     = 0.10;   // peage moyen sur autoroute francaise
+export const CHARGES          = 0.25;   // 25 % de charges (URSSAF) sur le total
 export const FACTEUR_ROUTE    = 1.3;    // vol d'oiseau -> distance reelle par la route
-export const DISTANCE_MAX_KM  = 120;    // au-dela, on invite a appeler plutot qu'a reserver
+export const DISTANCE_MAX_KM  = 200;    // au-dela, on invite a appeler plutot qu'a reserver
 
 const API = "https://api-adresse.data.gouv.fr/search/";
 
@@ -26,13 +28,17 @@ function volDoiseau(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* Carburant de l'aller-retour, pour les kilometres au-dela du rayon offert.
-   Arrondi a l'euro superieur : jamais moins que le cout reel. */
+/* Frais reels de l'aller-retour, pour les kilometres au-dela du rayon offert :
+   carburant + peages, puis 25 % de charges. Arrondi a l'euro superieur.
+   Le peage est une moyenne : impossible de connaitre le trajet exact sans
+   service payant. Se change en haut de ce fichier. */
 export function fraisPour(km) {
   const factures = Math.max(0, km - RAYON_OFFERT_KM);
   if (factures <= 0) return 0;
-  const litres = (factures * 2 * CONSO_L_100KM) / 100;   // aller + retour
-  return Math.ceil(litres * PRIX_CARBURANT);
+  const kmAllerRetour = factures * 2;
+  const carburant = (kmAllerRetour * CONSO_L_100KM / 100) * PRIX_CARBURANT;
+  const peages    = kmAllerRetour * PEAGE_PAR_KM;
+  return Math.ceil((carburant + peages) * (1 + CHARGES));
 }
 
 /* Retrouve une adresse francaise. On privilegie les resultats proches de

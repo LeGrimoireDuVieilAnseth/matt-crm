@@ -31,7 +31,7 @@ export default async (request) => {
     const messages = {
       introuvable: "Adresse introuvable. Essayez avec le code postal, ou juste le nom de la commune.",
       imprecis:    "Adresse trop imprécise. Ajoutez le code postal ou la commune.",
-      trop_loin:   "C'est un peu loin pour une réservation en ligne. Appelez-moi au 06 47 76 54 17, on trouve une solution."
+      trop_loin:   "C'est au-delà de mon rayon de déplacement. Appelez-moi au 06 47 76 54 17, on trouve une solution."
     };
     return json({ ok: true, valide: false, raison: d.raison, message: messages[d.raison] || "Adresse non reconnue." });
   }
@@ -41,7 +41,7 @@ export default async (request) => {
     label: d.label, km: d.km, frais: d.frais, offert: d.offert,
     message: d.offert
       ? "Déplacement offert : vous êtes à " + d.km + " km du studio."
-      : "À " + d.km + " km du studio. Les " + RAYON_OFFERT_KM + " premiers kilomètres sont offerts."
+      : "À " + d.km + " km du studio. Les " + RAYON_OFFERT_KM + " premiers kilomètres sont offerts, le reste couvre l'aller-retour et les péages."
   });
 };
 
