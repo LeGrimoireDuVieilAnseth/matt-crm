@@ -143,6 +143,24 @@
   .stat .num{font-family:"Fraunces";font-size:30px;font-weight:500;line-height:1.05;margin-top:5px;letter-spacing:-.02em;}
   .stat .foot{font-size:12px;color:var(--ink-2);margin-top:4px;}
   .stat .num.euro{font-size:26px;}
+  /* vue Chiffres */
+  .graphbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:12px 8px 4px;box-shadow:var(--shadow);overflow-x:auto;}
+  .graphbox svg{width:100%;min-width:520px;height:auto;display:block;}
+  .graphbox .grille{stroke:var(--line);stroke-width:1;}
+  .graphbox .axe{font-size:10px;fill:var(--ink-3);}
+  .legende{display:flex;gap:14px;flex-wrap:wrap;padding:8px 6px 2px;}
+  .legende span{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:6px;}
+  .legende i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .moisbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--shadow);overflow-x:auto;}
+  .moistab{width:100%;border-collapse:collapse;font-size:13px;min-width:520px;}
+  .moistab th,.moistab td{padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left;}
+  .moistab th{font-size:11px;color:var(--ink-3);font-weight:600;background:var(--surface-2);}
+  .moistab td.n,.moistab th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  .moistab tr:last-child td{border-bottom:0;}
+  .moistab .avenir{color:var(--warn);font-weight:600;}
+  .aide{font-size:12px;color:var(--ink-3);line-height:1.5;margin:10px 2px 0;}
 
   .section-title{
     display:flex;align-items:baseline;justify-content:space-between;
@@ -403,9 +421,25 @@
 <section id="paiements" class="view">
   <div class="brandbar" id="payBrandbar"></div>
   <div class="stat-grid" id="payStats"></div>
+  <button class="btn ghost wide" style="margin-bottom:12px" onclick="openChiffres()">
+    <svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9m4 7V5m4 11v-5m4 5V8"/></svg>Voir les chiffres</button>
   <div class="pill-row" id="payPills"></div>
   <div class="section-title"><h2>Paiements</h2><span class="count" id="payCount"></span></div>
   <div id="payList"></div>
+</section>
+
+<!-- ===================== CHIFFRES ===================== -->
+<section id="chiffres" class="view">
+  <div class="brandbar" id="chiffresBrandbar"></div>
+  <div class="stat-grid" id="chiffresStats"></div>
+  <div class="section-title"><h2>Évolution</h2></div>
+  <div id="chiffresGraph"></div>
+  <div class="section-title"><h2>Mois par mois</h2></div>
+  <div id="chiffresMois"></div>
+  <p class="aide"><b>Valeur vendue</b> : ce que les clients ont commandé ce mois-là, en entier.
+  <b>Rentré en caisse</b> : ce qui arrive vraiment sur le compte ce mois-là.<br>
+  Une séance à 390 € réservée en août compte 390 € de valeur vendue en août, mais seulement
+  90 € d'acompte encaissé. Les 300 € restants sont posés sur le mois de la séance.</p>
 </section>
 
 <!-- ===================== RAPPELS ===================== -->
@@ -655,7 +689,7 @@ function passFilter(b){ return FILTER==="all"||b===FILTER; }
 function nomMarqueActive(){ return FILTER==="all"?"Toutes les marques":(BRANDS[FILTER]||{}).name||FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",chiffres:"Chiffres",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
 /* ============================================================
    BOUTON RETOUR DU TELEPHONE
    Sans entree d'historique, le retour d'Android quittait l'application
@@ -698,6 +732,114 @@ function goHome(){ buildHome(); setView("home"); }
 function openClients(){ renderClients(); setView("clients"); }
 function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
+function openChiffres(){ renderChiffres(); setView("chiffres"); }
+
+/* ============================================================
+   CHIFFRES
+   Deux lectures d'une meme vente : ce qu'elle vaut, et ce qui rentre.
+   Une vente compte le mois ou le client reserve, pour son montant total.
+   Son solde compte le mois de la seance : c'est la qu'il est encaisse.
+   Meme regle que l'export local (dossier "Tableau de bord").
+   ============================================================ */
+function ventesCRM(){
+  const seances=DB.seances.filter(s=>s.type!=="Indispo");
+  return DB.paiements.filter(p=>passFilter(p.brand)).map(p=>{
+    // on rattache le paiement a la seance qu'il regle
+    const siennes=seances.filter(s=>s.clientId&&s.clientId===p.clientId);
+    let se=(p.dueDate?siennes.find(s=>s.date===p.dueDate):null)||null;
+    if(!se&&siennes.length){
+      const ref=parseDate(p.dueDate||p.date||"")||new Date();
+      se=siennes.slice().sort((a,b)=>
+        Math.abs((parseDate(a.date)||ref)-ref)-Math.abs((parseDate(b.date)||ref)-ref))[0];
+    }
+    const total=num(p.total);
+    const encaisse=p.statut==="Solde"?total:num(p.acompte);
+    return { total, encaisse, reste:Math.max(0,total-encaisse),
+      reserveLe:p.date||"", dateSeance:se?se.date:(p.dueDate||"") };
+  });
+}
+function moisCRM(ventes){
+  const m=new Map(), auj=todayStr(), estMois=x=>/^\d{4}-\d{2}$/.test(x);
+  const L=k=>{ if(!m.has(k)) m.set(k,{mois:k,nb:0,vendu:0,acomptes:0,soldes:0,aVenir:0}); return m.get(k); };
+  ventes.forEach(v=>{
+    const mr=(v.reserveLe||"").slice(0,7);
+    if(estMois(mr)){ const l=L(mr); l.nb++; l.vendu+=v.total; l.acomptes+=v.encaisse; }
+    const ms=(v.dateSeance||"").slice(0,7);
+    if(v.reste>0&&estMois(ms)){ const l=L(ms); l.soldes+=v.reste; if(v.dateSeance>auj) l.aVenir+=v.reste; }
+  });
+  // un mois sans vente doit apparaitre a zero, sinon la courbe relie deux
+  // mois eloignes et masque le creux entre les deux
+  const cles=[...m.keys()].sort();
+  if(cles.length){
+    let an=Number(cles[0].slice(0,4)), mo=Number(cles[0].slice(5,7));
+    const aF=Number(cles[cles.length-1].slice(0,4)), mF=Number(cles[cles.length-1].slice(5,7));
+    let garde=0;
+    while((an<aF||(an===aF&&mo<=mF))&&garde++<400){ L(an+"-"+String(mo).padStart(2,"0")); if(++mo>12){mo=1;an++;} }
+  }
+  return [...m.values()].map(l=>Object.assign(l,{caisse:l.acomptes+l.soldes}))
+    .sort((a,b)=>a.mois.localeCompare(b.mois));
+}
+function courbeCRM(lignes){
+  if(!lignes.length) return "";
+  const L=760,H=210,mg={g:44,d:10,h:12,b:26};
+  const series=[
+    {n:"Valeur vendue",c:"var(--lumiere)",v:lignes.map(l=>Math.round(l.vendu))},
+    {n:"Rentré en caisse",c:"var(--ok)",v:lignes.map(l=>Math.round(l.caisse))}];
+  const maxi=Math.max(1,...series.flatMap(s=>s.v));
+  const x=i=>mg.g+(lignes.length===1?(L-mg.g-mg.d)/2:i*(L-mg.g-mg.d)/(lignes.length-1));
+  const y=v=>mg.h+(1-v/maxi)*(H-mg.h-mg.b);
+  let g="";
+  for(let k=0;k<=3;k++){
+    const val=maxi*k/3, yy=y(val).toFixed(1);
+    g+=`<line x1="${mg.g}" y1="${yy}" x2="${L-mg.d}" y2="${yy}" class="grille"/>`;
+    g+=`<text x="${mg.g-6}" y="${(y(val)+3.5).toFixed(1)}" class="axe" text-anchor="end">${Math.round(val)}</text>`;
+  }
+  series.forEach(s=>{
+    g+=`<polyline points="${s.v.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ")}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    g+=s.v.map((v,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${s.c}"/>`).join("");
+  });
+  lignes.forEach((l,i)=>{
+    if(lignes.length>10&&i%2) return;
+    g+=`<text x="${x(i).toFixed(1)}" y="${H-9}" class="axe" text-anchor="middle">${MOIS[Number(l.mois.slice(5,7))-1].slice(0,3)} ${l.mois.slice(2,4)}</text>`;
+  });
+  return `<div class="graphbox"><svg viewBox="0 0 ${L} ${H}">${g}</svg>
+    <div class="legende">${series.map(s=>`<span><i style="background:${s.c}"></i>${s.n}</span>`).join("")}</div></div>`;
+}
+function renderChiffres(){
+  const ventes=ventesCRM();
+  const lignes=moisCRM(ventes);
+  const auj=todayStr();
+  const vendu=ventes.reduce((s,v)=>s+v.total,0);
+  const encaisse=ventes.reduce((s,v)=>s+v.encaisse,0);
+  const reste=ventes.reduce((s,v)=>s+v.reste,0);
+  const futures=ventes.filter(v=>v.dateSeance&&v.dateSeance>=auj).length;
+
+  document.getElementById("chiffresStats").innerHTML=`
+    <div class="stat"><div class="lab">Valeur vendue</div><div class="num euro">${euros(vendu)}</div><div class="foot">${ventes.length} vente${ventes.length>1?"s":""}</div></div>
+    <div class="stat"><div class="lab">Déjà encaissé</div><div class="num euro">${euros(encaisse)}</div><div class="foot">reste ${euros(reste)}</div></div>
+    <div class="stat"><div class="lab">Séances à venir</div><div class="num">${futures}</div><div class="foot">${nomMarqueActive()}</div></div>
+    <div class="stat"><div class="lab">Panier moyen</div><div class="num euro">${euros(ventes.length?vendu/ventes.length:0)}</div><div class="foot">par vente</div></div>`;
+
+  // 12 derniers mois presents, pour rester lisible sur telephone
+  document.getElementById("chiffresGraph").innerHTML=
+    lignes.length?courbeCRM(lignes.slice(-12))
+    :`<div class="empty"><div class="t">Pas encore de chiffres</div><div class="s">Les ventes apparaîtront ici dès le premier paiement enregistré.</div></div>`;
+
+  const box=document.getElementById("chiffresMois");
+  if(!lignes.length){ box.innerHTML=""; return; }
+  box.innerHTML=`<div class="moisbox"><table class="moistab">
+    <tr><th>Mois</th><th class="n">Ventes</th><th class="n">Valeur vendue</th><th class="n">Acomptes</th>
+        <th class="n">Soldes</th><th class="n">Rentré en caisse</th><th class="n">dont à venir</th></tr>
+    ${lignes.slice().reverse().map(l=>`<tr>
+      <td>${MOIS[Number(l.mois.slice(5,7))-1]} ${l.mois.slice(0,4)}</td>
+      <td class="n">${l.nb||""}</td>
+      <td class="n"><b>${euros(l.vendu)}</b></td>
+      <td class="n">${euros(l.acomptes)}</td>
+      <td class="n">${euros(l.soldes)}</td>
+      <td class="n"><b>${euros(l.caisse)}</b></td>
+      <td class="n">${l.aVenir?'<span class="avenir">'+euros(l.aVenir)+"</span>":""}</td></tr>`).join("")}
+  </table></div>`;
+}
 function openRappels(){ renderRappels(); setView("rappels"); }
 function openDemandes(){ renderDemandes(); setView("demandes"); }
 /* Une demande = quelqu'un qui attend une reponse de Matt (formulaire de
@@ -1275,7 +1417,7 @@ function closeModal(){
    ============================================================ */
 /* La meme barre est dessinee sur toutes les vues qui filtrent par marque,
    pour qu'on sache toujours dans quelle marque on se trouve. */
-const BARRES_MARQUE=["brandbar","clientsBrandbar","payBrandbar","demandesBrandbar"];
+const BARRES_MARQUE=["brandbar","clientsBrandbar","payBrandbar","demandesBrandbar","chiffresBrandbar"];
 function buildBrandbar(){
   let h=`<button class="bchip ${FILTER==="all"?"on":""}" onclick="setFilter('all')"><span class="d"></span>Tout</button>`;
   BRAND_ORDER.forEach(b=>{
@@ -1302,6 +1444,7 @@ function setFilter(b){
   if(document.querySelector("#clients.view.active")) renderClients();
   else if(document.querySelector("#paiements.view.active")) renderPaiements();
   else if(document.querySelector("#demandes.view.active")) renderDemandes();
+  else if(document.querySelector("#chiffres.view.active")) renderChiffres();
   else buildHome();
 }
 
