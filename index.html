@@ -2559,7 +2559,7 @@ function saveSeance(id){
     data.clientId=nc.id;
   }
   if(s){ Object.assign(s,data); saveDB(); closeModal(); openSeance(id); toast("Séance mise à jour"); }
-  else { const ns=Object.assign({id:uid()},data); DB.seances.push(ns); saveDB(); closeModal();
+  else { const ns=Object.assign({id:uid(),createdAt:Date.now()},data); DB.seances.push(ns); saveDB(); closeModal();
     if(data.clientId) openFiche(data.clientId); else openAgenda(); toast("Séance ajoutée"); }
 }
 function deleteSeance(id){

@@ -379,7 +379,7 @@ export default async (request) => {
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
     label: "Acompte réservation " + typeLbl,
-    total: String(total), acompte: String(acompte), statut: "Acompte",
+    total: String(total), acompte: String(acompte), statut: "Acompte recu",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
     notes: "Réglé en ligne via Stripe."
       + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : ""),
