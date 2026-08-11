@@ -49,8 +49,8 @@ async function sendClientEmail(m){
   if (!m.email) return;
   const reste = Math.max(0, Number(m.total) - Number(m.acompte));
   const html =
-    "<p>Bonjour " + (m.prenom || "") + ",</p>" +
-    "<p>Votre réservation est confirmée. Merci, et à très vite au studio.</p>" +
+    "<p>Bonjour " + (m.prenom || "") + " !</p>" +
+    "<p>La réservation est bien confirmée. Merci pour votre confiance ! Et à très bientôt.</p>" +
     "<ul>" +
     "<li><b>Séance :</b> " + typeLabelFr(m.type) + "</li>" +
     "<li><b>Date :</b> " + frDate(m.date) + " à " + m.time + "</li>" +
@@ -58,9 +58,9 @@ async function sendClientEmail(m){
     "<li><b>Acompte réglé :</b> " + m.acompte + " €</li>" +
     "<li><b>Solde le jour de la séance :</b> " + reste + " €</li>" +
     "</ul>" +
-    (m.invPdf ? "<p>Votre facture d'acompte est en pièce jointe.</p>" : "") +
-    "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
-    "<p>Mybabyshoot</p>";
+    (m.invPdf ? "<p>Votre facture d'acompte est en pièce jointe. Vous recevrez la facture complète après le dernier règlement, en fin de séance.</p>" : "") +
+    "<p>Si vous avez des questions, appelez-moi ou échangeons sur WhatsApp au 06 47 76 54 17.</p>" +
+    "<p>Mybabyshoot · mybabyshoot.fr</p>";
   const attachments = m.invPdf
     ? [{ filename: "Facture-" + (m.invNum || "acompte") + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
     : [];
@@ -166,8 +166,9 @@ async function traiterBonCadeau(session, md) {
     const site = siteClient(md);
     const lien = site + "/bon.html?code=" + coupon.code;
     const html =
-      "<p>Bonjour " + prenom + ",</p>" +
-      "<p>Merci beaucoup. Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", prêt à être offert.</p>" +
+      "<p>Bonjour " + prenom + " !</p>" +
+      "<p>Tout d'abord, merci pour votre confiance !</p>" +
+      "<p>Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", prêt à être offert.</p>" +
       "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">Voir et imprimer le bon cadeau</a></p>" +
       "<p>Ce lien ouvre votre bon en grand : vous pouvez le <b>télécharger en image</b> pour l'imprimer et l'offrir en main propre, ou simplement transmettre le code.</p>" +
       "<div style=\"border:2px solid #5E4430;border-radius:16px;padding:24px;text-align:center;font-family:Georgia,serif;max-width:420px\">" +
@@ -187,10 +188,10 @@ async function traiterBonCadeau(session, md) {
       + (invPdf ? ", votre facture est en pièce jointe" : "")
       + ". Le prix n'apparaît nulle part sur le bon.</p>" +
       "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
-      + "choisissez la date et le créneau, puis saisissez le code au moment de la réservation. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
+      + "puis saisissez le code, choisissez la date et le créneau et réservez. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
       "<p>Ce bon est à usage unique : gardez le code précieusement.</p>" +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
-      "<p>À très vite,<br>Matteo · Mybabyshoot</p>";
+      "<p>À très vite<br>Matteo · Mybabyshoot</p>";
     await sendMail({
       to: email,
       subject: "Votre bon cadeau Mybabyshoot",

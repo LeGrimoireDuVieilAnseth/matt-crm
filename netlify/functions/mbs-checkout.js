@@ -94,8 +94,9 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
   if (email) {
     const site = md.site || "https://mybabyshoot.fr";
     const html =
-      "<p>Bonjour " + (md.prenom || "") + ",</p>" +
-      "<p>Votre réservation est confirmée. Merci, et à très vite au studio.</p>" +
+      "<p>Bonjour " + (md.prenom || "") + " !</p>" +
+      "<p>Tout d'abord, j'espère que ce cadeau vous fait plaisir !</p>" +
+      "<p>Votre réservation est bien confirmée.</p>" +
       "<ul>" +
       "<li><b>Séance :</b> " + typeLbl + "</li>" +
       "<li><b>Date :</b> " + frDate(md.date) + " à " + md.time + "</li>" +
@@ -103,7 +104,8 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
       // Reglee par un bon cadeau : on ne parle ni de reglement ni de solde,
       // la personne n'a rien a payer et n'a pas a revoir le code ici.
       "</ul>" +
-      "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
+      "<p>Au plaisir de vous rencontrer !</p>" +
+      "<p>Si vous avez des questions, appelez-moi ou échangeons sur WhatsApp au 06 47 76 54 17.</p>" +
       "<p>Mybabyshoot · <a href=\"" + site + "\">" + site.replace(/^https?:\/\//, "") + "</a></p>";
     await sendMail({ to: email, subject: "Votre réservation est confirmée · Mybabyshoot", html });
   }
@@ -265,8 +267,10 @@ export default async (request) => {
       }],
       success_url: site + "/?reservation=ok&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/?reservation=annulee",
-      // expiration a 2 h : passe ce delai, Stripe previent et on relance le prospect
-      expires_at: Math.floor(now / 1000) + 2 * 60 * 60,
+      // La relance part quand Stripe declare la session expiree. Matt la veut
+      // le lendemain a la meme heure : Stripe plafonne a 24 h, on prend une
+      // petite marge pour ne pas se faire refuser a la seconde pres.
+      expires_at: Math.floor(now / 1000) + 23 * 60 * 60 + 55 * 60,
       metadata: {
         app: "mybabyshoot", lockId, type, date, time, site,
         lieuExt, fraisDepl: String(fraisDepl),
