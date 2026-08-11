@@ -1238,20 +1238,25 @@ function toast(msg){
 
 /* ---------- modal ---------- */
 function openModal(html){
-  // une modale deja ouverte ne rempile pas : on remplace juste son contenu
-  const dejaOuverte=modaleOuverte();
   document.getElementById("modalContent").innerHTML=html;
   document.getElementById("modalBg").classList.add("on");
   document.body.style.overflow="hidden";
-  if(!dejaOuverte) empiler({vue:vueCourante,modale:true});
+  // Une entree "modale" deja empilee sert aussi pour celle-ci. On se fie a
+  // l'historique et non a la classe CSS : enchainer deux modales (menu "+"
+  // puis formulaire) passe par un instant ou plus rien n'est affiche.
+  if(!(history.state&&history.state.modale)) empiler({vue:vueCourante,modale:true});
 }
 function closeModal(){
-  const parRetour=retourEnCours;
   document.getElementById("modalBg").classList.remove("on");
   document.body.style.overflow="";
-  // fermeture par la croix : on consomme l'entree empilee a l'ouverture,
-  // sinon un appui sur retour serait perdu a ne rien faire
-  if(!parRetour && history.state && history.state.modale){ try{ history.back(); }catch(e){} }
+  if(retourEnCours) return;   // c'est le retour qui ferme : rien a depiler
+  // Une autre modale peut s'ouvrir dans la foulee (menu "+" -> formulaire).
+  // On depile au tour suivant, et seulement si plus rien n'est ouvert :
+  // sinon le popstate differe viendrait refermer le formulaire qui s'ouvre.
+  setTimeout(()=>{
+    if(modaleOuverte()) return;
+    if(history.state&&history.state.modale){ try{ history.back(); }catch(e){} }
+  },0);
 }
 
 /* ============================================================
