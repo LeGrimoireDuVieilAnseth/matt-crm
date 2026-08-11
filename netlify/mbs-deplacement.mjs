@@ -28,14 +28,14 @@ function volDoiseau(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/* Frais reels de l'aller-retour, pour les kilometres au-dela du rayon offert :
-   carburant + peages, puis 25 % de charges. Arrondi a l'euro superieur.
-   Le peage est une moyenne : impossible de connaitre le trajet exact sans
-   service payant. Se change en haut de ce fichier. */
+/* Frais de l'aller-retour : carburant + peages, puis les charges.
+   Le rayon est OFFERT seulement si tout le trajet tient dedans ; au-dela,
+   c'est la totalite du trajet qui est comptee, pas seulement le depassement.
+   Arrondi a l'euro superieur. Le peage est une moyenne au kilometre :
+   le trajet reel peut ne pas en comporter. Se change en haut de ce fichier. */
 export function fraisPour(km) {
-  const factures = Math.max(0, km - RAYON_OFFERT_KM);
-  if (factures <= 0) return 0;
-  const kmAllerRetour = factures * 2;
+  if (km <= RAYON_OFFERT_KM) return 0;
+  const kmAllerRetour = km * 2;
   const carburant = (kmAllerRetour * CONSO_L_100KM / 100) * PRIX_CARBURANT;
   const peages    = kmAllerRetour * PEAGE_PAR_KM;
   return Math.ceil((carburant + peages) * (1 + CHARGES));
@@ -64,16 +64,47 @@ export async function geocoder(adresse) {
   } catch (e) { return null; }
 }
 
+/* Distance reelle par la route, en kilometres, via un service de calcul
+   d'itineraire ouvert. Retourne null si le service ne repond pas : on se
+   rabat alors sur l'estimation a vol d'oiseau, pour ne jamais bloquer une
+   reservation a cause d'un service tiers. */
+const ROUTAGE = "https://router.project-osrm.org/route/v1/driving/";
+
+async function distanceRoutiere(lat, lon) {
+  try {
+    const url = ROUTAGE + STUDIO.lon + "," + STUDIO.lat + ";" + lon + "," + lat + "?overview=false";
+    const ctrl = new AbortController();
+    const stop = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(stop);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.code !== "Ok" || !j.routes || !j.routes[0]) return null;
+    return {
+      km: Math.round(j.routes[0].distance / 1000),
+      minutes: Math.round(j.routes[0].duration / 60)
+    };
+  } catch (e) { return null; }
+}
+
 /* Calcul complet a partir d'une adresse saisie.
-   Retourne { ok, label, km, frais, offert } ou { ok:false, raison }. */
+   Retourne { ok, label, km, minutes, estime, frais, offert } ou { ok:false, raison }. */
 export async function calculerDeplacement(adresse) {
   const lieu = await geocoder(adresse);
   if (!lieu) return { ok: false, raison: "introuvable" };
   if (lieu.score < 0.4) return { ok: false, raison: "imprecis" };
 
-  const km = Math.round(volDoiseau(STUDIO.lat, STUDIO.lon, lieu.lat, lieu.lon) * FACTEUR_ROUTE);
+  const route = await distanceRoutiere(lieu.lat, lieu.lon);
+  const km = route ? route.km
+                   : Math.round(volDoiseau(STUDIO.lat, STUDIO.lon, lieu.lat, lieu.lon) * FACTEUR_ROUTE);
+  const minutes = route ? route.minutes : 0;
+
   if (km > DISTANCE_MAX_KM) return { ok: false, raison: "trop_loin", km, label: lieu.label };
 
   const frais = fraisPour(km);
-  return { ok: true, label: lieu.label, ville: lieu.ville, km, frais, offert: frais === 0 };
+  return {
+    ok: true, label: lieu.label, ville: lieu.ville,
+    km, minutes, estime: !route,
+    frais, offert: frais === 0
+  };
 }

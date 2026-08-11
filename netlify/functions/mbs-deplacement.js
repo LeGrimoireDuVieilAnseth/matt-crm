@@ -38,10 +38,11 @@ export default async (request) => {
 
   return json({
     ok: true, valide: true,
-    label: d.label, km: d.km, frais: d.frais, offert: d.offert,
+    label: d.label, km: d.km, minutes: d.minutes, estime: d.estime,
+    frais: d.frais, offert: d.offert,
     message: d.offert
       ? "Déplacement offert : vous êtes à " + d.km + " km du studio."
-      : "À " + d.km + " km du studio. Les " + RAYON_OFFERT_KM + " premiers kilomètres sont offerts, le reste couvre l'aller-retour et les péages."
+      : "À " + d.km + " km du studio par la route. Ces frais couvrent uniquement le carburant et les péages éventuels de l'aller-retour."
   });
 };
 
