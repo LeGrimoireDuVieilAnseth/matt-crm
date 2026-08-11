@@ -432,6 +432,8 @@
 <section id="chiffres" class="view">
   <div class="brandbar" id="chiffresBrandbar"></div>
   <div class="stat-grid" id="chiffresStats"></div>
+  <div class="section-title"><h2>Ce que rapporte chaque marque</h2><span class="count">à ce jour</span></div>
+  <div id="chiffresMarques"></div>
   <div class="section-title"><h2>Évolution</h2></div>
   <div id="chiffresGraph"></div>
   <div class="section-title"><h2>Mois par mois</h2></div>
@@ -440,6 +442,14 @@
   <b>Rentré en caisse</b> : ce qui arrive vraiment sur le compte ce mois-là.<br>
   Une séance à 390 € réservée en août compte 390 € de valeur vendue en août, mais seulement
   90 € d'acompte encaissé. Les 300 € restants sont posés sur le mois de la séance.</p>
+  <p class="aide"><b>Net</b> : ce qui te reste une fois les charges payées.
+  On retire <span id="aideTaux"></span> % d'URSSAF sur l'argent réellement encaissé (pas de TVA),
+  puis <span id="aidePub"></span> € de Google Ads par mois à partir de <span id="aideDepuis"></span>.
+  La publicité est portée par Mybabyshoot, mais elle pèse aussi sur le total quand tu affiches
+  toutes les marques.<br>
+  Les totaux et les cartes du haut ne comptent que ce qui est déjà engagé : l'argent réellement
+  encaissé, et la publicité jusqu'au mois en cours. Dans le tableau mensuel en revanche, les mois
+  à venir affichent déjà leur budget pub et les soldes attendus : c'est une prévision.</p>
 </section>
 
 <!-- ===================== RAPPELS ===================== -->
@@ -734,6 +744,33 @@ function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
 function openChiffres(){ renderChiffres(); setView("chiffres"); }
 
+/* ------------------------------------------------------------
+   Charges a deduire. Tout se regle ici.
+   ------------------------------------------------------------ */
+const CHARGES_TAUX = 0.24;          // URSSAF, sans TVA
+const PUB_PAR_MOIS = 1000;          // Google Ads
+const PUB_MARQUE   = "mybabyshoot"; // la campagne sert cette marque
+const PUB_DEPUIS   = "2026-08";     // premier mois facture
+
+/* Budget pub d'un mois donne, pour la marque affichee. En "Tout", la
+   depense compte : c'est de l'argent qui sort, quelle que soit la marque
+   a qui on l'attribue. */
+function pubDuMois(mois, marque){
+  if(!mois || mois < PUB_DEPUIS) return 0;
+  return (marque==="all"||marque===PUB_MARQUE) ? PUB_PAR_MOIS : 0;
+}
+/* Pub reellement engagee a ce jour : du premier mois facture au mois en
+   cours inclus. Le budget des mois a venir n'est pas encore depense, le
+   compter dans un total ferait apparaitre une perte qui n'existe pas. */
+function pubEngagee(marque){
+  if(marque!=="all"&&marque!==PUB_MARQUE) return 0;
+  const m=todayStr().slice(0,7);
+  if(m<PUB_DEPUIS) return 0;
+  const mois=(Number(m.slice(0,4))-Number(PUB_DEPUIS.slice(0,4)))*12
+            +(Number(m.slice(5,7))-Number(PUB_DEPUIS.slice(5,7)))+1;
+  return Math.max(0,mois)*PUB_PAR_MOIS;
+}
+
 /* ============================================================
    CHIFFRES
    Deux lectures d'une meme vente : ce qu'elle vaut, et ce qui rentre.
@@ -741,9 +778,10 @@ function openChiffres(){ renderChiffres(); setView("chiffres"); }
    Son solde compte le mois de la seance : c'est la qu'il est encaisse.
    Meme regle que l'export local (dossier "Tableau de bord").
    ============================================================ */
-function ventesCRM(){
+function ventesCRM(marque){
   const seances=DB.seances.filter(s=>s.type!=="Indispo");
-  return DB.paiements.filter(p=>passFilter(p.brand)).map(p=>{
+  const garde = marque ? (b=>b===marque) : passFilter;
+  return DB.paiements.filter(p=>garde(p.brand)).map(p=>{
     // on rattache le paiement a la seance qu'il regle
     const siennes=seances.filter(s=>s.clientId&&s.clientId===p.clientId);
     let se=(p.dueDate?siennes.find(s=>s.date===p.dueDate):null)||null;
@@ -758,7 +796,7 @@ function ventesCRM(){
       reserveLe:p.date||"", dateSeance:se?se.date:(p.dueDate||"") };
   });
 }
-function moisCRM(ventes){
+function moisCRM(ventes,marque){
   const m=new Map(), auj=todayStr(), estMois=x=>/^\d{4}-\d{2}$/.test(x);
   const L=k=>{ if(!m.has(k)) m.set(k,{mois:k,nb:0,vendu:0,acomptes:0,soldes:0,aVenir:0}); return m.get(k); };
   ventes.forEach(v=>{
@@ -776,21 +814,30 @@ function moisCRM(ventes){
     let garde=0;
     while((an<aF||(an===aF&&mo<=mF))&&garde++<400){ L(an+"-"+String(mo).padStart(2,"0")); if(++mo>12){mo=1;an++;} }
   }
-  return [...m.values()].map(l=>Object.assign(l,{caisse:l.acomptes+l.soldes}))
-    .sort((a,b)=>a.mois.localeCompare(b.mois));
+  return [...m.values()].map(l=>{
+    const caisse=l.acomptes+l.soldes;
+    // l'URSSAF se calcule sur ce qui est reellement encaisse
+    const charges=caisse*CHARGES_TAUX;
+    const pub=pubDuMois(l.mois,marque||FILTER);
+    return Object.assign(l,{caisse,charges,pub,net:caisse-charges-pub});
+  }).sort((a,b)=>a.mois.localeCompare(b.mois));
 }
 function courbeCRM(lignes){
   if(!lignes.length) return "";
   const L=760,H=210,mg={g:44,d:10,h:12,b:26};
   const series=[
     {n:"Valeur vendue",c:"var(--lumiere)",v:lignes.map(l=>Math.round(l.vendu))},
-    {n:"Rentré en caisse",c:"var(--ok)",v:lignes.map(l=>Math.round(l.caisse))}];
+    {n:"Rentré en caisse",c:"var(--ok)",v:lignes.map(l=>Math.round(l.caisse))},
+    {n:"Net après charges",c:"var(--baby)",v:lignes.map(l=>Math.round(l.net))}];
+  // le net peut etre negatif (un mois creux avec la pub a payer) : l'axe
+  // doit descendre sous zero, sinon la courbe sort du cadre
   const maxi=Math.max(1,...series.flatMap(s=>s.v));
+  const mini=Math.min(0,...series.flatMap(s=>s.v));
   const x=i=>mg.g+(lignes.length===1?(L-mg.g-mg.d)/2:i*(L-mg.g-mg.d)/(lignes.length-1));
-  const y=v=>mg.h+(1-v/maxi)*(H-mg.h-mg.b);
+  const y=v=>mg.h+(1-(v-mini)/(maxi-mini||1))*(H-mg.h-mg.b);
   let g="";
   for(let k=0;k<=3;k++){
-    const val=maxi*k/3, yy=y(val).toFixed(1);
+    const val=mini+(maxi-mini)*k/3, yy=y(val).toFixed(1);
     g+=`<line x1="${mg.g}" y1="${yy}" x2="${L-mg.d}" y2="${yy}" class="grille"/>`;
     g+=`<text x="${mg.g-6}" y="${(y(val)+3.5).toFixed(1)}" class="axe" text-anchor="end">${Math.round(val)}</text>`;
   }
@@ -805,6 +852,37 @@ function courbeCRM(lignes){
   return `<div class="graphbox"><svg viewBox="0 0 ${L} ${H}">${g}</svg>
     <div class="legende">${series.map(s=>`<span><i style="background:${s.c}"></i>${s.n}</span>`).join("")}</div></div>`;
 }
+/* Total d'une marque sur tout l'historique, charges comprises. */
+function bilanMarque(marque){
+  const v=ventesCRM(marque);
+  const vendu=v.reduce((s,x)=>s+x.total,0);
+  // l'encaisse vient du statut des paiements, pas des dates : c'est ce qui
+  // est vraiment sur le compte aujourd'hui
+  const caisse=v.reduce((s,x)=>s+x.encaisse,0);
+  const charges=caisse*CHARGES_TAUX;
+  const pub=pubEngagee(marque);
+  return { marque, nb:v.length, vendu, caisse, charges, pub, net:caisse-charges-pub };
+}
+function renderMarques(){
+  const box=document.getElementById("chiffresMarques");
+  // volontairement independant du filtre : c'est une comparaison
+  const bilans=BRAND_ORDER.map(bilanMarque);
+  const t={ vendu:0, caisse:0, charges:0, pub:0, net:0 };
+  bilans.forEach(b=>{ t.vendu+=b.vendu; t.caisse+=b.caisse; t.charges+=b.charges; t.pub+=b.pub; t.net+=b.net; });
+  const ligne=(nom,b,gras)=>`<tr>
+    <td>${gras?"<b>"+nom+"</b>":nom}</td>
+    <td class="n">${euros(b.vendu)}</td>
+    <td class="n">${euros(b.caisse)}</td>
+    <td class="n">${b.charges?"-"+euros(b.charges):euros(0)}</td>
+    <td class="n">${b.pub?"-"+euros(b.pub):euros(0)}</td>
+    <td class="n"><b class="${b.net<0?"avenir":""}">${euros(b.net)}</b></td></tr>`;
+  box.innerHTML=`<div class="moisbox"><table class="moistab">
+    <tr><th>Marque</th><th class="n">Valeur vendue</th><th class="n">Encaissé</th>
+        <th class="n">URSSAF</th><th class="n">Publicité</th><th class="n">Net</th></tr>
+    ${bilans.map(b=>ligne(BRANDS[b.marque].name,b,false)).join("")}
+    ${ligne("Total",t,true)}
+  </table></div>`;
+}
 function renderChiffres(){
   const ventes=ventesCRM();
   const lignes=moisCRM(ventes);
@@ -812,13 +890,24 @@ function renderChiffres(){
   const vendu=ventes.reduce((s,v)=>s+v.total,0);
   const encaisse=ventes.reduce((s,v)=>s+v.encaisse,0);
   const reste=ventes.reduce((s,v)=>s+v.reste,0);
+  const charges=encaisse*CHARGES_TAUX;
+  const pub=pubEngagee(FILTER);
+  const net=encaisse-charges-pub;
   const futures=ventes.filter(v=>v.dateSeance&&v.dateSeance>=auj).length;
+
+  const t=document.getElementById("aideTaux"); if(t) t.textContent=Math.round(CHARGES_TAUX*100);
+  const p=document.getElementById("aidePub"); if(p) p.textContent=PUB_PAR_MOIS;
+  const d=document.getElementById("aideDepuis");
+  if(d) d.textContent=MOIS[Number(PUB_DEPUIS.slice(5,7))-1]+" "+PUB_DEPUIS.slice(0,4);
 
   document.getElementById("chiffresStats").innerHTML=`
     <div class="stat"><div class="lab">Valeur vendue</div><div class="num euro">${euros(vendu)}</div><div class="foot">${ventes.length} vente${ventes.length>1?"s":""}</div></div>
     <div class="stat"><div class="lab">Déjà encaissé</div><div class="num euro">${euros(encaisse)}</div><div class="foot">reste ${euros(reste)}</div></div>
-    <div class="stat"><div class="lab">Séances à venir</div><div class="num">${futures}</div><div class="foot">${nomMarqueActive()}</div></div>
+    <div class="stat"><div class="lab">Charges et pub</div><div class="num euro">${euros(charges+pub)}</div><div class="foot">URSSAF ${euros(charges)} · pub ${euros(pub)}</div></div>
+    <div class="stat"><div class="lab">Net après charges</div><div class="num euro">${euros(net)}</div><div class="foot">${nomMarqueActive()}</div></div>
+    <div class="stat"><div class="lab">Séances à venir</div><div class="num">${futures}</div><div class="foot">à honorer</div></div>
     <div class="stat"><div class="lab">Panier moyen</div><div class="num euro">${euros(ventes.length?vendu/ventes.length:0)}</div><div class="foot">par vente</div></div>`;
+  renderMarques();
 
   // 12 derniers mois presents, pour rester lisible sur telephone
   document.getElementById("chiffresGraph").innerHTML=
@@ -828,15 +917,16 @@ function renderChiffres(){
   const box=document.getElementById("chiffresMois");
   if(!lignes.length){ box.innerHTML=""; return; }
   box.innerHTML=`<div class="moisbox"><table class="moistab">
-    <tr><th>Mois</th><th class="n">Ventes</th><th class="n">Valeur vendue</th><th class="n">Acomptes</th>
-        <th class="n">Soldes</th><th class="n">Rentré en caisse</th><th class="n">dont à venir</th></tr>
+    <tr><th>Mois</th><th class="n">Ventes</th><th class="n">Valeur vendue</th><th class="n">Rentré en caisse</th>
+        <th class="n">URSSAF</th><th class="n">Publicité</th><th class="n">Net</th><th class="n">dont à venir</th></tr>
     ${lignes.slice().reverse().map(l=>`<tr>
       <td>${MOIS[Number(l.mois.slice(5,7))-1]} ${l.mois.slice(0,4)}</td>
       <td class="n">${l.nb||""}</td>
       <td class="n"><b>${euros(l.vendu)}</b></td>
-      <td class="n">${euros(l.acomptes)}</td>
-      <td class="n">${euros(l.soldes)}</td>
-      <td class="n"><b>${euros(l.caisse)}</b></td>
+      <td class="n">${euros(l.caisse)}</td>
+      <td class="n">${l.charges?"-"+euros(l.charges):""}</td>
+      <td class="n">${l.pub?"-"+euros(l.pub):""}</td>
+      <td class="n"><b class="${l.net<0?"avenir":""}">${euros(l.net)}</b></td>
       <td class="n">${l.aVenir?'<span class="avenir">'+euros(l.aVenir)+"</span>":""}</td></tr>`).join("")}
   </table></div>`;
 }
