@@ -1075,6 +1075,53 @@ async function supprimerLotCoupons(id){
 }
 
 /* ============================================================
+   HABILLAGE DU SITE (habituel ou Noel)
+   ============================================================ */
+const THEME_API="/.netlify/functions/mbs-theme";
+let themeActif="normal";
+
+function renderTheme(){
+  const e=document.getElementById("themeEtat");
+  if(e){
+    const noel=themeActif==="noel";
+    e.textContent = noel ? "Le site est actuellement aux couleurs de Noël" : "Le site est dans son habillage habituel";
+    e.style.color = noel ? "var(--ok)" : "var(--ink-2)";
+  }
+}
+function themeMsg(t,err){
+  const m=document.getElementById("themeMsg");
+  if(m){ m.textContent=t||""; m.style.color=err?"var(--danger)":"var(--ink-3)"; }
+}
+
+async function chargerTheme(){
+  if(!document.getElementById("themeEtat")||!CLOUD) return;
+  try{
+    const r=await fetch(THEME_API,{cache:"no-store"});
+    const j=await r.json();
+    themeActif=(j&&j.theme)||"normal";
+  }catch(e){ themeActif="normal"; }
+  renderTheme();
+}
+
+async function changerTheme(t){
+  if(!CLOUD){ themeMsg("Disponible seulement en ligne.",true); return; }
+  if(t===themeActif){ themeMsg("C'est déjà l'habillage actif."); return; }
+  if(t==="noel" && !confirm("Passer le site aux couleurs de Noël ?")) return;
+  if(t==="normal" && !confirm("Revenir à l'habillage habituel ?")) return;
+  themeMsg("Changement en cours...");
+  try{
+    const r=await fetch(THEME_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({theme:t})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){
+      themeActif=j.theme; renderTheme();
+      themeMsg("C'est fait. Le site change au prochain chargement des visiteurs.");
+      toast(t==="noel"?"Site en mode Noël":"Habillage habituel rétabli");
+    } else themeMsg("Échec du changement.",true);
+  }catch(e){ themeMsg("Erreur réseau.",true); }
+}
+
+/* ============================================================
    GALERIE DU SITE
    Matt reordonne lui-meme les photos. L'ordre part sur le serveur ;
    le site le relit a chaque chargement, et garde sa liste en dur en
@@ -2888,6 +2935,20 @@ function renderReglages(){
       <div id="cpLots" style="margin-top:14px"></div>
     </div>
 
+    <div class="grouplab">Habillage du site</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+        Transforme <b>mybabyshoot.fr</b> aux couleurs de Noël : sapin, or, guirlande et neige.
+        Le contenu et les prix ne changent pas. Tu peux l'activer fin novembre et le retirer après les fêtes.
+      </div>
+      <div id="themeEtat" style="font-size:13.5px;font-weight:700;margin-bottom:12px"></div>
+      <div style="display:flex;gap:9px">
+        <button class="btn ghost" style="flex:1" onclick="changerTheme('normal')">Habituel</button>
+        <button class="btn" style="flex:1" onclick="changerTheme('noel')">Noël</button>
+      </div>
+      <div id="themeMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:9px"></div>
+    </div>
+
     <div class="grouplab">Galerie du site</div>
     <div class="card" style="padding:16px">
       <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
@@ -2939,7 +3000,7 @@ function renderReglages(){
       Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
     </div>`;
   setSyncMsg("");
-  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} try{ loadBonsCadeaux(); }catch(e){} try{ chargerGalerie(); }catch(e){} }
+  if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} try{ loadBonsCadeaux(); }catch(e){} try{ chargerGalerie(); }catch(e){} try{ chargerTheme(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   renderSecurity();
   renderNotifs();
