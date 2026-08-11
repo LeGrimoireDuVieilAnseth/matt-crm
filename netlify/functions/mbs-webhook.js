@@ -117,6 +117,10 @@ async function traiterBonCadeau(session, md) {
     };
     data.clients.push(client);
   } else {
+    // deja fiche : on garde son statut (il n'a pas reserve, seulement offert)
+    // mais on recupere les coordonnees qui manquaient encore
+    client.tel   = client.tel   || tel;
+    client.email = client.email || email;
     client.notes = (client.notes ? client.notes + "\n" : "") + ligne;
   }
 
