@@ -69,7 +69,7 @@ export default async (request) => {
           }
         }
       }],
-      success_url: site + "/?cadeau=ok&session_id={CHECKOUT_SESSION_ID}",
+      success_url: site + "/?cadeau=ok&valeur=" + montant + "&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/?cadeau=annule",
       metadata: {
         app: "mbs-gift", montant: String(montant),
