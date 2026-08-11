@@ -12,6 +12,7 @@ import {
   couponStore, checkCoupon, reasonLabel, discountFor,
   reserveCoupon, releaseCoupon, consumeCoupon, prettyGift
 } from "../mbs-coupons.mjs";
+import { calculerDeplacement } from "../mbs-deplacement.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 
@@ -206,6 +207,22 @@ export default async (request) => {
   // Garde-fou : l'acompte ne depasse jamais le total a payer.
   const acompte = Math.min(acompteFor(totalPlein), total);
 
+  // Seance en exterieur : les frais sont RECALCULES ici depuis l'adresse.
+  // Le navigateur n'envoie qu'une adresse, jamais un montant. Les frais
+  // s'ajoutent APRES la remise : un code promo ne doit pas manger le carburant.
+  let fraisDepl = 0, lieuExt = "";
+  if (body.exterieur && body.exterieur.adresse) {
+    const d = await calculerDeplacement(String(body.exterieur.adresse).slice(0, 160));
+    if (!d.ok) {
+      await releaseLock();
+      if (couponCode) { try { await releaseCoupon(couponStore(), couponCode); } catch (_) {} }
+      return json({ ok: false, error: "exterieur", message: "Adresse du lieu non reconnue. Reprenez l'adresse dans le formulaire." }, 400);
+    }
+    fraisDepl = d.frais;
+    lieuExt = d.label;
+    total += fraisDepl;
+  }
+
   // Cas bon cadeau couvrant toute la seance : plus rien a payer en ligne.
   // Stripe ne sait pas encaisser 0 euro, on confirme donc la reservation ici.
   if (total <= 0) {
@@ -241,7 +258,8 @@ export default async (request) => {
           unit_amount: acompte * 100,
           product_data: {
             name: label,
-            description: "Séance du " + frDate(date) + " à " + time + " au studio, à La Mulatière."
+            description: "Séance du " + frDate(date) + " à " + time +
+              (lieuExt ? " en extérieur, " + lieuExt + "." : " au studio, à La Mulatière.")
           }
         }
       }],
@@ -251,6 +269,7 @@ export default async (request) => {
       expires_at: Math.floor(now / 1000) + 2 * 60 * 60,
       metadata: {
         app: "mybabyshoot", lockId, type, date, time, site,
+        lieuExt, fraisDepl: String(fraisDepl),
         acompte: String(acompte), total: String(total),
         coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
         prenom, nom, email, tel

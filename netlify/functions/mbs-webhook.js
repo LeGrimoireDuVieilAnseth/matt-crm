@@ -54,7 +54,7 @@ async function sendClientEmail(m){
     "<ul>" +
     "<li><b>Séance :</b> " + typeLabelFr(m.type) + "</li>" +
     "<li><b>Date :</b> " + frDate(m.date) + " à " + m.time + "</li>" +
-    "<li><b>Lieu :</b> " + PLACE + "</li>" +
+    "<li><b>Lieu :</b> " + (m.lieu ? m.lieu + " (séance en extérieur)" : PLACE) + "</li>" +
     "<li><b>Acompte réglé :</b> " + m.acompte + " €</li>" +
     "<li><b>Solde le jour de la séance :</b> " + reste + " €</li>" +
     "</ul>" +
@@ -358,10 +358,14 @@ export default async (request) => {
   }
 
   // Seance (apparait dans l'agenda du CRM).
+  // En exterieur, le lieu est l'adresse du client, pas le studio.
+  const fraisDepl = Number(md.fraisDepl) || 0;
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
-    date, time, place: PLACE, status: "A venir",
+    date, time, place: md.lieuExt || PLACE, status: "A venir",
     notes: "Réservation en ligne. Total séance " + total + " €, acompte " + acompte + " € encaissé."
+      + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
+          + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
       + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " €)." : ""),
     createdAt: now, stripeSession: session.id
   });
@@ -392,7 +396,8 @@ export default async (request) => {
   try {
     await notifyAll(
       "Nouvelle réservation Mybabyshoot",
-      name + " · " + typeLbl + " le " + frDate(date) + " à " + time + " · acompte " + acompte + " €",
+      name + " · " + typeLbl + " le " + frDate(date) + " à " + time + " · acompte " + acompte + " €"
+        + (md.lieuExt ? " · EXTÉRIEUR " + md.lieuExt : ""),
       "/"
     );
   } catch (e) { /* non bloquant */ }
@@ -418,7 +423,7 @@ export default async (request) => {
   } catch (e) { /* non bloquant : une facture ratee ne doit pas casser la reservation */ }
 
   // Email de confirmation au client (+ facture jointe, copie a Matt). Best effort.
-  await sendClientEmail({ prenom, email, type, date, time, acompte, total, invNum, invPdf });
+  await sendClientEmail({ prenom, email, type, date, time, acompte, total, invNum, invPdf, lieu: md.lieuExt || "" });
 
   return new Response(JSON.stringify({ received: true, booked: true }), { status: 200 });
 };
