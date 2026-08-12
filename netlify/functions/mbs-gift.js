@@ -2,7 +2,7 @@
 // Achat d'un bon cadeau Mybabyshoot : l'acheteur paie la totalite tout de suite,
 // le code n'est cree qu'au paiement confirme (dans mbs-webhook).
 import Stripe from "stripe";
-import { offreCadeau } from "../mbs-coupons.mjs";
+import { offreCadeau, styleValide } from "../mbs-coupons.mjs";
 
 const SEANCE_LABEL = {
   grossesse: "Séance photo grossesse",
@@ -45,6 +45,7 @@ export default async (request) => {
   const tel    = String(body.tel || "").trim().slice(0, 30);
   const pour   = String(body.pour || "").trim().slice(0, 60);      // prenom du beneficiaire
   const mot    = String(body.message || "").trim().slice(0, 200);  // petit mot sur le bon
+  const style  = styleValide(body.style);                          // habillage choisi
   const label  = offre.nom;
 
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
@@ -73,7 +74,7 @@ export default async (request) => {
       cancel_url: site + "/?cadeau=annule",
       metadata: {
         app: "mbs-gift", montant: String(montant),
-        offre: offre.id, seance, label,
+        offre: offre.id, seance, label, style,
         // Le site reellement utilise pour l'achat : c'est lui qui sert bon.html.
         // Sans ca l'email pointerait vers mybabyshoot.fr, encore chez Wix.
         site,

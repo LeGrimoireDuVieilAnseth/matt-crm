@@ -93,6 +93,7 @@ async function traiterBonCadeau(session, md) {
     amount: montant,
     formule: md.label || "",
     seance: md.seance || "grossesse",
+    style: md.style || "",
     acheteur: { nom: name, email, tel },
     beneficiaire: md.pour || "",
     message: md.mot || "",

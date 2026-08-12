@@ -103,7 +103,20 @@ export function prettyGift(code) {
   return String(code || "");
 }
 
-export async function createGiftCoupon(store, { amount, formule, seance, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
+/* Habillages proposes a l'achat. Doit rester identique a STYLES dans
+   js/bon.js du site : un style inconnu retomberait sur le premier, et
+   l'acheteuse recevrait un bon qui ne ressemble pas a son choix. */
+export const STYLES_BON = [
+  "creme", "blanc", "blanc-lin", "ivoire", "sable", "rose-poudre", "terracotta",
+  "vert-sauge", "vert-anglais", "kaki", "kaki-clair", "bleu-canard", "bleu-orage",
+  "bleu-nuit", "sombre"
+];
+export function styleValide(id) {
+  const s = String(id || "").trim();
+  return STYLES_BON.includes(s) ? s : STYLES_BON[0];
+}
+
+export async function createGiftCoupon(store, { amount, formule, seance, style, acheteur, beneficiaire, message, sessionId, now = Date.now() }) {
   // 6 caracteres, sans prefixe ni tiret (choix de Matt : plus simple a recopier).
   // Les codes promo font 8 caracteres : aucune confusion possible entre les deux.
   // On retente si le code tire existe deja (probabilite infime, cout nul).
@@ -120,6 +133,7 @@ export async function createGiftCoupon(store, { amount, formule, seance, acheteu
   const coupon = {
     code, kind: "cadeau", amount: Number(amount) || 0,
     formule: formule || "", seance: seance || "grossesse",
+    style: styleValide(style),
     batchId: "", expiresAt: exp.getTime(), createdAt: now,
     usedAt: 0, sessionId: "", reservedUntil: 0, disabled: false,
     acheteur: acheteur || {}, beneficiaire: beneficiaire || "", message: message || "",

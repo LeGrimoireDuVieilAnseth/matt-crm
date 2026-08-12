@@ -38,7 +38,7 @@ LES FORMULES (seance grossesse OU naissance)
 LES PACKS DUO (grossesse + naissance, 2 seances)
 - Duo Essentiel 590 euros : 15 photos retouchees a repartir + galeries naturel offertes.
 - Duo Confort 690 euros : 30 photos retouchees a repartir + galeries naturel offertes. Le plus choisi.
-- Duo Prestige 890 euros : toutes les plus belles photos des 2 seances retouchees sans limite, et l'album photo imprime offert.
+- Duo Prestige 890 euros : toutes les plus belles photos des 2 seances retouchees, sans limite.
 
 OPTIONS ET PAIEMENT
 - Photo retouchee supplementaire : 20 euros. Album photo imprime : 140 euros.

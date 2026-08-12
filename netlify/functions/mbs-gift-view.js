@@ -48,6 +48,7 @@ export default async (request) => {
       code: prettyGift(c.code),
       formule: c.formule || "",
       seance: c.seance || "grossesse",
+      style: c.style || "",
       montant: c.amount || 0,
       pour: c.beneficiaire || "",
       message: c.message || "",
