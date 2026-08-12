@@ -421,8 +421,6 @@
 <section id="paiements" class="view">
   <div class="brandbar" id="payBrandbar"></div>
   <div class="stat-grid" id="payStats"></div>
-  <button class="btn ghost wide" style="margin-bottom:12px" onclick="openChiffres()">
-    <svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9m4 7V5m4 11v-5m4 5V8"/></svg>Voir les chiffres</button>
   <div class="pill-row" id="payPills"></div>
   <div class="section-title"><h2>Paiements</h2><span class="count" id="payCount"></span></div>
   <div id="payList"></div>
@@ -447,8 +445,6 @@
 <!-- ===================== CHIFFRES ===================== -->
 <section id="chiffres" class="view">
   <div class="brandbar" id="chiffresBrandbar"></div>
-  <button class="btn ghost wide" style="margin-bottom:12px" onclick="openVisites()">
-    <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Visites du site</button>
   <div class="stat-grid" id="chiffresStats"></div>
   <div class="section-title"><h2>Ce que rapporte chaque marque</h2><span class="count">à ce jour</span></div>
   <div id="chiffresMarques"></div>
@@ -522,18 +518,17 @@
   <button class="tab" data-view="clients" onclick="openClients()">
     <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/><path d="M16 5.5a3 3 0 0 1 0 5.6"/><path d="M18 20c-.3-1.6-1-3-2-4"/></svg><span>Clients</span>
   </button>
-  <button class="tab" data-view="agenda" onclick="openAgenda()">
-    <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg><span>Agenda</span>
+  <button class="tab" data-view="chiffres" onclick="openChiffres()">
+    <svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9m4 7V5m4 11v-5m4 5V8"/></svg><span>Chiffres</span>
+  </button>
+  <button class="tab" data-view="visites" onclick="openVisites()">
+    <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span>Visites</span>
   </button>
   <button class="tab" data-view="paiements" onclick="openPaiements()">
     <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span>Paiements</span>
   </button>
   <button class="tab" data-view="demandes" onclick="openDemandes()">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><span>Demandes</span>
-  </button>
-  <button class="tab" data-view="chat" onclick="openChatList()">
-    <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg><span>Chat</span>
-    <span class="tab-dot" id="chatDot" style="display:none"></span>
   </button>
 </nav>
 
@@ -1747,6 +1742,12 @@ function buildHome(){
     futurs.slice(0,8).forEach(s=>h+=seanceRow(s));
     if(futurs.length>8) h+=`<button class="btn ghost wide sm" onclick="openAgenda()">Voir tout l'agenda</button>`;
   }
+
+  // le chat du site n'a plus d'onglet en bas : il vit ici, avec sa pastille
+  h+=`<button class="btn ghost wide sm" style="margin-top:12px;position:relative" onclick="openChatList()">
+    <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>Chat du site
+    <span class="tab-dot" id="chatDot" style="display:none;position:absolute;right:14px;top:50%;transform:translateY(-50%)"></span>
+  </button>`;
 
   // rappels chauds
   if(rappelsChauds.length){
@@ -3339,137 +3340,154 @@ function deleteBlock(id){
 /* ============================================================
    REGLAGES + SYNCHRO
    ============================================================ */
+/* Les reglages tenaient sur une seule colonne de 15 blocs : trouver quelque
+   chose demandait de tout faire defiler. Ils sont maintenant groupes, et un
+   seul groupe s'affiche a la fois. Tout est rendu en meme temps, seul
+   l'affichage change : les fonctions d'initialisation retrouvent leurs
+   elements par id comme avant. */
+let regOnglet = "site";
+function setRegOnglet(g){ regOnglet = g; majRegOnglets(); window.scrollTo(0,0); }
+function majRegOnglets(){
+  document.querySelectorAll("#reglagesBody .reg-groupe").forEach(function(d){
+    d.style.display = (d.dataset.g === regOnglet) ? "" : "none";
+  });
+  document.querySelectorAll("#regPills .pill").forEach(function(b){
+    b.classList.toggle("on", b.dataset.g === regOnglet);
+  });
+}
+
 function renderReglages(){
   const nbC=DB.clients.length,nbS=DB.seances.length,nbP=DB.paiements.length,nbT=DB.taches.length;
   const box=document.getElementById("reglagesBody");
   box.innerHTML=`
+    <div class="pill-row" id="regPills"><button class="pill" data-g="site" onclick="setRegOnglet('site')">Site</button><button class="pill" data-g="contacts" onclick="setRegOnglet('contacts')">Contacts</button><button class="pill" data-g="ventes" onclick="setRegOnglet('ventes')">Ventes</button><button class="pill" data-g="app" onclick="setRegOnglet('app')">Application</button></div>
+
+    <div class="reg-groupe" data-g="site">
+  <div class="grouplab">Habillage du site</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          Transforme <b>mybabyshoot.fr</b> aux couleurs de Noël : sapin, or, guirlande et neige.
+          Le contenu et les prix ne changent pas. Tu peux l'activer fin novembre et le retirer après les fêtes.
+        </div>
+        <div id="themeEtat" style="font-size:13.5px;font-weight:700;margin-bottom:12px"></div>
+        <div style="display:flex;gap:9px">
+          <button class="btn ghost" style="flex:1" onclick="changerTheme('normal')">Habituel</button>
+          <button class="btn" style="flex:1" onclick="changerTheme('noel')">Noël</button>
+        </div>
+        <div id="themeMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:9px"></div>
+      </div>
+  <div class="grouplab">Galerie du site</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          L'ordre des photos sur <b>mybabyshoot.fr</b>. Les <b>10 premières</b> s'affichent tout de suite,
+          les autres derrière le bouton « Voir plus de photos ». Utilise les flèches pour déplacer une photo,
+          ou <b>Masquer</b> pour la retirer du site sans la supprimer.
+        </div>
+        <div id="galEtat" style="font-size:12.5px;color:var(--ink-3);margin-bottom:10px"></div>
+        <div id="galListe"></div>
+        <button class="btn wide" style="margin-top:12px" onclick="enregistrerGalerie()">Enregistrer l'ordre</button>
+        <div id="galMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
+      </div>
+  <div class="grouplab">Assistants des sites : corriger leurs réponses</div>
+      <div class="card" style="padding:16px">
+        <div class="seg brands" id="consBrandBar" style="margin-bottom:12px"></div>
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">
+          Écris ici tout ce que l'assistant de <b id="consBrandNom">ce site</b> doit savoir ou corriger. Une consigne par ligne, en français simple.
+          Ces consignes sont <b>prioritaires</b> : elles écrasent ce qu'il croyait savoir. Chaque site a ses propres consignes.<br>
+          Exemples : <i>Le studio est fermé le samedi. / L'album coûte 160 euros, pas 140. / Ne propose jamais de remise.</i>
+        </div>
+        <textarea id="iaConsignes" class="synccode" style="min-height:150px" placeholder="Ex : Les seances naissance se font a partir de 5 jours de vie, jamais avant."></textarea>
+        <div style="display:flex;gap:9px;margin-top:10px;align-items:center">
+          <button class="btn" onclick="saveConsignes()">Enregistrer</button>
+          <span id="iaConsignesMsg" style="font-size:12.5px;color:var(--ink-3)"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="reg-groupe" data-g="contacts">
+  <div class="grouplab">Contacts & campagnes</div>
+      <div class="card" style="padding:16px" id="contactsCard"></div>
+    </div>
+
+    <div class="reg-groupe" data-g="ventes">
+  <div class="grouplab">Chiffre d'affaires</div>
+      <div class="card" style="padding:16px" id="caCard"></div>
+  <div class="grouplab">Codes de réduction (-100 €)</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          Génère des codes <b>uniques et à usage unique</b> pour tes partenaires (box, offres...).
+          Chaque code donne <b>100 € de remise</b> sur le total de la séance. Ton acompte reste le même,
+          c'est le solde du jour J qui baisse. Un code utilisé ne peut plus jamais resservir.
+        </div>
+        <div class="field"><label>Nom du lot</label><input id="cpNom" placeholder="Ex. Box jeunes parents 2026"></div>
+        <div class="field two"><label>Nombre de codes & expiration</label>
+          <input id="cpNb" type="number" min="1" max="500" value="100" inputmode="numeric">
+          <input id="cpExp" type="date">
+        </div>
+        <button class="btn wide" onclick="creerLotCoupons()">Générer les codes</button>
+        <div id="cpMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
+        <div id="cpLots" style="margin-top:14px"></div>
+      </div>
+  <div class="grouplab">Bons cadeaux</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          Vendus directement sur le site : le client paie le montant en entier, reçoit son code par email,
+          et le bénéficiaire l'utilise au moment de réserver. La séance est alors <b>déjà réglée</b>,
+          rien à encaisser le jour J. Validité 18 mois.
+        </div>
+        <div id="cpCadeaux"></div>
+      </div>
+    </div>
+
+    <div class="reg-groupe" data-g="app">
     <div class="stat-grid">
       <div class="stat"><div class="lab">Clients</div><div class="num">${nbC}</div></div>
       <div class="stat"><div class="lab">Séances</div><div class="num">${nbS}</div></div>
       <div class="stat"><div class="lab">Paiements</div><div class="num">${nbP}</div></div>
       <div class="stat"><div class="lab">Rappels</div><div class="num">${nbT}</div></div>
     </div>
-
-    <div class="grouplab">Thème</div>
-    <div class="card" style="padding:16px">
-      <div style="display:flex;gap:10px;flex-wrap:wrap" id="themeRow"></div>
-    </div>
-
-    <div class="grouplab">Chiffre d'affaires</div>
-    <div class="card" style="padding:16px" id="caCard"></div>
-
-    <div class="grouplab">Synchronisation</div>
-    <div class="card" style="padding:16px">
-      <div style="font-weight:600;margin-bottom:6px">${CLOUD?"Synchro auto active":"Mode local"}</div>
-      <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">${CLOUD
-        ?"Tes données sont sauvegardées automatiquement sur ton site. Ouvre la même adresse sur ton téléphone et ton ordi, tout reste à jour."
-        :"Tu as ouvert le fichier en local, donc la synchro auto ne tourne pas. Une fois le site en ligne (Netlify), elle s'active toute seule. En attendant, utilise la sauvegarde manuelle ci-dessous."}</div>
-      ${CLOUD?`<button class="btn ghost sm" style="margin-top:12px" onclick="syncNow()">Rafraichir depuis le cloud</button>`:""}
-      <div id="syncMsg" style="font-size:13px;color:var(--ok);margin-top:10px"></div>
-    </div>
-
-    <div class="grouplab">Contacts & campagnes</div>
-    <div class="card" style="padding:16px" id="contactsCard"></div>
-
-    <div class="grouplab">Assistants des sites : corriger leurs réponses</div>
-    <div class="card" style="padding:16px">
-      <div class="seg brands" id="consBrandBar" style="margin-bottom:12px"></div>
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">
-        Écris ici tout ce que l'assistant de <b id="consBrandNom">ce site</b> doit savoir ou corriger. Une consigne par ligne, en français simple.
-        Ces consignes sont <b>prioritaires</b> : elles écrasent ce qu'il croyait savoir. Chaque site a ses propres consignes.<br>
-        Exemples : <i>Le studio est fermé le samedi. / L'album coûte 160 euros, pas 140. / Ne propose jamais de remise.</i>
+  <div class="grouplab">Thème</div>
+      <div class="card" style="padding:16px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap" id="themeRow"></div>
       </div>
-      <textarea id="iaConsignes" class="synccode" style="min-height:150px" placeholder="Ex : Les seances naissance se font a partir de 5 jours de vie, jamais avant."></textarea>
-      <div style="display:flex;gap:9px;margin-top:10px;align-items:center">
-        <button class="btn" onclick="saveConsignes()">Enregistrer</button>
-        <span id="iaConsignesMsg" style="font-size:12.5px;color:var(--ink-3)"></span>
+  <div class="grouplab">Notifications</div>
+      <div class="card" style="padding:16px" id="notifCard"></div>
+  <div class="grouplab">Sécurité</div>
+      <div class="card" style="padding:16px" id="securityCard"></div>
+  <div class="grouplab">Synchronisation</div>
+      <div class="card" style="padding:16px">
+        <div style="font-weight:600;margin-bottom:6px">${CLOUD?"Synchro auto active":"Mode local"}</div>
+        <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55">${CLOUD
+          ?"Tes données sont sauvegardées automatiquement sur ton site. Ouvre la même adresse sur ton téléphone et ton ordi, tout reste à jour."
+          :"Tu as ouvert le fichier en local, donc la synchro auto ne tourne pas. Une fois le site en ligne (Netlify), elle s'active toute seule. En attendant, utilise la sauvegarde manuelle ci-dessous."}</div>
+        ${CLOUD?`<button class="btn ghost sm" style="margin-top:12px" onclick="syncNow()">Rafraichir depuis le cloud</button>`:""}
+        <div id="syncMsg" style="font-size:13px;color:var(--ok);margin-top:10px"></div>
+      </div>
+  <div class="grouplab">Sauvegarde manuelle</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
+        <textarea id="syncBox" class="synccode" placeholder="Le code de sauvegarde apparait ici..."></textarea>
+        <div style="display:flex;gap:9px;margin-top:10px">
+          <button class="btn ghost sm" style="flex:1" onclick="exportManual()">Copier ma sauvegarde</button>
+          <button class="btn ghost sm" style="flex:1" onclick="importManual()">Importer un code</button>
+        </div>
+        <div id="syncMsg2" style="font-size:13px;color:var(--ink-2);margin-top:9px"></div>
+      </div>
+  <div class="grouplab">Données</div>
+      <div class="card" style="padding:16px">
+        <button class="btn danger sm wide" onclick="wipeAll()">Tout effacer sur cet appareil</button>
+        <div class="hint" style="margin-top:8px">Efface uniquement les données locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
+      </div>
+  <div class="grouplab">A propos</div>
+      <div class="card" style="padding:16px;font-size:13px;color:var(--ink-3);line-height:1.6">
+        Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
       </div>
     </div>
-
-    <div class="grouplab">Codes de réduction (-100 €)</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
-        Génère des codes <b>uniques et à usage unique</b> pour tes partenaires (box, offres...).
-        Chaque code donne <b>100 € de remise</b> sur le total de la séance. Ton acompte reste le même,
-        c'est le solde du jour J qui baisse. Un code utilisé ne peut plus jamais resservir.
-      </div>
-      <div class="field"><label>Nom du lot</label><input id="cpNom" placeholder="Ex. Box jeunes parents 2026"></div>
-      <div class="field two"><label>Nombre de codes & expiration</label>
-        <input id="cpNb" type="number" min="1" max="500" value="100" inputmode="numeric">
-        <input id="cpExp" type="date">
-      </div>
-      <button class="btn wide" onclick="creerLotCoupons()">Générer les codes</button>
-      <div id="cpMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
-      <div id="cpLots" style="margin-top:14px"></div>
-    </div>
-
-    <div class="grouplab">Habillage du site</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
-        Transforme <b>mybabyshoot.fr</b> aux couleurs de Noël : sapin, or, guirlande et neige.
-        Le contenu et les prix ne changent pas. Tu peux l'activer fin novembre et le retirer après les fêtes.
-      </div>
-      <div id="themeEtat" style="font-size:13.5px;font-weight:700;margin-bottom:12px"></div>
-      <div style="display:flex;gap:9px">
-        <button class="btn ghost" style="flex:1" onclick="changerTheme('normal')">Habituel</button>
-        <button class="btn" style="flex:1" onclick="changerTheme('noel')">Noël</button>
-      </div>
-      <div id="themeMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:9px"></div>
-    </div>
-
-    <div class="grouplab">Galerie du site</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
-        L'ordre des photos sur <b>mybabyshoot.fr</b>. Les <b>10 premières</b> s'affichent tout de suite,
-        les autres derrière le bouton « Voir plus de photos ». Utilise les flèches pour déplacer une photo,
-        ou <b>Masquer</b> pour la retirer du site sans la supprimer.
-      </div>
-      <div id="galEtat" style="font-size:12.5px;color:var(--ink-3);margin-bottom:10px"></div>
-      <div id="galListe"></div>
-      <button class="btn wide" style="margin-top:12px" onclick="enregistrerGalerie()">Enregistrer l'ordre</button>
-      <div id="galMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
-    </div>
-
-    <div class="grouplab">Bons cadeaux</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
-        Vendus directement sur le site : le client paie le montant en entier, reçoit son code par email,
-        et le bénéficiaire l'utilise au moment de réserver. La séance est alors <b>déjà réglée</b>,
-        rien à encaisser le jour J. Validité 18 mois.
-      </div>
-      <div id="cpCadeaux"></div>
-    </div>
-
-    <div class="grouplab">Sauvegarde manuelle</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:10px;line-height:1.55">Copie ce code pour garder une sauvegarde, ou pour transferer vers un autre appareil. Colle un code puis touche Importer pour restaurer.</div>
-      <textarea id="syncBox" class="synccode" placeholder="Le code de sauvegarde apparait ici..."></textarea>
-      <div style="display:flex;gap:9px;margin-top:10px">
-        <button class="btn ghost sm" style="flex:1" onclick="exportManual()">Copier ma sauvegarde</button>
-        <button class="btn ghost sm" style="flex:1" onclick="importManual()">Importer un code</button>
-      </div>
-      <div id="syncMsg2" style="font-size:13px;color:var(--ink-2);margin-top:9px"></div>
-    </div>
-
-    <div class="grouplab">Données</div>
-    <div class="card" style="padding:16px">
-      <button class="btn danger sm wide" onclick="wipeAll()">Tout effacer sur cet appareil</button>
-      <div class="hint" style="margin-top:8px">Efface uniquement les données locales. Si la synchro cloud est active, elles peuvent revenir au prochain chargement.</div>
-    </div>
-
-    <div class="grouplab">Notifications</div>
-    <div class="card" style="padding:16px" id="notifCard"></div>
-
-    <div class="grouplab">Sécurité</div>
-    <div class="card" style="padding:16px" id="securityCard"></div>
-
-    <div class="grouplab">A propos</div>
-    <div class="card" style="padding:16px;font-size:13px;color:var(--ink-3);line-height:1.6">
-      Studio, l'atelier de Matt. Fichier unique, memes rouages que le Grimoire du vieil Anseth. Mybabyshoot, Maison Lumiere et Matt la photo dans un seul outil.
-    </div>`;
+  `;
   setSyncMsg("");
   if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} try{ loadBonsCadeaux(); }catch(e){} try{ chargerGalerie(); }catch(e){} try{ chargerTheme(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
+  majRegOnglets();
   renderSecurity();
   renderNotifs();
   renderCA();
