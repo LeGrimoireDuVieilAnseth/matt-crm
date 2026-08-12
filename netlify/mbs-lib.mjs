@@ -16,7 +16,10 @@ export const SLOTS = ["10:30", "14:30", "18:00"];
 // Delai minimum avant une seance : on ne propose pas les dates trop proches.
 export const MIN_LEAD_DAYS = 1;
 // Horizon de reservation : on propose les creneaux jusqu'a X jours en avant.
-export const HORIZON_DAYS = 90;
+// Une annee complete de reservation. A 90 jours, plus rien n'etait
+// reservable au-dela de trois mois : les clientes qui s'y prennent tot,
+// typiquement en debut de grossesse, ne trouvaient aucune date.
+export const HORIZON_DAYS = 365;
 // Duree du verrou pose pendant le paiement (au dela, le creneau se relibere).
 export const LOCK_TTL_MS = 20 * 60 * 1000;
 
