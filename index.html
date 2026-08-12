@@ -143,6 +143,24 @@
   .stat .num{font-family:"Fraunces";font-size:30px;font-weight:500;line-height:1.05;margin-top:5px;letter-spacing:-.02em;}
   .stat .foot{font-size:12px;color:var(--ink-2);margin-top:4px;}
   .stat .num.euro{font-size:26px;}
+  /* galerie en grille */
+  .galgrille{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:7px;}
+  .galcell{position:relative;padding:0;border:2px solid transparent;border-radius:10px;
+    overflow:hidden;background:var(--surface-3);cursor:pointer;aspect-ratio:1;display:block;width:100%;}
+  .galcell img{width:100%;height:100%;object-fit:cover;display:block;}
+  .galnum{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.62);color:#fff;
+    font-size:10.5px;font-weight:600;padding:1px 5px;border-radius:99px;line-height:1.5;}
+  .galcell.apercu{border-color:var(--ok);}
+  .galcell.pris{border-color:var(--baby);box-shadow:0 0 0 3px var(--baby-soft);}
+  .galcell.cible{opacity:.55;}
+  .galcell.morte{border-color:var(--danger);background:var(--danger-soft);}
+  .galcell.morte img{opacity:.15;}
+  .galcell.morte::after{content:"introuvable";position:absolute;inset:auto 0 50% 0;
+    text-align:center;font-size:10px;color:var(--danger);font-weight:700;}
+  .galbarre{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;
+    padding:9px 11px;background:var(--baby-soft);border-radius:10px;font-size:12.5px;}
+  .galbarre span{flex:1 1 auto;}
+
   /* vue Chiffres */
   .graphbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
     padding:12px 8px 4px;box-shadow:var(--shadow);overflow-x:auto;}
@@ -1595,43 +1613,92 @@ async function chargerGalerie(){
   renderGalerie();
 }
 
+/* La galerie tenait sur une liste d'une ligne par photo : avec une
+   trentaine d'images, on scrollait sans fin pour en deplacer une. Elle est
+   maintenant en grille. On touche une photo pour la prendre, puis on
+   touche la place ou on veut la mettre. Les photos introuvables sont
+   reperees au chargement et se retirent en un bouton. */
+let galSel = -1;          // index de la photo prise en main
+let galMortes = [];       // photos dont le fichier ne repond pas
+
+function galPrendre(i){
+  if(galSel === i){ galSel = -1; renderGalerie(); return; }
+  if(galSel < 0){ galSel = i; renderGalerie(); return; }
+  // deuxieme touche : on deplace la photo prise a cette place
+  const p = galOrdre.splice(galSel, 1)[0];
+  galOrdre.splice(i, 0, p);
+  galSel = -1;
+  renderGalerie();
+  galMsg("Photo déplacée, pense à enregistrer.");
+}
+function galAnnulerSel(){ galSel = -1; renderGalerie(); }
+
+function galRetirerMortes(){
+  if(!galMortes.length) return;
+  const n = galMortes.length;
+  galOrdre = galOrdre.filter(function(p){ return galMortes.indexOf(p) < 0; });
+  galMasquees = galMasquees.filter(function(p){ return galMortes.indexOf(p) < 0; });
+  galMortes = [];
+  renderGalerie();
+  galMsg(n + " photo(s) introuvable(s) retirée(s), pense à enregistrer.");
+}
+
+/* Une vignette qui ne charge pas est signalee, pas masquee : Matt doit
+   voir qu'il y a un trou, sinon il ne saura jamais pourquoi le site
+   affiche une image cassee. */
+function galSignalerMorte(img, chemin){
+  if(galMortes.indexOf(chemin) < 0) galMortes.push(chemin);
+  const c = img.closest(".galcell");
+  if(c) c.classList.add("morte");
+  const z = document.getElementById("galMortesZone");
+  if(z) z.innerHTML = '<button class="btn danger sm wide" onclick="galRetirerMortes()">Retirer les '
+    + galMortes.length + ' photo(s) introuvable(s)</button>';
+}
+
 function renderGalerie(){
   const box=document.getElementById("galListe");
   if(!box) return;
+  galMortes = [];
   const etat=document.getElementById("galEtat");
   if(etat) etat.textContent=galOrdre.length+" photo(s) affichée(s)"+(galMasquees.length?", "+galMasquees.length+" masquée(s)":"");
 
-  const ligne=(p,i,masquee)=>{
-    const pos=masquee?"":(i<10?'<span class="badge ok" style="margin-left:6px">aperçu</span>':"");
-    return `<div class="row" style="cursor:default;align-items:center">
-      <img src="${galSrc(p)}" alt="" loading="lazy" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none;background:var(--fill)">
-      <div class="row-main" style="min-width:0">
-        <div class="t" style="font-size:13.5px">${masquee?"Masquée":"Photo "+(i+1)}${pos}</div>
-        <div class="s" style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis">${esc(p.split("/").pop().slice(0,26))}</div>
-      </div>
-      <div class="row-end" style="gap:5px">
-        ${masquee
-          ? `<button class="btn sm ghost" style="padding:6px 9px" onclick="galAfficher('${esc(p)}')">Afficher</button>`
-          : `<button class="btn sm ghost" style="padding:6px 8px" onclick="galHaut(${i})" ${i===0?"disabled":""}>&uarr;</button>
-             <button class="btn sm ghost" style="padding:6px 8px" onclick="galBas(${i})" ${i===galOrdre.length-1?"disabled":""}>&darr;</button>
-             <button class="btn sm ghost" style="padding:6px 8px" onclick="galPremier(${i})" title="Mettre en premier">&uarr;&uarr;</button>
-             <button class="btn sm danger" style="padding:6px 8px" onclick="galMasquer(${i})">Masquer</button>`}
-      </div>
-    </div>`;
+  const cellule = function(p, i, masquee){
+    const pris = (!masquee && i === galSel);
+    const cible = (!masquee && galSel >= 0 && !pris);
+    return '<button type="button" class="galcell'
+      + (pris ? " pris" : "") + (cible ? " cible" : "") + (!masquee && i < 10 ? " apercu" : "") + '"'
+      + ' onclick="' + (masquee ? "galAfficher('" + esc(p) + "')" : "galPrendre(" + i + ")") + '">'
+      + '<img src="' + galSrc(p) + '" alt="" loading="lazy" onerror="galSignalerMorte(this,\'' + esc(p) + '\')">'
+      + '<span class="galnum">' + (masquee ? "masquée" : (i+1)) + '</span>'
+      + '</button>';
   };
 
-  let h=galOrdre.map((p,i)=>ligne(p,i,false)).join("");
-  if(galMasquees.length){
-    h+=`<div class="grouplab" style="margin-top:14px">Masquées (absentes du site)</div>`;
-    h+=galMasquees.map(p=>ligne(p,0,true)).join("");
+  let h = '<div id="galMortesZone"></div>';
+
+  if(galSel >= 0){
+    h += '<div class="galbarre">'
+      + '<span>Touche la place où mettre cette photo</span>'
+      + '<button class="btn sm ghost" onclick="galAnnulerSel()">Annuler</button>'
+      + '<button class="btn sm danger" onclick="galMasquer(' + galSel + ')">Masquer</button>'
+      + '</div>';
+  } else {
+    h += '<div class="hint" style="margin-bottom:10px">Touche une photo pour la prendre, puis touche la place où la mettre. Les 10 premières sont celles visibles avant le bouton « Voir plus ».</div>';
   }
-  box.innerHTML=h;
+
+  h += '<div class="galgrille">' + galOrdre.map(function(p,i){ return cellule(p,i,false); }).join("") + '</div>';
+
+  if(galMasquees.length){
+    h += '<div class="grouplab" style="margin-top:14px">Masquées (absentes du site)</div>'
+      + '<div class="hint" style="margin-bottom:10px">Touche une photo masquée pour la remettre en fin de galerie.</div>'
+      + '<div class="galgrille">' + galMasquees.map(function(p){ return cellule(p,0,true); }).join("") + '</div>';
+  }
+  box.innerHTML = h;
 }
 
 function galHaut(i){ if(i<=0) return; const t=galOrdre[i]; galOrdre[i]=galOrdre[i-1]; galOrdre[i-1]=t; renderGalerie(); galMsg("Ordre modifié, pense à enregistrer."); }
 function galBas(i){ if(i>=galOrdre.length-1) return; const t=galOrdre[i]; galOrdre[i]=galOrdre[i+1]; galOrdre[i+1]=t; renderGalerie(); galMsg("Ordre modifié, pense à enregistrer."); }
 function galPremier(i){ if(i<=0) return; const p=galOrdre.splice(i,1)[0]; galOrdre.unshift(p); renderGalerie(); galMsg("Photo mise en premier, pense à enregistrer."); }
-function galMasquer(i){ const p=galOrdre.splice(i,1)[0]; if(p) galMasquees.push(p); renderGalerie(); galMsg("Photo masquée, pense à enregistrer."); }
+function galMasquer(i){ const p=galOrdre.splice(i,1)[0]; if(p) galMasquees.push(p); galSel=-1; renderGalerie(); galMsg("Photo masquée, pense à enregistrer."); }
 function galAfficher(p){
   const k=galMasquees.indexOf(p);
   if(k>=0) galMasquees.splice(k,1);
@@ -3412,7 +3479,7 @@ function renderReglages(){
   const nbC=DB.clients.length,nbS=DB.seances.length,nbP=DB.paiements.length,nbT=DB.taches.length;
   const box=document.getElementById("reglagesBody");
   box.innerHTML=`
-    <div class="pill-row" id="regPills"><button class="pill" data-g="site" onclick="setRegOnglet('site')">Site</button><button class="pill" data-g="contacts" onclick="setRegOnglet('contacts')">Contacts</button><button class="pill" data-g="ventes" onclick="setRegOnglet('ventes')">Ventes</button><button class="pill" data-g="app" onclick="setRegOnglet('app')">Application</button></div>
+    <div class="pill-row" id="regPills"><button class="pill" data-g="site" onclick="setRegOnglet('site')">Site</button><button class="pill" data-g="galerie" onclick="setRegOnglet('galerie')">Galerie</button><button class="pill" data-g="assistants" onclick="setRegOnglet('assistants')">Assistants</button><button class="pill" data-g="contacts" onclick="setRegOnglet('contacts')">Contacts</button><button class="pill" data-g="ventes" onclick="setRegOnglet('ventes')">Ventes</button><button class="pill" data-g="app" onclick="setRegOnglet('app')">Application</button></div>
 
     <div class="reg-groupe" data-g="site">
   <div class="grouplab">Habillage du site</div>
@@ -3428,6 +3495,9 @@ function renderReglages(){
         </div>
         <div id="themeMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:9px"></div>
       </div>
+    </div>
+
+    <div class="reg-groupe" data-g="galerie">
   <div class="grouplab">Galerie du site</div>
       <div class="card" style="padding:16px">
         <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
@@ -3440,6 +3510,9 @@ function renderReglages(){
         <button class="btn wide" style="margin-top:12px" onclick="enregistrerGalerie()">Enregistrer l'ordre</button>
         <div id="galMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
       </div>
+    </div>
+
+    <div class="reg-groupe" data-g="assistants">
   <div class="grouplab">Assistants des sites : corriger leurs réponses</div>
       <div class="card" style="padding:16px">
         <div class="seg brands" id="consBrandBar" style="margin-bottom:12px"></div>
