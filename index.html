@@ -432,6 +432,8 @@
   <div class="stat-grid" id="visStats"></div>
   <div class="section-title"><h2>Visiteurs jour par jour</h2></div>
   <div id="visGraph"></div>
+  <div class="section-title"><h2 id="visDetailTitre">Jour par jour</h2></div>
+  <div id="visDetail"></div>
   <div class="section-title"><h2>D'où viennent-ils</h2></div>
   <div id="visSources"></div>
   <div class="section-title"><h2>Sur quoi ils cliquent</h2></div>
@@ -792,6 +794,7 @@ function renderVisites(){
   if(visData === null){
     box.innerHTML = '<div class="stat"><div class="lab">Mesure indisponible</div><div class="foot">Vérifie ta connexion, puis rouvre cet écran.</div></div>';
     document.getElementById("visGraph").innerHTML = "";
+    document.getElementById("visDetail").innerHTML = "";
     document.getElementById("visSources").innerHTML = "";
     document.getElementById("visClics").innerHTML = "";
     return;
@@ -805,6 +808,7 @@ function renderVisites(){
   if(!jours.length){
     box.innerHTML = '<div class="stat"><div class="lab">Aucune visite mesurée</div><div class="foot">Les premières remonteront dès la prochaine visite du site.</div></div>';
     document.getElementById("visGraph").innerHTML = "";
+    document.getElementById("visDetail").innerHTML = "";
     document.getElementById("visSources").innerHTML = "";
     document.getElementById("visClics").innerHTML = "";
     return;
@@ -823,8 +827,56 @@ function renderVisites(){
     '<div class="stat"><div class="lab">Jours mesurés</div><div class="num">' + jours.length + '</div><div class="foot">depuis le ' + fmtDateShort(jours[0].jour) + '</div></div>';
 
   document.getElementById("visGraph").innerHTML = courbeVisites(jours);
+  document.getElementById("visDetail").innerHTML = tableauVisites(jours);
   document.getElementById("visSources").innerHTML = barresCumul(jours, "sources", visiteurs);
   document.getElementById("visClics").innerHTML = barresCumul(jours, "clics", 0);
+}
+
+/* Regroupe les jours selon la periode affichee, pour que le tableau reste
+   lisible : 30 lignes se parcourent, 365 non. */
+function tableauVisites(jours){
+  const parSemaine = visPeriode === "90", parMois = visPeriode === "365";
+  const titre = parMois ? "Mois par mois" : (parSemaine ? "Semaine par semaine" : "Jour par jour");
+  const t = document.getElementById("visDetailTitre");
+  if(t) t.textContent = titre;
+
+  const paquets = new Map();
+  jours.forEach(function(j){
+    let cle, libelle;
+    if(parMois){
+      cle = j.jour.slice(0,7);
+      libelle = MOIS[Number(j.jour.slice(5,7))-1] + " " + j.jour.slice(0,4);
+    } else if(parSemaine){
+      // on rattache chaque jour au lundi de sa semaine
+      const d = parseDate(j.jour) || new Date(j.jour);
+      const lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay()+6)%7));
+      cle = lundi.toISOString().slice(0,10);
+      libelle = "Semaine du " + fmtDateShort(cle).replace(/.$/, "");
+    } else {
+      cle = j.jour;
+      libelle = fmtDate(j.jour);
+    }
+    if(!paquets.has(cle)) paquets.set(cle, { cle:cle, libelle:libelle, visiteurs:0, vues:0, duree:0, mesures:0 });
+    const p = paquets.get(cle);
+    p.visiteurs += Number(j.visiteurs)||0;
+    p.vues      += Number(j.vues)||0;
+    p.duree     += Number(j.duree)||0;
+    p.mesures   += Number(j.mesures)||0;
+  });
+
+  const lignes = [...paquets.values()].sort(function(a,b){ return b.cle.localeCompare(a.cle); });
+  if(!lignes.length) return "";
+
+  return '<div class="moisbox"><table class="moistab">'
+    + '<tr><th>' + (parMois ? "Mois" : (parSemaine ? "Semaine" : "Jour")) + '</th>'
+    + '<th class="n">Visiteurs</th><th class="n">Pages vues</th><th class="n">Temps moyen</th></tr>'
+    + lignes.map(function(l){
+        return '<tr><td>' + esc(l.libelle) + '</td>'
+          + '<td class="n"><b>' + l.visiteurs + '</b></td>'
+          + '<td class="n">' + l.vues + '</td>'
+          + '<td class="n">' + (l.mesures ? dureeLisible(Math.round(l.duree/l.mesures)) : "") + '</td></tr>';
+      }).join("")
+    + '</table></div>';
 }
 
 function dureeLisible(s){
