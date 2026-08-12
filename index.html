@@ -428,9 +428,27 @@
   <div id="payList"></div>
 </section>
 
+<!-- ===================== VISITES ===================== -->
+<section id="visites" class="view">
+  <div class="pill-row" id="visPills"></div>
+  <div class="stat-grid" id="visStats"></div>
+  <div class="section-title"><h2>Visiteurs jour par jour</h2></div>
+  <div id="visGraph"></div>
+  <div class="section-title"><h2>D'où viennent-ils</h2></div>
+  <div id="visSources"></div>
+  <div class="section-title"><h2>Sur quoi ils cliquent</h2></div>
+  <div id="visClics"></div>
+  <p class="aide">Un visiteur n'est compté qu'une fois par jour, même s'il revient plusieurs fois.
+  Le temps moyen se mesure jusqu'au moment où la page est quittée ou mise en arrière-plan :
+  c'est une estimation basse, jamais gonflée.<br>
+  Aucune donnée ne sort d'ici, rien n'est transmis à Google ni à personne d'autre.</p>
+</section>
+
 <!-- ===================== CHIFFRES ===================== -->
 <section id="chiffres" class="view">
   <div class="brandbar" id="chiffresBrandbar"></div>
+  <button class="btn ghost wide" style="margin-bottom:12px" onclick="openVisites()">
+    <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>Visites du site</button>
   <div class="stat-grid" id="chiffresStats"></div>
   <div class="section-title"><h2>Ce que rapporte chaque marque</h2><span class="count">à ce jour</span></div>
   <div id="chiffresMarques"></div>
@@ -699,7 +717,7 @@ function passFilter(b){ return FILTER==="all"||b===FILTER; }
 function nomMarqueActive(){ return FILTER==="all"?"Toutes les marques":(BRANDS[FILTER]||{}).name||FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",chiffres:"Chiffres",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",chiffres:"Chiffres",visites:"Visites du site",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
 /* ============================================================
    BOUTON RETOUR DU TELEPHONE
    Sans entree d'historique, le retour d'Android quittait l'application
@@ -743,6 +761,138 @@ function openClients(){ renderClients(); setView("clients"); }
 function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
 function openChiffres(){ renderChiffres(); setView("chiffres"); }
+function openVisites(){ setView("visites"); chargerVisites(); }
+
+/* ============================================================
+   VISITES DU SITE
+   Mesure maison, servie par la fonction mbs-stats. Aucun identifiant
+   de visiteur n'existe : le site sait lui-meme s'il a deja ete compte
+   dans la journee, le serveur ne tient que des compteurs.
+   ============================================================ */
+const VIS_API = "/.netlify/functions/mbs-stats";
+const VIS_PERIODES = [["7","7 jours"],["30","30 jours"],["90","3 mois"],["365","1 an"]];
+let visPeriode = "30";
+let visData = null;
+
+function setVisPeriode(p){ visPeriode = p; renderVisites(); }
+
+async function chargerVisites(){
+  document.getElementById("visStats").innerHTML =
+    '<div class="stat"><div class="lab">Chargement...</div></div>';
+  try{
+    const r = await fetch(VIS_API, { headers: apiHeaders(), cache:"no-store" });
+    const j = await r.json();
+    visData = (j && j.jours) || [];
+  }catch(e){ visData = null; }
+  renderVisites();
+}
+
+function renderVisites(){
+  const box = document.getElementById("visStats");
+  document.getElementById("visPills").innerHTML =
+    VIS_PERIODES.map(function(p){
+      return '<button class="pill ' + (visPeriode===p[0]?"on":"") + '" onclick="setVisPeriode(\'' + p[0] + '\')">' + p[1] + '</button>';
+    }).join("");
+
+  if(visData === null){
+    box.innerHTML = '<div class="stat"><div class="lab">Mesure indisponible</div><div class="foot">Vérifie ta connexion, puis rouvre cet écran.</div></div>';
+    document.getElementById("visGraph").innerHTML = "";
+    document.getElementById("visSources").innerHTML = "";
+    document.getElementById("visClics").innerHTML = "";
+    return;
+  }
+
+  // on ne garde que la periode choisie
+  const limite = new Date(Date.now() - Number(visPeriode) * 86400000).toISOString().slice(0,10);
+  const jours = visData.filter(function(j){ return j.jour >= limite; })
+                       .sort(function(a,b){ return a.jour.localeCompare(b.jour); });
+
+  if(!jours.length){
+    box.innerHTML = '<div class="stat"><div class="lab">Aucune visite mesurée</div><div class="foot">Les premières remonteront dès la prochaine visite du site.</div></div>';
+    document.getElementById("visGraph").innerHTML = "";
+    document.getElementById("visSources").innerHTML = "";
+    document.getElementById("visClics").innerHTML = "";
+    return;
+  }
+
+  const som = function(k){ return jours.reduce(function(s,j){ return s + (Number(j[k])||0); }, 0); };
+  const visiteurs = som("visiteurs"), vues = som("vues");
+  const duree = som("duree"), mesures = som("mesures");
+  const moyenne = mesures ? Math.round(duree/mesures) : 0;
+  const parJour = Math.round(visiteurs / jours.length * 10) / 10;
+
+  box.innerHTML =
+    '<div class="stat"><div class="lab">Visiteurs</div><div class="num">' + visiteurs + '</div><div class="foot">' + parJour + ' par jour en moyenne</div></div>' +
+    '<div class="stat"><div class="lab">Pages vues</div><div class="num">' + vues + '</div><div class="foot">' + (visiteurs ? (Math.round(vues/visiteurs*10)/10) : 0) + ' par visiteur</div></div>' +
+    '<div class="stat"><div class="lab">Temps moyen</div><div class="num euro">' + dureeLisible(moyenne) + '</div><div class="foot">sur ' + mesures + ' mesure' + (mesures>1?"s":"") + '</div></div>' +
+    '<div class="stat"><div class="lab">Jours mesurés</div><div class="num">' + jours.length + '</div><div class="foot">depuis le ' + fmtDateShort(jours[0].jour) + '</div></div>';
+
+  document.getElementById("visGraph").innerHTML = courbeVisites(jours);
+  document.getElementById("visSources").innerHTML = barresCumul(jours, "sources", visiteurs);
+  document.getElementById("visClics").innerHTML = barresCumul(jours, "clics", 0);
+}
+
+function dureeLisible(s){
+  s = Number(s)||0;
+  if(s < 60) return s + " s";
+  return Math.floor(s/60) + " min " + String(s%60).padStart(2,"0");
+}
+
+function courbeVisites(jours){
+  const L=760, H=190, mg={g:38,d:10,h:12,b:24};
+  const v = jours.map(function(j){ return Number(j.visiteurs)||0; });
+  const maxi = Math.max(1, ...v);
+  const x = function(i){ return mg.g + (jours.length===1 ? (L-mg.g-mg.d)/2 : i*(L-mg.g-mg.d)/(jours.length-1)); };
+  const y = function(n){ return mg.h + (1-n/maxi)*(H-mg.h-mg.b); };
+  let g = "";
+  for(let k=0;k<=3;k++){
+    const val = maxi*k/3, yy = y(val).toFixed(1);
+    g += '<line x1="'+mg.g+'" y1="'+yy+'" x2="'+(L-mg.d)+'" y2="'+yy+'" class="grille"/>';
+    g += '<text x="'+(mg.g-6)+'" y="'+(y(val)+3.5).toFixed(1)+'" class="axe" text-anchor="end">'+Math.round(val)+'</text>';
+  }
+  g += '<polyline points="' + v.map(function(n,i){ return x(i).toFixed(1)+","+y(n).toFixed(1); }).join(" ")
+     + '" fill="none" stroke="var(--baby)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+  if(jours.length <= 60) g += v.map(function(n,i){ return '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(n).toFixed(1)+'" r="2.5" fill="var(--baby)"/>'; }).join("");
+  const pas = Math.max(1, Math.ceil(jours.length/7));
+  jours.forEach(function(j,i){
+    if(i % pas) return;
+    g += '<text x="'+x(i).toFixed(1)+'" y="'+(H-8)+'" class="axe" text-anchor="middle">'+fmtDateShort(j.jour)+'</text>';
+  });
+  return '<div class="graphbox"><svg viewBox="0 0 '+L+' '+H+'">'+g+'</svg></div>';
+}
+
+/* Cumule un dictionnaire (sources ou clics) sur la periode et le dessine
+   en barres, du plus frequent au moins frequent. */
+function barresCumul(jours, champ, total){
+  const t = {};
+  jours.forEach(function(j){
+    const d = j[champ] || {};
+    Object.keys(d).forEach(function(k){ t[k] = (t[k]||0) + (Number(d[k])||0); });
+  });
+  const lignes = Object.keys(t).map(function(k){ return [k, t[k]]; })
+                       .sort(function(a,b){ return b[1]-a[1]; });
+  if(!lignes.length) return '<div class="empty"><div class="s">Rien de mesuré sur cette période.</div></div>';
+  const maxi = lignes[0][1];
+  return '<div class="moisbox" style="padding:12px 14px">' + lignes.map(function(l){
+    const pc = total ? Math.round(l[1]/total*100) : 0;
+    return '<div style="margin-bottom:10px">'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">'
+      + '<span>' + esc(NOMS_CLIC[l[0]] || l[0]) + '</span>'
+      + '<span style="color:var(--ink-3);font-variant-numeric:tabular-nums">' + l[1] + (total ? " · " + pc + " %" : "") + '</span></div>'
+      + '<div style="height:6px;background:var(--surface-3);border-radius:99px;overflow:hidden">'
+      + '<div style="height:100%;width:' + Math.round(l[1]/maxi*100) + '%;background:var(--baby);border-radius:99px"></div>'
+      + '</div></div>';
+  }).join("") + '</div>';
+}
+
+/* Noms lisibles des elements cliques, tels que le site les envoie. */
+const NOMS_CLIC = {
+  reserver:"Réserver une séance", bon_cadeau:"Offrir un bon cadeau",
+  telephone:"Appeler", itineraire:"Itinéraire vers le studio",
+  instagram:"Instagram", tiktok:"TikTok", mentions:"Mentions légales",
+  composer:"Composer ma séance", galerie:"Galerie photo", avis:"Avis Google",
+  top:"Retour en haut", formules:"Formules", studio:"Le studio"
+};
 
 /* ------------------------------------------------------------
    Charges a deduire. Tout se regle ici.
