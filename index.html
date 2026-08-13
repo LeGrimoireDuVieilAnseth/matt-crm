@@ -3808,6 +3808,23 @@ function mergeCloud(cloud){
    ============================================================ */
 const KEY_STORE="studio_matt_key";
 const BIO_STORE="studio_matt_bio";
+/* Duree pendant laquelle un deverrouillage reste valable. Sans elle, le
+   moindre rechargement de page (tirer vers le bas sur telephone, ou revenir
+   dans l'application) relancait l'empreinte digitale.
+   La cle du CRM est de toute facon deja gardee sur l'appareil : cette fenetre
+   ne protege que contre quelqu'un qui aurait le telephone deverrouille en
+   main, et 30 minutes reste court pour ce cas la. */
+const AUTH_STORE="studio_matt_auth";
+const AUTH_FENETRE_MS=30*60*1000;
+
+function marquerAuth(){ try{ localStorage.setItem(AUTH_STORE,String(Date.now())); }catch(e){} }
+function authRecente(){
+  try{
+    const t=Number(localStorage.getItem(AUTH_STORE)||0);
+    return t>0 && (Date.now()-t)<AUTH_FENETRE_MS;
+  }catch(e){ return false; }
+}
+function oublierAuth(){ try{ localStorage.removeItem(AUTH_STORE); }catch(e){} }
 let CRM_KEY = "";
 try{ CRM_KEY = localStorage.getItem(KEY_STORE) || ""; }catch(e){}
 let authed=false;
@@ -3820,6 +3837,7 @@ function apiHeaders(json){
 function handleUnauthorized(){
   authed=false; CRM_KEY="";
   try{ localStorage.removeItem(KEY_STORE); }catch(e){}
+  oublierAuth();
   showLock();
 }
 
@@ -3950,6 +3968,7 @@ async function submitPassword(){
 }
 function onAuthenticated(){
   authed=true;
+  marquerAuth();
   // premiere entree d'historique : c'est elle qui sert de retour a l'accueil
   vueCourante="home";
   try{ history.replaceState({vue:"home"},""); }catch(e){}
@@ -4121,12 +4140,16 @@ loadDB();
 buildHome();
 setView("home");
 if(CLOUD){
-  // acces protege : on passe par l'ecran de verrouillage
-  showLock(); // showLock tente l'empreinte tout seul si elle est activee
   document.getElementById("lockPass").addEventListener("keydown",e=>{ if(e.key==="Enter") submitPassword(); });
-  if(!bioEnabled() && CRM_KEY){
-    // deja connecte sur cet appareil (PC) : on verifie la cle en silence
-    verifyKey(CRM_KEY).then(ok=>{ if(ok){ onAuthenticated(); } });
+
+  if(CRM_KEY && (authRecente() || !bioEnabled())){
+    // Deverrouille il y a peu, ou appareil sans empreinte : on verifie la cle
+    // aupres du serveur sans rien demander. L'ecran de verrouillage n'apparait
+    // que si le serveur la refuse.
+    verifyKey(CRM_KEY).then(ok=>{ if(ok){ onAuthenticated(); } else { oublierAuth(); showLock(); } });
+  } else {
+    // acces protege : on passe par l'ecran de verrouillage
+    showLock(); // showLock tente l'empreinte tout seul si elle est activee
   }
 } else {
   // fichier local, pas de cloud : pas de verrou
