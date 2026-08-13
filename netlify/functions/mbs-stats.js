@@ -96,8 +96,11 @@ export default async (request) => {
   if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
 
   /* ---------- enregistrement depuis le site ---------- */
+  // Les beacons annoncent text/plain pour eviter la verification CORS :
+  // on ne se fie pas au type declare, on lit et on analyse.
   let body = {};
-  try { body = await request.json(); } catch (e) {}
+  try { body = JSON.parse(await request.text()); } catch (e) {}
+  if (!body || typeof body !== "object") body = {};
 
   const jour = jourParis();
   const s = store();
