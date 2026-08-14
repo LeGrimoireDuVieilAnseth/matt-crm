@@ -139,10 +139,34 @@ export function isBlocked(data, date, time){
   );
 }
 
+/* Un mariage dont l'acompte est encaisse bloque la journee entiere de la
+   reservation Mybabyshoot. L'inverse n'est pas vrai : une seance grossesse
+   deja posee ne bloque pas un mariage, Matt peut la decaler en appelant sa
+   cliente, ce qu'il ne pourrait pas faire d'un mariage.
+
+   On ne cree aucun blocage en double : la seance de mariage sert de source
+   unique. Si elle change de date ou est annulee, la journee se relibere
+   toute seule. */
+export function mariageConfirme(data, date){
+  const mariages = (data.seances || []).filter(s =>
+    s.brand === "maison-lumiere" && s.status !== "Annulee" && s.type !== "Indispo" &&
+    (s.dateEnd ? (date >= s.date && date <= s.dateEnd) : s.date === date)
+  );
+  if (!mariages.length) return false;
+
+  // "acompte recu" au sens du CRM : un paiement existe et n'est plus en attente
+  return mariages.some(m => (data.paiements || []).some(p =>
+    p.brand === "maison-lumiere" &&
+    p.clientId && p.clientId === m.clientId &&
+    p.statut && p.statut !== "En attente"
+  ));
+}
+
 // Un creneau est-il libre a la reservation ?
 export function isFree(data, date, time, now = Date.now()){
   return isValidSlot(date, time) && !isBooked(data, date, time)
-    && !isLocked(data, date, time, now) && !isBlocked(data, date, time);
+    && !isLocked(data, date, time, now) && !isBlocked(data, date, time)
+    && !mariageConfirme(data, date);
 }
 
 // Calcule les jours et creneaux disponibles a partir des donnees.
@@ -153,6 +177,7 @@ export function computeAvailability(data, now = Date.now()){
   for (let i = 0; i < HORIZON_DAYS; i++){
     const date = addDaysISO(start, i);
     if (!OPEN_DAYS.includes(weekdayOf(date))) continue;
+    if (mariageConfirme(data, date)) continue;   // journee prise par un mariage
     const slots = SLOTS.filter(t => !isBooked(data, date, t) && !isLocked(data, date, t, now) && !isBlocked(data, date, t));
     if (slots.length) days.push({ date, slots });
   }
