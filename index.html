@@ -955,7 +955,10 @@ function barresCumul(jours, champ, total){
   const t = {};
   jours.forEach(function(j){
     const d = j[champ] || {};
-    Object.keys(d).forEach(function(k){ t[k] = (t[k]||0) + (Number(d[k])||0); });
+    Object.keys(d).forEach(function(k){
+      const n = CLICS_ANCIENS[k] || k;
+      t[n] = (t[n]||0) + (Number(d[k])||0);
+    });
   });
   const lignes = Object.keys(t).map(function(k){ return [k, t[k]]; })
                        .sort(function(a,b){ return b[1]-a[1]; });
@@ -973,14 +976,21 @@ function barresCumul(jours, champ, total){
   }).join("") + '</div>';
 }
 
-/* Noms lisibles des elements cliques, tels que le site les envoie. */
+/* Noms lisibles des elements cliques, tels que le site les envoie.
+   Ce sont les noms des boutons vus par le visiteur, pas ceux du code. */
 const NOMS_CLIC = {
-  reserver:"Réserver une séance", bon_cadeau:"Offrir un bon cadeau",
+  disponibilites:"Voir les disponibilités", reserver:"Réserver une séance",
+  bon_cadeau:"Offrir un bon cadeau", tarifs:"Tarif et réservation",
   telephone:"Appeler", itineraire:"Itinéraire vers le studio",
   instagram:"Instagram", tiktok:"TikTok", mentions:"Mentions légales",
-  composer:"Composer ma séance", galerie:"Galerie photo", avis:"Avis Google",
+  galerie:"Galerie photo", avis:"Avis Google",
   top:"Retour en haut", formules:"Formules", studio:"Le studio"
 };
+
+/* Anciens noms envoyes par le site avant le 14/08/2026. On les fond dans
+   le compteur actuel : l'historique reste comptabilise, sans faire deux
+   lignes qui portent le meme nom. */
+const CLICS_ANCIENS = { composer:"tarifs" };
 
 /* ============================================================
    CHIFFRES

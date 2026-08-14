@@ -192,7 +192,7 @@ async function traiterBonCadeau(session, md) {
       "<p style=\"font-size:13px;color:#888\">Montant réglé : " + montant + " €"
       + (invPdf ? ", votre facture est en pièce jointe" : "")
       + ". Le prix n'apparaît nulle part sur le bon.</p>" +
-      "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#composer\">" + site.replace(/^https?:\/\//, "") + "</a>, "
+      "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#tarifs\">" + site.replace(/^https?:\/\//, "") + "</a>, "
       + "puis saisissez le code, choisissez la date et le créneau et réservez. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
       "<p>Ce bon est à usage unique : gardez le code précieusement.</p>" +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
@@ -263,7 +263,7 @@ async function traiterAbandon(session, md) {
       "<p>Bonjour " + (prenom || "") + ",</p>" +
       "<p>Vous avez commencé à réserver une <b>séance " + typeLbl.toLowerCase() + "</b> au studio, et la réservation n'est pas allée au bout. Aucun souci : votre créneau a simplement été libéré.</p>" +
       "<p>Si vous souhaitez toujours venir, tout est encore possible :</p>" +
-      "<p><a href=\"" + site + "/#composer\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
+      "<p><a href=\"" + site + "/#tarifs\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
       "<p>Et si vous avez la moindre question (déroulement, tenues, meilleur moment pour la séance), répondez simplement à cet email ou appelez-moi au <b>06 47 76 54 17</b>. Je réponds toujours avec plaisir.</p>" +
       "<p>À très vite,<br>Matteo · Mybabyshoot</p>" +
       "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une réservation a été commencée avec cette adresse. Si ce n'était pas vous, ignorez simplement cet email.</p>";

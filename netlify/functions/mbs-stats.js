@@ -1,8 +1,10 @@
 // netlify/functions/mbs-stats.js
 // Mesure d'audience maison du site Mybabyshoot.
 //
-// POST (public, appele par le site)  : enregistre un evenement
-// GET  (protege par CRM_KEY)         : renvoie les compteurs pour le CRM
+// POST   (public, appele par le site)  : enregistre un evenement
+// GET    (protege par CRM_KEY)         : renvoie les compteurs pour le CRM
+// DELETE (protege par CRM_KEY)         : retire des etiquettes de clic laissees
+//                                        par une mise au point
 //
 // Aucun identifiant de visiteur n'est stocke ici. Le site sait lui-meme
 // s'il a deja ete compte aujourd'hui et ne l'annonce qu'une fois : le
@@ -14,7 +16,7 @@ const JOURS_GARDES = 400;   // un peu plus d'un an, pour comparer les saisons
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, X-CRM-Key"
 };
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
@@ -91,6 +93,39 @@ export default async (request) => {
       } catch (e) {}
     }
     return json({ ok: true, jours });
+  }
+
+  /* ---------- effacement d'etiquettes de clic (protege) ----------
+     Une mise au point laisse des compteurs de test dans les chiffres. Plutot
+     que de les masquer a l'affichage, on les retire vraiment. On n'efface
+     jamais un jour entier ni une visite : uniquement les etiquettes nommees. */
+  if (request.method === "DELETE") {
+    if (!autorise(request)) return json({ ok: false, error: "unauthorized" }, 401);
+
+    const url = new URL(request.url);
+    const cibles = (url.searchParams.get("clics") || "")
+      .split(",").map(etiquette).filter(Boolean);
+    if (!cibles.length) return json({ ok: false, error: "clics" }, 400);
+
+    const s = store();
+    let index = [];
+    try { index = (await s.get("index", { type: "json" })) || []; } catch (e) {}
+
+    const efface = {};
+    for (const j of index) {
+      let d = null;
+      try { d = await s.get("j-" + j, { type: "json" }); } catch (e) {}
+      if (!d || !d.clics) continue;
+      let touche = false;
+      for (const c of cibles) {
+        if (d.clics[c] === undefined) continue;
+        efface[c] = (efface[c] || 0) + d.clics[c];
+        delete d.clics[c];
+        touche = true;
+      }
+      if (touche) { try { await s.setJSON("j-" + j, d); } catch (e) {} }
+    }
+    return json({ ok: true, efface });
   }
 
   if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
