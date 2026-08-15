@@ -647,6 +647,13 @@ function loadDB(){
   try{ const r=localStorage.getItem(KEY); if(r){ DB=Object.assign(DB,JSON.parse(r)); } }catch(e){}
   DB.clients = DB.clients||[]; DB.seances=DB.seances||[]; DB.paiements=DB.paiements||[]; DB.taches=DB.taches||[]; DB.deleted=DB.deleted||[];
   DB.reglages = DB.reglages||{};
+  // Valeurs connues, posees une seule fois : Matt peut les changer ensuite,
+  // y compris les vider, sans qu'elles reviennent au chargement suivant.
+  if(DB.reglages.defautsPoses!==true){
+    if(!DB.reglages.avisMybabyshoot) DB.reglages.avisMybabyshoot="https://g.page/r/CTGWLnQvUCwtEBM/review";
+    if(!DB.reglages.codeFairePart)   DB.reglages.codeFairePart="MLP20";
+    DB.reglages.defautsPoses=true;
+  }
 }
 function saveDB(){
   DB.t=Date.now();
@@ -4188,7 +4195,12 @@ function renderAvisCard(){
       <input id="avisMbs" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisMybabyshoot||"")}"></div>
     <div class="field"><label>Maison Lumière</label>
       <input id="avisMl" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisLumiere||"")}"></div>
-    <button class="btn wide" onclick="saveAvisLinks()">Enregistrer les liens</button>`;
+    <div class="field"><label>Code promo faire-part (Mybabyshoot)</label>
+      <input id="codeFp" type="text" autocapitalize="characters" placeholder="MLP20" value="${esc(r.codeFairePart||"")}"></div>
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-6px 0 12px">
+      Affiché dans le mail avec le bouton vers monfairepart.com. Laisse vide pour ne pas en parler.
+    </div>
+    <button class="btn wide" onclick="saveAvisLinks()">Enregistrer</button>`;
 }
 function saveAvisLinks(){
   const mbs=document.getElementById("avisMbs").value.trim();
@@ -4198,8 +4210,10 @@ function saveAvisLinks(){
   DB.reglages=DB.reglages||{};
   DB.reglages.avisMybabyshoot=lienPropre(mbs);
   DB.reglages.avisLumiere=lienPropre(ml);
+  const cfp=document.getElementById("codeFp");
+  DB.reglages.codeFairePart=cfp?cfp.value.trim().toUpperCase().slice(0,24):"";
   saveDB();
-  toast("Liens d'avis enregistrés");
+  toast("Réglages enregistrés");
 }
 
 /* ---------- fiche : l'etat de l'envoi et le bouton ---------- */
@@ -4214,13 +4228,14 @@ function blocMailFinal(c){
     h+=`<div class="card" style="margin:12px 0;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:9px;color:var(--ok);font-size:13.5px;font-weight:600">
         <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
-        Mail final envoyé le ${fmtDate(m.date.slice(0,10))}</div>
+        Envoyé le ${fmtDate(m.date.slice(0,10))}${m.facture?" · facture "+esc(m.facture):""}</div>
       ${m.galerie?`<div style="margin-top:7px;font-size:13px;word-break:break-all"><a href="${esc(m.galerie)}" target="_blank" rel="noopener">${esc(m.galerie)}</a></div>`:""}
     </div>`;
   }
+  const nomBouton = c.brand==="maison-lumiere" ? "la galerie" : "galerie + facture";
   h+=`<button class="btn ${m&&m.date?"ghost":""} wide sm" style="margin-bottom:4px" onclick="openMailFinal('${c.id}')">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
-    ${m&&m.date?"Renvoyer le mail final":"Envoyer le mail final"}</button>`;
+    ${m&&m.date?"Renvoyer":"Envoyer"} ${nomBouton}</button>`;
   return h;
 }
 
@@ -4231,10 +4246,25 @@ function openMailFinal(id){
   const marque=c.brand==="maison-lumiere"?"Maison Lumière":"Mybabyshoot";
   const dejaFait=c.mailFinal&&c.mailFinal.date;
 
-  let h=`<h2>${dejaFait?"Renvoyer le mail final":"Envoyer le mail final"}</h2>
+  const mbs=c.brand!=="maison-lumiere";
+  let h=`<h2>${dejaFait?"Renvoyer":"Envoyer"} ${mbs?"galerie + facture":"la galerie"}</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       À <b>${esc(c.email)}</b>, au nom de ${esc(marque)}.
-    </div>
+    </div>`;
+
+  if(mbs){
+    const p=DB.paiements.filter(x=>x.clientId===c.id&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+    const solde=p?num(p.total)-num(p.acompte):0;
+    h+=p&&num(p.total)
+      ? `<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
+          La facture de solde part en pièce jointe (séance ${euros(num(p.total))}, solde ${euros(solde)}).
+          Si elle a déjà été émise, c'est celle-là qui est jointe, sans nouveau numéro.</div>`
+      : `<div style="font-size:13px;color:var(--danger);line-height:1.5;margin-bottom:14px">
+          Aucun montant enregistré pour cette séance : la facture ne peut pas être établie et l'envoi sera refusé.
+          Ajoute le paiement d'abord.</div>`;
+  }
+
+  h+=`
     <div class="field"><label>Lien vers sa galerie *</label>
       <input id="mfGalerie" type="url" inputmode="url" autocomplete="off"
              placeholder="https://..." value="${esc((c.mailFinal&&c.mailFinal.galerie)||"")}"></div>`;
@@ -4276,6 +4306,7 @@ async function envoyerMailFinal(id){
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok){
       const raisons={ galerie:"Ce lien de galerie n'est pas valide.",
+                      sans_facture:"Aucun montant enregistré pour cette séance : ajoute le paiement d'abord.",
                       sans_email:"Cette fiche n'a pas d'adresse email.",
                       introuvable:"Fiche introuvable côté serveur, synchronise puis réessaie.",
                       envoi:"L'envoi a échoué. Vérifie la configuration mail dans Netlify.",
@@ -4285,11 +4316,17 @@ async function envoyerMailFinal(id){
       return;
     }
     // c'est le CRM qui note l'envoi : le serveur ne touche jamais aux donnees
-    c.mailFinal={ date:new Date().toISOString(), galerie };
+    c.mailFinal={ date:new Date().toISOString(), galerie, facture:j.facture||"" };
+    // Facture de solde emise a l'instant : le paiement passe a "Solde", comme
+    // le fait le bouton facture de la fiche seance.
+    if(j.factureCreee){
+      const p=DB.paiements.filter(x=>x.clientId===id&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+      if(p) p.statut="Solde";
+    }
     saveDB();
     closeModal();
     openFiche(id);
-    toast(j.avisInclus?"Mail envoyé, avec la demande d'avis":"Mail envoyé");
+    toast(j.facture?("Mail envoyé, facture "+j.facture+" jointe"):"Mail envoyé");
   }catch(e){
     toast("Pas de réseau, réessaie");
     if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
