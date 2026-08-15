@@ -646,6 +646,7 @@ let DB = { clients:[], seances:[], paiements:[], taches:[], deleted:[], v:1, t:0
 function loadDB(){
   try{ const r=localStorage.getItem(KEY); if(r){ DB=Object.assign(DB,JSON.parse(r)); } }catch(e){}
   DB.clients = DB.clients||[]; DB.seances=DB.seances||[]; DB.paiements=DB.paiements||[]; DB.taches=DB.taches||[]; DB.deleted=DB.deleted||[];
+  DB.reglages = DB.reglages||{};
 }
 function saveDB(){
   DB.t=Date.now();
@@ -2512,6 +2513,8 @@ function openFiche(id){
     }
   }
 
+  h+=blocMailFinal(c);
+
   // infos
   h+=`<div class="card" style="margin:12px 0;">`;
   if(c.type) h+=kv("Prestation",esc(acc(c.type)));
@@ -3452,6 +3455,7 @@ function deleteBlock(id){
 let regOnglet = "site";
 function setRegOnglet(g){ regOnglet = g; majRegOnglets(); window.scrollTo(0,0); }
 function majRegOnglets(){
+  renderAvisCard();
   document.querySelectorAll("#reglagesBody .reg-groupe").forEach(function(d){
     d.style.display = (d.dataset.g === regOnglet) ? "" : "none";
   });
@@ -3517,6 +3521,8 @@ function renderReglages(){
     <div class="reg-groupe" data-g="contacts">
   <div class="grouplab">Contacts & campagnes</div>
       <div class="card" style="padding:16px" id="contactsCard"></div>
+  <div class="grouplab">Liens pour laisser un avis</div>
+      <div class="card" style="padding:16px" id="avisCard"></div>
     </div>
 
     <div class="reg-groupe" data-g="ventes">
@@ -4146,6 +4152,150 @@ if(CLOUD){
 
 /* raccourci clavier Echap pour fermer le modal */
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+/* =====================================================================
+   MAIL DE FIN DE PRESTATION
+   Matt clique, donne le lien de la galerie, le client recoit ses photos
+   et l'invitation a laisser un avis.
+
+   Le lien de galerie change a chaque client : il est demande a chaque
+   envoi. Le lien d'avis ne bouge pas : il vit dans les reglages, une
+   fois pour toutes, et par marque.
+
+   Place en fin de fichier : apiHeaders et CRM_KEY sont declares plus
+   haut, les lire avant leur declaration ferait echouer tout le script.
+   ===================================================================== */
+const MAIL_FINAL_ENDPOINT = "/.netlify/functions/crm-mail-final";
+
+function lienPropre(v){
+  const s=String(v||"").trim();
+  if(!s) return "";
+  try{
+    const u=new URL(s);
+    return (u.protocol==="http:"||u.protocol==="https:") ? u.href : "";
+  }catch(e){ return ""; }
+}
+
+/* ---------- reglages : les deux liens d'avis ---------- */
+function renderAvisCard(){
+  const box=document.getElementById("avisCard");
+  if(!box) return;
+  const r=DB.reglages||{};
+  box.innerHTML=`<div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Colle ici le lien qui ouvre directement le formulaire d'avis. Il est ajouté au mail de fin
+      de prestation, selon la marque du client. Laisse vide pour ne pas demander d'avis.
+    </div>
+    <div class="field"><label>Mybabyshoot</label>
+      <input id="avisMbs" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisMybabyshoot||"")}"></div>
+    <div class="field"><label>Maison Lumière</label>
+      <input id="avisMl" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisLumiere||"")}"></div>
+    <button class="btn wide" onclick="saveAvisLinks()">Enregistrer les liens</button>`;
+}
+function saveAvisLinks(){
+  const mbs=document.getElementById("avisMbs").value.trim();
+  const ml=document.getElementById("avisMl").value.trim();
+  if(mbs&&!lienPropre(mbs)){ toast("Le lien Mybabyshoot doit commencer par https://"); return; }
+  if(ml&&!lienPropre(ml)){ toast("Le lien Maison Lumière doit commencer par https://"); return; }
+  DB.reglages=DB.reglages||{};
+  DB.reglages.avisMybabyshoot=lienPropre(mbs);
+  DB.reglages.avisLumiere=lienPropre(ml);
+  saveDB();
+  toast("Liens d'avis enregistrés");
+}
+
+/* ---------- fiche : l'etat de l'envoi et le bouton ---------- */
+function blocMailFinal(c){
+  if(!c.email){
+    return `<div class="card" style="margin:12px 0;padding:14px 16px;font-size:13.5px;color:var(--ink-3);line-height:1.5">
+      Ajoute une adresse email à cette fiche pour pouvoir envoyer le mail final.</div>`;
+  }
+  const m=c.mailFinal;
+  let h="";
+  if(m&&m.date){
+    h+=`<div class="card" style="margin:12px 0;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:9px;color:var(--ok);font-size:13.5px;font-weight:600">
+        <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
+        Mail final envoyé le ${fmtDate(m.date.slice(0,10))}</div>
+      ${m.galerie?`<div style="margin-top:7px;font-size:13px;word-break:break-all"><a href="${esc(m.galerie)}" target="_blank" rel="noopener">${esc(m.galerie)}</a></div>`:""}
+    </div>`;
+  }
+  h+=`<button class="btn ${m&&m.date?"ghost":""} wide sm" style="margin-bottom:4px" onclick="openMailFinal('${c.id}')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+    ${m&&m.date?"Renvoyer le mail final":"Envoyer le mail final"}</button>`;
+  return h;
+}
+
+function openMailFinal(id){
+  const c=clientById(id); if(!c||!c.email) return;
+  const r=DB.reglages||{};
+  const avis=c.brand==="maison-lumiere"?r.avisLumiere:r.avisMybabyshoot;
+  const marque=c.brand==="maison-lumiere"?"Maison Lumière":"Mybabyshoot";
+  const dejaFait=c.mailFinal&&c.mailFinal.date;
+
+  let h=`<h2>${dejaFait?"Renvoyer le mail final":"Envoyer le mail final"}</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      À <b>${esc(c.email)}</b>, au nom de ${esc(marque)}.
+    </div>
+    <div class="field"><label>Lien vers sa galerie *</label>
+      <input id="mfGalerie" type="url" inputmode="url" autocomplete="off"
+             placeholder="https://..." value="${esc((c.mailFinal&&c.mailFinal.galerie)||"")}"></div>`;
+
+  if(avis){
+    h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">
+      Le bouton « Laisser un avis » sera ajouté automatiquement.</div>`;
+  }else{
+    h+=`<div style="font-size:13px;color:var(--warn,var(--ink-3));line-height:1.5;margin:-4px 0 14px">
+      Aucun lien d'avis enregistré pour ${esc(marque)} : le mail partira sans la demande d'avis.
+      Tu peux l'ajouter dans Réglages, onglet Contacts.</div>`;
+  }
+
+  if(dejaFait){
+    h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
+      Un mail final a déjà été envoyé le ${fmtDate(c.mailFinal.date.slice(0,10))}. Il en recevra un second.</div>`;
+  }
+
+  h+=`<button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}')">Envoyer</button>`;
+  openModal(h);
+}
+
+async function envoyerMailFinal(id){
+  const c=clientById(id); if(!c) return;
+  const champ=document.getElementById("mfGalerie");
+  const galerie=lienPropre(champ?champ.value:"");
+  if(!galerie){ toast("Colle le lien de la galerie, il doit commencer par https://"); return; }
+
+  const bouton=document.getElementById("mfGo");
+  if(bouton){ bouton.disabled=true; bouton.textContent="Envoi en cours..."; }
+
+  try{
+    const res=await fetch(MAIL_FINAL_ENDPOINT,{
+      method:"POST",
+      headers:apiHeaders(true),
+      body:JSON.stringify({ clientId:id, galerie })
+    });
+    if(res.status===401){ handleUnauthorized(); return; }
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok||!j.ok){
+      const raisons={ galerie:"Ce lien de galerie n'est pas valide.",
+                      sans_email:"Cette fiche n'a pas d'adresse email.",
+                      introuvable:"Fiche introuvable côté serveur, synchronise puis réessaie.",
+                      envoi:"L'envoi a échoué. Vérifie la configuration mail dans Netlify.",
+                      indisponible:"Serveur momentanément indisponible." };
+      toast(raisons[j.error]||"Envoi impossible");
+      if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
+      return;
+    }
+    // c'est le CRM qui note l'envoi : le serveur ne touche jamais aux donnees
+    c.mailFinal={ date:new Date().toISOString(), galerie };
+    saveDB();
+    closeModal();
+    openFiche(id);
+    toast(j.avisInclus?"Mail envoyé, avec la demande d'avis":"Mail envoyé");
+  }catch(e){
+    toast("Pas de réseau, réessaie");
+    if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
+  }
+}
+
 </script>
 </body>
 </html>
