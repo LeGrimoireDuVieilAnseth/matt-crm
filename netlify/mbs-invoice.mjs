@@ -30,6 +30,34 @@ export async function nextInvoiceNumber(){
 
 function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " €"; }
 
+/* Le libelle de seance arrive sous deux formes.
+   Depuis le site : "Grossesse", "Naissance", "Grossesse + naissance".
+   Depuis le CRM  : "Seance grossesse", "Naissance / nouveau-ne", ou les
+   valeurs ne sont jamais accentuees, exprès, pour ne pas casser les filtres.
+
+   La facture ecrivait "Séance " + le libelle brut, ce qui donnait
+   "Séance Seance grossesse" : le mot deux fois, dont une sans accent, sur un
+   document que la cliente garde. On accentue ici, et on ne prefixe "Séance"
+   que si le mot n'est pas deja la. */
+const LIBELLES_SEANCE = {
+  "seance grossesse":        "Séance grossesse",
+  "naissance / nouveau-ne":  "Séance naissance",
+  "suivi bebe":              "Séance suivi bébé",
+  "famille":                 "Séance famille",
+  "smash cake":              "Séance smash cake"
+};
+
+export function libelleSeance(v){
+  const brut = String(v == null ? "" : v).trim();
+  if (!brut) return "Séance";
+  const connu = LIBELLES_SEANCE[brut.toLowerCase()];
+  if (connu) return connu;
+  // Un type ajoute plus tard commencera peut-etre par "Seance" sans accent :
+  // on accentue au moins ce mot-la, et on ne le prefixe pas une seconde fois.
+  if (/^s[ée]ance\b/i.test(brut)) return brut.replace(/^Seance\b/, "Séance").replace(/^seance\b/, "séance");
+  return "Séance " + brut.toLowerCase();
+}
+
 /* ---------- Archivage ----------
    Les factures etaient generees puis envoyees par email, et perdues ensuite.
    On garde desormais chaque PDF dans le store "mbs-invoices" (cle pdf-<numero>)
@@ -98,7 +126,7 @@ export async function makeInvoicePdf(inv){
   T(430, yTable, "Montant", 10, bold, soft);
   page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
 
-  T(M, yTable + 30, "Acompte - Séance " + inv.typeLabel, 11, font);
+  T(M, yTable + 30, "Acompte - " + libelleSeance(inv.typeLabel), 11, font);
   T(M, yTable + 46, "du " + inv.seanceDateFr + " à " + inv.time + " (studio, La Mulatière)", 9.5, font, soft);
   T(430, yTable + 30, eur(inv.acompte), 11, bold);
 
@@ -219,7 +247,7 @@ export async function makeFinalInvoicePdf(inv){
   T(430, yTable, "Montant", 10, bold, soft);
   page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
 
-  T(M, yTable + 30, "Séance " + inv.typeLabel + " du " + inv.seanceDateFr, 11, font);
+  T(M, yTable + 30, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr, 11, font);
   T(430, yTable + 30, eur(inv.total), 11, font);
   T(M, yTable + 52, "Acompte déjà versé", 11, font, soft);
   T(430, yTable + 52, "- " + eur(inv.acompte), 11, font, soft);

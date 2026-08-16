@@ -14,7 +14,7 @@
 // la fiche. Un seul ecrivain sur le blob, pas de course entre les deux.
 import { crmStore, loadData } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
-import { invoiceStore, nextInvoiceNumber, makeFinalInvoicePdf, saveInvoice } from "../mbs-invoice.mjs";
+import { invoiceStore, nextInvoiceNumber, makeFinalInvoicePdf, saveInvoice, libelleSeance } from "../mbs-invoice.mjs";
 
 const FAIRE_PART_URL = "https://www.monfairepart.com/faire-part-naissance.html";
 const AVIS_MBS_DEFAUT = "https://g.page/r/CTGWLnQvUCwtEBM/review";
@@ -141,7 +141,7 @@ async function factureDeSolde(client, data) {
   await saveInvoice({
     number, kind: "solde", pdf, client: { name: client.name, email: client.email },
     montant: Math.max(0, total - acompte), dateStr,
-    detail: "Solde " + typeLabel + (seanceDateFr ? " du " + seanceDateFr : "")
+    detail: "Solde - " + libelleSeance(typeLabel) + (seanceDateFr ? " du " + seanceDateFr : "")
   });
   return { number, pdf, nouvelle: true };
 }
