@@ -67,57 +67,33 @@ const bouton = (href, texte, fond) =>
   esc(texte) + "</a></p>";
 
 /* ---------------------------------------------------------------
-   Le mail Mybabyshoot, texte de Matt.
+   Le texte est ecrit par Matt dans le CRM, et modifiable a chaque envoi.
+   Ici on ne fait que le mettre en forme.
+
+   Tout ce qu'il tape est echappe : seuls les trois reperes entre crochets
+   produisent du HTML. Rien de ce qui est saisi ne peut donc devenir une
+   balise, un lien ou un script dans la boite du client.
    --------------------------------------------------------------- */
-function mailMybabyshoot(prenom, galerie, avis, code, avecFacture) {
-  let h = "<p>Bonjour " + esc(prenom) + " !</p>";
-  h += "<p>C'était un plaisir de réaliser votre séance ! Encore merci pour votre confiance !</p>";
-  h += "<p>Vous pouvez découvrir et sélectionner vos photos en cliquant sur le bouton juste en dessous.</p>";
-  h += "<p>Pour sélectionner les photos que vous souhaitez que je retouche, c'est très simple : "
-     + "il suffit de les liker.</p>";
-  h += "<p>Vous pourrez aussi faire imprimer des photos directement depuis la galerie. "
-     + "Il y a plusieurs types d'impressions et de tailles.</p>";
-  h += bouton(galerie, "Découvrir ma galerie", "#C97B63");
+const JETONS = {
+  "[bouton galerie]": (ctx) => bouton(ctx.galerie, ctx.libelleGalerie, ctx.couleur),
+  "[bouton avis]":    (ctx) => ctx.avis ? bouton(ctx.avis, "Laisser un avis", "#6B6B6B") : "",
+  "[code faire-part]": (ctx) => ctx.code
+    ? '<p style="margin:14px 0"><span style="display:inline-block;border:2px dashed ' + ctx.couleur
+      + ';border-radius:10px;padding:11px 22px;font-size:20px;font-weight:bold;letter-spacing:3px;color:#8A4B37">'
+      + esc(ctx.code) + "</span></p>" + bouton(FAIRE_PART_URL, "Voir les faire-part", "#8A8078")
+    : ""
+};
 
-  if (code) {
-    h += "<p>Voici votre code promo pour obtenir <b>-20 % sur vos faire-part</b> sur monfairepart.com :</p>";
-    h += '<p style="margin:14px 0"><span style="display:inline-block;border:2px dashed #C97B63;border-radius:10px;'
-       + 'padding:11px 22px;font-size:20px;font-weight:bold;letter-spacing:3px;color:#8A4B37">'
-       + esc(code) + "</span></p>";
-    h += bouton(FAIRE_PART_URL, "Voir les faire-part", "#8A8078");
+function htmlDepuisTexte(texte, ctx) {
+  const blocs = String(texte || "").replace(/\r\n/g, "\n").split(/\n[ \t]*\n/);
+  let h = "";
+  for (const b of blocs) {
+    const t = b.trim();
+    if (!t) continue;
+    const jeton = JETONS[t.toLowerCase()];
+    if (jeton) { h += jeton(ctx); continue; }
+    h += "<p>" + esc(t).replace(/\n/g, "<br>") + "</p>";
   }
-
-  if (avis) {
-    h += "<p>Si la séance et ce premier résultat vous ont plu, quelques mots en avis m'aideraient beaucoup. "
-       + "C'est ce qui permet à d'autres familles de me trouver plus facilement, et ça ne prend qu'une minute.</p>";
-    h += bouton(avis, "Laisser un avis", "#6B6B6B");
-  }
-
-  if (avecFacture) {
-    h += '<p style="font-size:13px;color:#888">Votre facture, solde réglé, est en pièce jointe.</p>';
-  }
-
-  h += "<p>Très belle " + momentDuJour() + " à vous<br>Matt</p>";
-  return h;
-}
-
-/* ---------------------------------------------------------------
-   Le mail Maison Lumiere, inchange pour l'instant.
-   --------------------------------------------------------------- */
-function mailMaisonLumiere(prenom, galerie, avis) {
-  let h = "<p>Bonjour " + esc(prenom) + ",</p>";
-  h += "<p>Vos photos de mariage sont prêtes. J'ai pris le temps qu'il fallait, "
-     + "et j'ai hâte que vous les découvriez.</p>";
-  h += bouton(galerie, "Voir mes photos", "#5E4430");
-  h += "<p>Prenez le temps de les télécharger et d'en garder une copie de votre côté : "
-     + "c'est le meilleur moyen de ne jamais les perdre.</p>";
-  if (avis) {
-    h += "<p>Si le résultat vous plaît, quelques mots en avis m'aideraient beaucoup. "
-       + "C'est ce qui permet à d'autres couples de me trouver, et ça ne prend qu'une minute.</p>";
-    h += bouton(avis, "Laisser un avis", "#6B6B6B");
-  }
-  h += "<p>Une question, une envie de tirage ou d'album ? Répondez simplement à cet email.</p>";
-  h += "<p>À très vite<br>Matteo · Maison Lumière</p>";
   return h;
 }
 
@@ -180,8 +156,13 @@ export default async (request) => {
 
   const clientId = String(body.clientId || "").trim();
   const galerie = lienValide(body.galerie);
+  const texte = String(body.texte || "").trim();
   if (!clientId) return json({ ok: false, error: "client" }, 400);
   if (!galerie) return json({ ok: false, error: "galerie" }, 400);
+  // Le texte vient toujours du CRM : c'est la seule version, celle que Matt a
+  // sous les yeux. Pas de repli silencieux ici, qui enverrait autre chose que
+  // ce qu'il a relu.
+  if (!texte) return json({ ok: false, error: "sans_texte" }, 400);
 
   let data;
   try { data = await loadData(crmStore()); }
@@ -201,16 +182,15 @@ export default async (request) => {
     if (!facture) return json({ ok: false, error: "sans_facture" }, 400);
   }
 
-  let html, sujet;
-  if (mariage) {
-    html = mailMaisonLumiere(prenomDe(client.name), galerie, lienValide(reglages.avisLumiere));
-    sujet = "Vos photos de mariage sont en ligne";
-  } else {
-    const avis = lienValide(reglages.avisMybabyshoot) || AVIS_MBS_DEFAUT;
-    const code = String(reglages.codeFairePart || "").trim().slice(0, 24);
-    html = mailMybabyshoot(prenomDe(client.name), galerie, avis, code, true);
-    sujet = "Vos photos sont en ligne";
-  }
+  const html = htmlDepuisTexte(texte, {
+    galerie,
+    libelleGalerie: mariage ? "Voir mes photos" : "Découvrir ma galerie",
+    couleur: mariage ? "#5E4430" : "#C97B63",
+    avis: mariage ? lienValide(reglages.avisLumiere)
+                  : (lienValide(reglages.avisMybabyshoot) || AVIS_MBS_DEFAUT),
+    code: mariage ? "" : String(reglages.codeFairePart || "").trim().slice(0, 24)
+  });
+  const sujet = mariage ? "Vos photos de mariage sont en ligne" : "Vos photos sont en ligne";
 
   const envoye = await sendMail({
     to: client.email,

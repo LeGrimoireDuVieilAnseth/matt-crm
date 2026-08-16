@@ -3093,7 +3093,6 @@ function openSeance(id){
       location:s.place||"", details:c&&c.tel?"Tel : "+c.tel:""
     },"Ajouter à Google Agenda")}</div>
     ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn wide" style="margin-top:6px" onclick="openMove('${id}')">Déplacer le créneau</button>`:""}
-    ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn ghost wide" style="margin-top:6px" onclick="sendFinalInvoice('${id}')">Facture de solde (client a réglé)</button>`:""}
     <div style="display:flex;gap:9px;margin-top:6px">
       ${c?`<button class="btn ghost" style="flex:1" onclick="openClientEdit('${c.id}')">Modifier la fiche client</button>`:""}
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier la séance</button>
@@ -3128,25 +3127,6 @@ function saveMove(id){
   if(!date){ toast("Choisis une date"); return; }
   if(mbsSlotBusy(id,date,time)){ toast("Ce créneau est déjà pris ou bloqué. Choisis-en un autre."); return; }
   s.date=date; s.time=time; saveDB(); closeModal(); openSeance(id); toast("Créneau déplacé");
-}
-async function sendFinalInvoice(id){
-  const s=DB.seances.find(x=>x.id===id); if(!s) return;
-  const c=s.clientId?clientById(s.clientId):null;
-  if(!c||!c.email){ toast("Ce client n'a pas d'email"); return; }
-  const p=DB.paiements.filter(x=>x.clientId===s.clientId&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
-  const total=p?num(p.total):0, acompte=p?num(p.acompte):0;
-  if(!total){ toast("Aucun montant trouve pour cette seance"); return; }
-  if(!confirm("Envoyer la facture de solde a "+c.name+" ? (solde de "+euros(total-acompte)+")")) return;
-  toast("Envoi de la facture...");
-  try{
-    const r=await fetch("/.netlify/functions/mbs-invoice-final",{method:"POST",headers:apiHeaders(true),body:JSON.stringify({
-      client:{name:c.name,email:c.email}, typeLabel:s.type||"Seance",
-      seanceDateFr:(s.date||"").split("-").reverse().join("/"), total, acompte
-    })});
-    const j=await r.json().catch(()=>null);
-    if(j&&j.ok){ if(p){ p.statut="Solde"; saveDB(); } toast("Facture de solde envoyee ("+j.number+")"); openSeance(id); }
-    else { toast("Echec de l'envoi de la facture"); }
-  }catch(e){ toast("Erreur reseau"); }
 }
 
 /* ============================================================
@@ -4269,12 +4249,11 @@ function openMailFinal(id){
       <input id="mfGalerie" type="url" inputmode="url" autocomplete="off"
              placeholder="https://..." value="${esc((c.mailFinal&&c.mailFinal.galerie)||"")}"></div>`;
 
-  if(avis){
-    h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">
-      Le bouton « Laisser un avis » sera ajouté automatiquement.</div>`;
-  }else{
+  // Le repere [bouton avis] est visible dans le texte : inutile d'annoncer
+  // qu'il sera ajoute. On ne parle que du cas ou il ne menerait nulle part.
+  if(!avis){
     h+=`<div style="font-size:13px;color:var(--warn,var(--ink-3));line-height:1.5;margin:-4px 0 14px">
-      Aucun lien d'avis enregistré pour ${esc(marque)} : le mail partira sans la demande d'avis.
+      Aucun lien d'avis enregistré pour ${esc(marque)} : le repère [bouton avis] ne produira rien.
       Tu peux l'ajouter dans Réglages, onglet Contacts.</div>`;
   }
 
@@ -4283,8 +4262,18 @@ function openMailFinal(id){
       Un mail final a déjà été envoyé le ${fmtDate(c.mailFinal.date.slice(0,10))}. Il en recevra un second.</div>`;
   }
 
-  h+=`<button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}')">Envoyer</button>`;
+  h+=`<div class="field"><label>Texte du mail</label>
+      <textarea id="mfTexte" rows="16" style="font-size:14px;line-height:1.55"></textarea></div>
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.6;margin:-4px 0 14px">
+      Écris ce que tu veux. Les trois repères entre crochets deviennent les boutons du mail :
+      <b>[bouton galerie]</b>, <b>[code faire-part]</b>, <b>[bouton avis]</b>.
+      Déplace-les, supprime ceux qui ne servent pas, ou ajoute tes propres paragraphes autour.
+      <a onclick="remettreTexteParDefaut('${c.id}')" style="cursor:pointer;text-decoration:underline">Remettre le texte par défaut</a>
+    </div>
+    <button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}')">Envoyer</button>`;
   openModal(h);
+  const zone=document.getElementById("mfTexte");
+  if(zone) zone.value=texteMailParDefaut(c);
 }
 
 async function envoyerMailFinal(id){
@@ -4292,6 +4281,9 @@ async function envoyerMailFinal(id){
   const champ=document.getElementById("mfGalerie");
   const galerie=lienPropre(champ?champ.value:"");
   if(!galerie){ toast("Colle le lien de la galerie, il doit commencer par https://"); return; }
+  const zone=document.getElementById("mfTexte");
+  const texte=zone?zone.value.trim():"";
+  if(!texte){ toast("Le texte du mail est vide. Touche « Remettre le texte par défaut » si besoin."); return; }
 
   const bouton=document.getElementById("mfGo");
   if(bouton){ bouton.disabled=true; bouton.textContent="Envoi en cours..."; }
@@ -4300,13 +4292,14 @@ async function envoyerMailFinal(id){
     const res=await fetch(MAIL_FINAL_ENDPOINT,{
       method:"POST",
       headers:apiHeaders(true),
-      body:JSON.stringify({ clientId:id, galerie })
+      body:JSON.stringify({ clientId:id, galerie, texte })
     });
     if(res.status===401){ handleUnauthorized(); return; }
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok){
       const raisons={ galerie:"Ce lien de galerie n'est pas valide.",
                       sans_facture:"Aucun montant enregistré pour cette séance : ajoute le paiement d'abord.",
+                      sans_texte:"Le texte du mail est vide.",
                       sans_email:"Cette fiche n'a pas d'adresse email.",
                       introuvable:"Fiche introuvable côté serveur, synchronise puis réessaie.",
                       envoi:"L'envoi a échoué. Vérifie la configuration mail dans Netlify.",
@@ -4331,6 +4324,53 @@ async function envoyerMailFinal(id){
     toast("Pas de réseau, réessaie");
     if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
   }
+}
+
+/* Texte par defaut du mail de fin. Il vit ici et nulle part ailleurs : le
+   serveur ne fait que le mettre en forme, donc ce que Matt lit dans la
+   fenetre est exactement ce qui partira.
+
+   Les trois reperes entre crochets deviennent des boutons. Tout le reste
+   est du texte, echappe a l'arrivee : rien de ce qui est tape ici ne peut
+   se transformer en HTML dans la boite du client. */
+function texteMailParDefaut(c){
+  const prenom=(String(c.name||"").trim().split(/\s+/)[0])||"";
+  const moment=(new Date().getHours()>=18)?"soirée":"journée";
+  const r=DB.reglages||{};
+
+  if(c.brand==="maison-lumiere"){
+    return [
+      "Bonjour "+prenom+",",
+      "Vos photos de mariage sont prêtes. J'ai pris le temps qu'il fallait, et j'ai hâte que vous les découvriez.",
+      "[bouton galerie]",
+      "Prenez le temps de les télécharger et d'en garder une copie de votre côté : c'est le meilleur moyen de ne jamais les perdre.",
+      (r.avisLumiere?"Si le résultat vous plaît, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres couples de me trouver, et ça ne prend qu'une minute.":""),
+      (r.avisLumiere?"[bouton avis]":""),
+      "Une question, une envie de tirage ou d'album ? Répondez simplement à cet email.",
+      "Très belle "+moment+" à vous\nMatteo · Maison Lumière"
+    ].filter(Boolean).join("\n\n");
+  }
+
+  return [
+    "Bonjour "+prenom+" !",
+    "C'était un plaisir de réaliser votre séance ! Encore merci pour votre confiance !",
+    "Vous pouvez découvrir et sélectionner vos photos en cliquant sur le bouton juste en dessous.",
+    "Pour sélectionner les photos que vous souhaitez que je retouche, c'est très simple : il suffit de les liker.",
+    "Vous pourrez aussi faire imprimer des photos directement depuis la galerie. Il y a plusieurs types d'impressions et de tailles.",
+    "[bouton galerie]",
+    (r.codeFairePart?"Voici votre code promo pour obtenir -20 % sur vos faire-part sur monfairepart.com :":""),
+    (r.codeFairePart?"[code faire-part]":""),
+    "Si la séance et ce premier résultat vous ont plu, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres familles de me trouver plus facilement, et ça ne prend qu'une minute.",
+    "[bouton avis]",
+    "Votre facture, solde réglé, est en pièce jointe.",
+    "Très belle "+moment+" à vous\nMatt"
+  ].filter(Boolean).join("\n\n");
+}
+
+function remettreTexteParDefaut(id){
+  const c=clientById(id); if(!c) return;
+  const zone=document.getElementById("mfTexte");
+  if(zone){ zone.value=texteMailParDefaut(c); toast("Texte par défaut rétabli"); }
 }
 
 </script>
