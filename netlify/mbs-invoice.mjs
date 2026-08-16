@@ -40,22 +40,25 @@ function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " €"; }
    document que la cliente garde. On accentue ici, et on ne prefixe "Séance"
    que si le mot n'est pas deja la. */
 const LIBELLES_SEANCE = {
-  "seance grossesse":        "Séance grossesse",
-  "naissance / nouveau-ne":  "Séance naissance",
-  "suivi bebe":              "Séance suivi bébé",
-  "famille":                 "Séance famille",
-  "smash cake":              "Séance smash cake"
+  "seance grossesse":        "Séance photo grossesse",
+  "grossesse":               "Séance photo grossesse",
+  "naissance / nouveau-ne":  "Séance photo naissance",
+  "naissance":               "Séance photo naissance",
+  "grossesse + naissance":   "Séance photo grossesse + naissance",
+  "suivi bebe":              "Séance photo suivi bébé",
+  "famille":                 "Séance photo famille",
+  "smash cake":              "Séance photo smash cake"
 };
 
 export function libelleSeance(v){
   const brut = String(v == null ? "" : v).trim();
-  if (!brut) return "Séance";
+  if (!brut) return "Séance photo";
   const connu = LIBELLES_SEANCE[brut.toLowerCase()];
   if (connu) return connu;
-  // Un type ajoute plus tard commencera peut-etre par "Seance" sans accent :
-  // on accentue au moins ce mot-la, et on ne le prefixe pas une seconde fois.
-  if (/^s[ée]ance\b/i.test(brut)) return brut.replace(/^Seance\b/, "Séance").replace(/^seance\b/, "séance");
-  return "Séance " + brut.toLowerCase();
+  // Type ajoute plus tard : on retire un "Seance" ou "Séance photo" deja
+  // present avant de prefixer, pour ne jamais ecrire le mot deux fois.
+  const reste = brut.replace(/^s[ée]ance\b\s*(photo\b\s*)?/i, "").trim();
+  return reste ? "Séance photo " + reste.toLowerCase() : "Séance photo";
 }
 
 /* ---------- Archivage ----------
