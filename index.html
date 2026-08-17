@@ -176,6 +176,10 @@
   .moistab th,.moistab td{padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left;}
   .moistab th{font-size:11px;color:var(--ink-3);font-weight:600;background:var(--surface-2);}
   .moistab td.n,.moistab th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  .moistab .pubin{width:88px;text-align:right;padding:5px 7px;font-size:13.5px;
+    border:1px solid var(--line);border-radius:7px;background:var(--surface);
+    color:var(--ink);font-variant-numeric:tabular-nums}
+  .moistab .pubin:focus{outline:none;border-color:var(--baby)}
   .moistab tr:last-child td{border-bottom:0;}
   .moistab .avenir{color:var(--warn);font-weight:600;}
   .aide{font-size:12px;color:var(--ink-3);line-height:1.5;margin:10px 2px 0;}
@@ -472,6 +476,8 @@
   <div id="chiffresGraph"></div>
   <div class="section-title"><h2>Mois par mois</h2></div>
   <div id="chiffresMois"></div>
+  <div class="section-title" id="pubTitre"><h2>Retour sur la publicité</h2><span class="count">Google Ads</span></div>
+  <div id="chiffresPub"></div>
   <p class="aide"><b>Valeur vendue</b> : ce que les clients ont commandé ce mois-là, en entier.
   <b>Rentré en caisse</b> : ce qui arrive vraiment sur le compte ce mois-là.<br>
   Une séance à 390 € réservée en août compte 390 € de valeur vendue en août, mais seulement
@@ -1021,8 +1027,10 @@ function ventesCRM(marque){
     }
     const total=num(p.total);
     const encaisse=p.statut==="Solde"?total:num(p.acompte);
+    const cl=p.clientId?clientById(p.clientId):null;
     return { total, encaisse, reste:Math.max(0,total-encaisse),
-      reserveLe:p.date||"", dateSeance:se?se.date:(p.dueDate||"") };
+      reserveLe:p.date||"", dateSeance:se?se.date:(p.dueDate||""),
+      origine:(cl&&cl.origineWeb)||"" };
   });
 }
 function moisCRM(ventes,marque){
@@ -1122,6 +1130,8 @@ function renderChiffres(){
   document.getElementById("chiffresGraph").innerHTML=
     lignes.length?courbeCRM(lignes.slice(-12))
     :`<div class="empty"><div class="t">Pas encore de chiffres</div><div class="s">Les ventes apparaîtront ici dès le premier paiement enregistré.</div></div>`;
+
+  renderPub();
 
   const box=document.getElementById("chiffresMois");
   if(!lignes.length){ box.innerHTML=""; return; }
@@ -4371,6 +4381,105 @@ function remettreTexteParDefaut(id){
   const c=clientById(id); if(!c) return;
   const zone=document.getElementById("mfTexte");
   if(zone){ zone.value=texteMailParDefaut(c); toast("Texte par défaut rétabli"); }
+}
+
+/* =====================================================================
+   RETOUR SUR LA PUBLICITE
+
+   Met face a face ce que la publicite rapporte et ce qu'elle coute.
+
+   Le chiffre d'affaires vient des fiches : depuis aout 2026, le site
+   retient d'ou vient chaque cliente et l'inscrit sur sa fiche. Les
+   reservations anterieures n'ont pas cette information et ne sont donc
+   pas comptees : le mois ou tu as commence a mesurer part forcement bas.
+
+   La depense, elle, se saisit a la main. Google Ads ne se laisse pas
+   interroger sans passer par son API et une validation de compte : une
+   ligne par mois recopiee depuis ton tableau de bord suffit largement.
+   ===================================================================== */
+function pubDuMois(mois){
+  const r=(DB.reglages&&DB.reglages.pubParMois)||{};
+  const v=num(r[mois]);
+  return v>0?v:0;
+}
+function setPubDuMois(mois,valeur){
+  DB.reglages=DB.reglages||{};
+  DB.reglages.pubParMois=DB.reglages.pubParMois||{};
+  const v=num(valeur);
+  if(v>0) DB.reglages.pubParMois[mois]=v;
+  else delete DB.reglages.pubParMois[mois];
+  saveDB();
+  renderPub();
+}
+
+function renderPub(){
+  const box=document.getElementById("chiffresPub");
+  const titre=document.getElementById("pubTitre");
+  if(!box) return;
+
+  // La mesure ne vaut que pour Mybabyshoot : c'est la seule marque qui a
+  // une campagne et un site qui enregistre la provenance.
+  if(FILTER==="maison-lumiere"){
+    if(titre) titre.style.display="none";
+    box.innerHTML="";
+    return;
+  }
+  if(titre) titre.style.display="";
+
+  const ventes=ventesCRM("mybabyshoot");
+  const mois=new Map();
+  const L=k=>{ if(!mois.has(k)) mois.set(k,{mois:k,nb:0,ca:0,total:0}); return mois.get(k); };
+  ventes.forEach(v=>{
+    const m=(v.reserveLe||"").slice(0,7);
+    if(!/^\d{4}-\d{2}$/.test(m)) return;
+    const l=L(m);
+    l.total+=v.total;
+    if(v.origine==="Google Ads"){ l.nb++; l.ca+=v.total; }
+  });
+
+  // on affiche aussi les mois ou seule une depense est saisie
+  const saisis=(DB.reglages&&DB.reglages.pubParMois)||{};
+  Object.keys(saisis).forEach(m=>{ if(/^\d{4}-\d{2}$/.test(m)) L(m); });
+
+  const lignes=[...mois.values()].sort((a,b)=>b.mois.localeCompare(a.mois)).slice(0,12);
+  if(!lignes.length){
+    box.innerHTML='<div class="empty"><div class="t">Rien à comparer pour l\'instant</div>'
+      +'<div class="s">Dès qu\'une réservation arrivera par une annonce, elle apparaîtra ici.</div></div>';
+    return;
+  }
+
+  const totCa=lignes.reduce((s,l)=>s+l.ca,0);
+  const totNb=lignes.reduce((s,l)=>s+l.nb,0);
+  const totDep=lignes.reduce((s,l)=>s+pubDuMois(l.mois),0);
+
+  box.innerHTML='<div class="moisbox"><table class="moistab">'
+    +'<tr><th>Mois</th><th class="n">Séances via la pub</th><th class="n">Ce qu\'elles ont rapporté</th>'
+    +'<th class="n">Dépense pub</th><th class="n">Coût par séance</th><th class="n">Rapporté par euro</th></tr>'
+    + lignes.map(function(l){
+        const dep=pubDuMois(l.mois);
+        const cout=(dep&&l.nb)?dep/l.nb:0;
+        const ret=dep?l.ca/dep:0;
+        return '<tr>'
+          +'<td>'+MOIS[Number(l.mois.slice(5,7))-1]+' '+l.mois.slice(0,4)+'</td>'
+          +'<td class="n">'+(l.nb||"")+'</td>'
+          +'<td class="n"><b>'+(l.ca?euros(l.ca):"")+'</b></td>'
+          +'<td class="n"><input class="pubin" type="number" min="0" step="0.01" inputmode="decimal" '
+            +'value="'+(dep||"")+'" placeholder="0" '
+            +'onchange="setPubDuMois(\''+l.mois+'\',this.value)"></td>'
+          +'<td class="n">'+(cout?euros(cout):"")+'</td>'
+          +'<td class="n">'+(ret?('<b>'+ret.toFixed(1).replace(".",",")+' €</b>'):"")+'</td>'
+          +'</tr>';
+      }).join("")
+    +'</table></div>'
+    + (totDep
+        ? '<p class="aide">Sur ces '+lignes.length+' mois : <b>'+euros(totDep)+'</b> de publicité, '
+          +'<b>'+totNb+' séance'+(totNb>1?"s":"")+'</b> et <b>'+euros(totCa)+'</b> de chiffre d\'affaires. '
+          +'Soit <b>'+(totCa/totDep).toFixed(1).replace(".",",")+' €</b> rapportés par euro dépensé'
+          +(totNb?' et '+euros(totDep/totNb)+' pour obtenir une séance':'')+'.</p>'
+        : '<p class="aide">Saisis ta dépense Google Ads mois par mois dans la colonne <b>Dépense pub</b>, '
+          +'et le coût par séance se calcule tout seul.</p>')
+    + '<p class="aide">Seules les réservations passées par le site depuis le 16 août 2026 portent leur provenance. '
+      +'Celles d\'avant, et celles que tu saisis toi-même, ne sont pas comptées comme venant de la pub.</p>';
 }
 
 </script>

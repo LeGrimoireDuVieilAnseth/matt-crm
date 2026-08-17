@@ -354,6 +354,7 @@ export default async (request) => {
     client = {
       id: uid(), brand: BRAND, name, status: "Client", type: typeLbl,
       tel, email, insta: "", source: "Réservation site Mybabyshoot",
+      origineWeb: String(md.origine || "Direct"),
       notes: "", fromSite: true, createdAt: now
     };
     data.clients.push(client);

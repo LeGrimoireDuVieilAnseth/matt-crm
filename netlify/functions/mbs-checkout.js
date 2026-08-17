@@ -123,6 +123,10 @@ export default async (request) => {
   catch (e) { return json({ ok: false, error: "json" }, 400); }
 
   let   type   = String(body.type || "grossesse");
+  // Provenance de la visite, telle que le site l'a retenue. Liste fermee :
+  // on n'ecrit dans la fiche que des categories connues.
+  const ORIGINES = ["Google Ads", "Google", "Instagram", "TikTok", "Facebook", "Autre moteur", "Autre site", "Direct"];
+  const origine = ORIGINES.includes(String(body.origine || "")) ? String(body.origine) : "Direct";
   const date   = String(body.date || "");
   const time   = String(body.time || "");
   const client = body.client || {};
@@ -315,7 +319,7 @@ export default async (request) => {
       metadata: {
         app: "mybabyshoot", lockId, type, date, time, site,
         lieuExt, fraisDepl: String(fraisDepl),
-        acompte: String(acompte), total: String(total),
+        acompte: String(acompte), total: String(total), origine,
         coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
         prenom, nom, email, tel
       }
