@@ -28,6 +28,36 @@ export function acompteFor(total){
   return Number(total) >= 590 ? 190 : 90;
 }
 
+/* ---------------------------------------------------------------
+   TARIFS DES SEANCES
+
+   C'est ici la reference. Le navigateur affiche un prix, il ne le
+   decide pas : le serveur recalcule toujours a partir de la formule
+   choisie. Sans ca, n'importe qui pouvait annoncer le montant de son
+   choix au moment de payer.
+
+   A garder identique a GAMMES dans "1 - Site Mybabyshoot/js/app.js".
+   Si les deux divergent, la reservation est refusee avec un message
+   demandant de recharger la page, plutot que de facturer autre chose
+   que ce que la cliente a vu.
+   --------------------------------------------------------------- */
+export const PRIX_PHOTO_SUPP = 20;
+export const PRIX_ALBUM = 140;
+export const TARIFS = {
+  simple: { essentielle: 290, confort: 390, prestige: 490 },
+  duo:    { essentiel: 590, confort: 690, prestige: 890 }
+};
+
+/* Renvoie le prix de la formule, hors frais de deplacement et hors
+   remise, ou null si la formule est inconnue. */
+export function prixSeance({ section, gamme, photos, album } = {}){
+  const table = TARIFS[section === "duo" ? "duo" : "simple"];
+  const base = table[String(gamme || "")];
+  if (!base) return null;
+  const n = Math.min(Math.max(parseInt(photos, 10) || 0, 0), 50);
+  return base + n * PRIX_PHOTO_SUPP + (album ? PRIX_ALBUM : 0);
+}
+
 // Libelle francais du type de seance (pour l'agenda et les emails).
 export function typeLabelFr(type){
   if (type === "duo") return "Grossesse + naissance";

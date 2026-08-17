@@ -6,7 +6,7 @@
 import Stripe from "stripe";
 import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
-  acompteFor, typeLabelFr, LOCK_TTL_MS, uid, BRAND, PLACE
+  acompteFor, typeLabelFr, prixSeance, LOCK_TTL_MS, uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import {
   couponStore, checkCoupon, reasonLabel, discountFor,
@@ -134,9 +134,33 @@ export default async (request) => {
   if (!isValidSlot(date, time)) return json({ ok: false, error: "invalid_slot" }, 400);
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
 
-  // Total de la seance compose par le client (sert a l'acompte et au reste du).
-  let total = Math.round(Number(body.total));
-  if (!Number.isFinite(total) || total < 90 || total > 5000) total = 290;
+  /* Prix de la seance : recalcule ICI a partir de la formule choisie. Le
+     navigateur envoie aussi ce qu'il a affiche, mais uniquement pour qu'on
+     puisse detecter un ecart : jamais pour facturer.
+
+     Une reservation avec un bon cadeau seul ne passe pas par le
+     configurateur, sa formule vient du bon et non du navigateur. */
+  let total = 0, affiche = null;
+  if (!body.giftOnly) {
+    const calcule = prixSeance({
+      section: body.section, gamme: body.gamme,
+      photos: body.photos, album: body.album
+    });
+    if (calcule === null) {
+      return json({ ok: false, error: "formule",
+        message: "Formule non reconnue. Rechargez la page et recommencez la réservation." }, 400);
+    }
+    total = calcule;
+    const vu = Math.round(Number(body.totalAffiche));
+    if (Number.isFinite(vu)) affiche = vu;
+  } else if (!body.coupon) {
+    /* Une reservation "bon cadeau seul" tire son montant du bon. Sans code,
+       le total resterait a zero et la seance serait confirmee gratuitement.
+       Avant, la fourchette de securite l'empechait par accident ; maintenant
+       qu'elle a disparu, il faut le dire explicitement. */
+    return json({ ok: false, error: "coupon",
+      message: "Indiquez le code de votre bon cadeau." }, 400);
+  }
 
   const store = crmStore();
   const now = Date.now();
@@ -223,6 +247,20 @@ export default async (request) => {
     fraisDepl = d.frais;
     lieuExt = d.label;
     total += fraisDepl;
+  }
+
+  /* Ce que la cliente a vu doit couvrir ce qu'on va lui compter. Si son
+     ecran annonce moins, c'est que la page est perimee ou que le montant a
+     ete bricole : on refuse plutot que de facturer plus que l'affichage.
+     L'inverse ne pose pas de probleme, elle paie moins que prevu.
+
+     total + remise, c'est le prix de la formule plus le deplacement, avant
+     remise : exactement ce que le site affiche a l'ecran. */
+  if (affiche !== null && affiche < total + remise) {
+    await releaseLock();
+    if (couponCode) { try { await releaseCoupon(couponStore(), couponCode); } catch (_) {} }
+    return json({ ok: false, error: "prix",
+      message: "Nos tarifs ont changé depuis l'ouverture de la page. Rechargez-la pour voir le prix à jour." }, 409);
   }
 
   // Cas bon cadeau couvrant toute la seance : plus rien a payer en ligne.
