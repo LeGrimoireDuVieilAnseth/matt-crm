@@ -3103,6 +3103,7 @@ function openSeance(id){
       location:s.place||"", details:c&&c.tel?"Tel : "+c.tel:""
     },"Ajouter à Google Agenda")}</div>
     ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?`<button class="btn wide" style="margin-top:6px" onclick="openMove('${id}')">Déplacer le créneau</button>`:""}
+    ${s.brand==="mybabyshoot"&&s.type!=="Indispo"?blocFactureSolde(s):""}
     <div style="display:flex;gap:9px;margin-top:6px">
       ${c?`<button class="btn ghost" style="flex:1" onclick="openClientEdit('${c.id}')">Modifier la fiche client</button>`:""}
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier la séance</button>
@@ -4480,6 +4481,87 @@ function renderPub(){
           +'et le coût par séance se calcule tout seul.</p>')
     + '<p class="aide">Seules les réservations passées par le site depuis le 16 août 2026 portent leur provenance. '
       +'Celles d\'avant, et celles que tu saisis toi-même, ne sont pas comptées comme venant de la pub.</p>';
+}
+
+/* =====================================================================
+   FACTURE DE SOLDE, ENVOYEE AU STUDIO
+
+   La cliente regle le solde devant Matt en fin de seance : il lui envoie
+   sa facture dans la foulee, sans attendre que la galerie soit prete.
+
+   Ce bouton avait ete retire parce qu'il emettait un nouveau numero a
+   chaque clic. Il passe desormais par la meme fonction que le mail
+   galerie, qui cherche une facture existante avant d'en creer une : la
+   facture envoyee ici sera retrouvee et rattachee au mail galerie
+   quelques jours plus tard, sans second numero.
+   ===================================================================== */
+function paiementDeLaSeance(s){
+  return DB.paiements
+    .filter(p=>p.clientId===s.clientId && p.brand==="mybabyshoot")
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0] || null;
+}
+
+function blocFactureSolde(s){
+  const c=s.clientId?clientById(s.clientId):null;
+  if(!c||!c.email){
+    return `<div class="card" style="margin-top:6px;padding:12px 15px;font-size:13px;color:var(--ink-3);line-height:1.5">
+      Ajoute une adresse email à la fiche client pour pouvoir envoyer la facture.</div>`;
+  }
+  const p=paiementDeLaSeance(s);
+  if(!p||!num(p.total)){
+    return `<div class="card" style="margin-top:6px;padding:12px 15px;font-size:13px;color:var(--ink-3);line-height:1.5">
+      Aucun montant enregistré : ajoute le paiement pour pouvoir facturer.</div>`;
+  }
+  const solde=num(p.total)-num(p.acompte);
+  const deja=s.factureEnvoyee;
+  let h="";
+  if(deja&&deja.date){
+    h+=`<div class="card" style="margin-top:6px;padding:12px 15px">
+      <div style="display:flex;align-items:center;gap:9px;color:var(--ok);font-size:13.5px;font-weight:600">
+        <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
+        Facture ${esc(deja.numero||"")} envoyée le ${fmtDate(deja.date.slice(0,10))}</div>
+    </div>`;
+  }
+  h+=`<button class="btn ${deja&&deja.date?"ghost":""} wide" style="margin-top:6px" onclick="envoyerFactureSolde('${s.id}')">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 11h3"/></svg>
+    ${deja&&deja.date?"Renvoyer la facture":"Envoyer la facture (solde réglé "+euros(solde)+")"}</button>`;
+  return h;
+}
+
+async function envoyerFactureSolde(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  if(!c||!c.email){ toast("Ce client n'a pas d'email"); return; }
+  const p=paiementDeLaSeance(s);
+  if(!p||!num(p.total)){ toast("Aucun montant enregistré pour cette séance"); return; }
+  const solde=num(p.total)-num(p.acompte);
+  if(!confirm("Envoyer la facture à "+c.name+" ?\n\nSéance "+euros(num(p.total))+", solde réglé "+euros(solde)+".")) return;
+
+  toast("Envoi de la facture...");
+  try{
+    const res=await fetch(MAIL_FINAL_ENDPOINT,{
+      method:"POST", headers:apiHeaders(true),
+      body:JSON.stringify({ clientId:c.id, factureSeule:true })
+    });
+    if(res.status===401){ handleUnauthorized(); return; }
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok||!j.ok){
+      const raisons={ sans_facture:"Aucun montant enregistré : ajoute le paiement d'abord.",
+                      sans_email:"Cette fiche n'a pas d'adresse email.",
+                      introuvable:"Fiche introuvable côté serveur, synchronise puis réessaie.",
+                      marque:"Les factures ne sont émises que pour Mybabyshoot.",
+                      envoi:"L'envoi a échoué. Vérifie la configuration mail dans Netlify.",
+                      indisponible:"Serveur momentanément indisponible." };
+      toast(raisons[j.error]||"Envoi impossible");
+      return;
+    }
+    // Le serveur ne touche pas aux donnees : c'est le CRM qui note.
+    s.factureEnvoyee={ date:new Date().toISOString(), numero:j.facture||"" };
+    if(j.factureCreee) p.statut="Solde";
+    saveDB();
+    openSeance(id);
+    toast("Facture "+(j.facture||"")+" envoyée");
+  }catch(e){ toast("Pas de réseau, réessaie"); }
 }
 
 </script>

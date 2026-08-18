@@ -155,14 +155,30 @@ export default async (request) => {
   try { body = await request.json(); } catch (e) {}
 
   const clientId = String(body.clientId || "").trim();
-  const galerie = lienValide(body.galerie);
-  const texte = String(body.texte || "").trim();
   if (!clientId) return json({ ok: false, error: "client" }, 400);
-  if (!galerie) return json({ ok: false, error: "galerie" }, 400);
-  // Le texte vient toujours du CRM : c'est la seule version, celle que Matt a
-  // sous les yeux. Pas de repli silencieux ici, qui enverrait autre chose que
-  // ce qu'il a relu.
-  if (!texte) return json({ ok: false, error: "sans_texte" }, 400);
+
+  /* Deux usages pour la meme fonction.
+
+     factureSeule : la cliente vient de regler le solde au studio, Matt lui
+     envoie sa facture tout de suite, sans attendre que la galerie soit
+     prete. Pas de lien, pas de texte a relire, un seul geste.
+
+     Sinon : le mail de fin de prestation, avec la galerie et la facture.
+
+     Les deux passent par la MEME recherche de facture, et c'est tout
+     l'interet : celle envoyee au studio sera retrouvee et rattachee au mail
+     galerie, au lieu qu'un second numero soit emis pour la meme seance. */
+  const factureSeule = !!body.factureSeule;
+  const galerie = factureSeule ? "" : lienValide(body.galerie);
+  const texte = factureSeule ? "" : String(body.texte || "").trim();
+
+  if (!factureSeule) {
+    if (!galerie) return json({ ok: false, error: "galerie" }, 400);
+    // Le texte vient toujours du CRM : c'est la seule version, celle que Matt
+    // a sous les yeux. Pas de repli silencieux ici, qui enverrait autre chose
+    // que ce qu'il a relu.
+    if (!texte) return json({ ok: false, error: "sans_texte" }, 400);
+  }
 
   let data;
   try { data = await loadData(crmStore()); }
@@ -174,12 +190,38 @@ export default async (request) => {
 
   const reglages = data.reglages || {};
   const mariage = client.brand === "maison-lumiere";
+  if (factureSeule && mariage) {
+    return json({ ok: false, error: "marque",
+      message: "Les factures ne sont émises que pour Mybabyshoot." }, 400);
+  }
 
   // Facture de solde : uniquement Mybabyshoot, la seule marque facturee ici.
   let facture = null;
   if (!mariage) {
     try { facture = await factureDeSolde(client, data); } catch (e) { facture = null; }
     if (!facture) return json({ ok: false, error: "sans_facture" }, 400);
+  }
+
+  /* La facture seule : un mail court, sans lien ni bouton. Elle part alors
+     que la cliente est encore au studio ou vient d'en sortir, le contexte
+     est frais, il n'y a rien a expliquer. */
+  if (factureSeule) {
+    const html =
+      "<p>Bonjour " + esc(prenomDe(client.name)) + " !</p>" +
+      "<p>Merci pour votre confiance et pour ce moment passé ensemble.</p>" +
+      "<p>Vous trouverez votre facture en pièce jointe, solde réglé.</p>" +
+      "<p>Vos photos arrivent, je vous envoie la galerie dès qu'elle est prête.</p>" +
+      "<p>Très belle " + momentDuJour() + " à vous<br>Matt</p>";
+    const parti = await sendMail({
+      to: client.email,
+      subject: "Votre facture · Mybabyshoot",
+      html,
+      attachments: [{ filename: "Facture-" + facture.number + ".pdf",
+        content: facture.pdf, contentType: "application/pdf" }]
+    });
+    if (!parti) return json({ ok: false, error: "envoi" }, 502);
+    return json({ ok: true, destinataire: client.email,
+      facture: facture.number, factureCreee: !!facture.nouvelle });
   }
 
   const html = htmlDepuisTexte(texte, {
