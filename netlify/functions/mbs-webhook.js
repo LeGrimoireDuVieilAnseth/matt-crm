@@ -370,20 +370,24 @@ export default async (request) => {
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: md.lieuExt || PLACE, status: "A venir",
-    notes: "Réservation en ligne. Total séance " + total + " €, acompte " + acompte + " € encaissé."
+    notes: "Réservation en ligne. Total séance " + total + " €, "
+      + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
       + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " €)." : ""),
     createdAt: now, stripeSession: session.id
   });
 
-  // Paiement (acompte encaisse ; le CRM affiche le reste du).
+  /* Paiement. En integral, tout est encaisse : le CRM ne doit reclamer aucun
+     solde le jour J, et la seance part directement en "Solde". */
+  const toutRegle = md.integral === "1";
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
-    label: "Acompte réservation " + typeLbl,
-    total: String(total), acompte: String(acompte), statut: "Acompte recu",
+    label: toutRegle ? ("Séance réglée en ligne " + typeLbl) : ("Acompte réservation " + typeLbl),
+    total: String(total), acompte: String(acompte),
+    statut: toutRegle ? "Solde" : "Acompte recu",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
-    notes: "Réglé en ligne via Stripe."
+    notes: (toutRegle ? "Totalité réglée en ligne via Stripe, rien à encaisser le jour J." : "Réglé en ligne via Stripe.")
       + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : ""),
     stripeSession: session.id
   });

@@ -127,6 +127,9 @@ export default async (request) => {
   // on n'ecrit dans la fiche que des categories connues.
   const ORIGINES = ["Google Ads", "Google", "Instagram", "TikTok", "Facebook", "Autre moteur", "Autre site", "Direct"];
   const origine = ORIGINES.includes(String(body.origine || "")) ? String(body.origine) : "Direct";
+  /* Comment la cliente veut regler. Liste fermee : tout ce qui n'est pas
+     "integral" retombe sur l'acompte, le mode par defaut. */
+  const integral = String(body.paiement || "") === "integral";
   const date   = String(body.date || "");
   const time   = String(body.time || "");
   const client = body.client || {};
@@ -232,10 +235,13 @@ export default async (request) => {
     total = total - remise;
   }
 
-  // Acompte calcule sur le prix PLEIN (avant remise) : Matt encaisse le meme
-  // acompte qu'une reservation sans code, c'est le solde du jour J qui baisse.
-  // Garde-fou : l'acompte ne depasse jamais le total a payer.
-  const acompte = Math.min(acompteFor(totalPlein), total);
+  /* Acompte calcule sur le prix PLEIN (avant remise) : Matt encaisse le meme
+     acompte qu'une reservation sans code, c'est le solde du jour J qui baisse.
+     Garde-fou : l'acompte ne depasse jamais le total a payer.
+
+     En paiement integral, il n'y a plus d'acompte : on prend tout. Le solde
+     du jour J tombe a zero. */
+  const acompte = integral ? total : Math.min(acompteFor(totalPlein), total);
 
   // Seance en exterieur : les frais sont RECALCULES ici depuis l'adresse.
   // Le navigateur n'envoie qu'une adresse, jamais un montant. Les frais
@@ -289,11 +295,15 @@ export default async (request) => {
   // 2) Session Stripe Checkout pour l'acompte.
   try {
     const stripe = new Stripe(secret);
-    const label = "Acompte réservation " + typeLabelFr(type);
+    const label = (integral ? "Séance " : "Acompte réservation ") + typeLabelFr(type);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["card"],
+      /* Klarna n'est propose que sur le paiement integral. Sur un acompte de
+         90 EUR, fractionner n'aurait aucun sens et couterait plus cher.
+         Apple Pay et Google Pay n'ont pas a etre listes : sur les pages
+         hebergees par Stripe, ils sont servis par le type "card". */
+      payment_method_types: integral ? ["card", "klarna"] : ["card"],
       customer_email: email || undefined,
       line_items: [{
         quantity: 1,
@@ -320,6 +330,7 @@ export default async (request) => {
         app: "mybabyshoot", lockId, type, date, time, site,
         lieuExt, fraisDepl: String(fraisDepl),
         acompte: String(acompte), total: String(total), origine,
+        integral: integral ? "1" : "",
         coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
         prenom, nom, email, tel
       }
