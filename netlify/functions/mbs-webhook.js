@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
-import { makeInvoicePdf, makeGiftInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
+import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 
 const SEANCE_TXT = {
@@ -48,6 +48,9 @@ function frDate(iso){
 async function sendClientEmail(m){
   if (!m.email) return;
   const reste = Math.max(0, Number(m.total) - Number(m.acompte));
+  /* Regle en totalite : lui parler d'acompte et d'un solde de zero euro
+     lui ferait douter d'avoir paye. */
+  const toutRegle = !!m.integral;
   const html =
     "<p>Bonjour " + (m.prenom || "") + " !</p>" +
     "<p>La réservation est bien confirmée. Merci pour votre confiance ! Et à très bientôt.</p>" +
@@ -55,14 +58,21 @@ async function sendClientEmail(m){
     "<li><b>Séance :</b> " + typeLabelFr(m.type) + "</li>" +
     "<li><b>Date :</b> " + frDate(m.date) + " à " + m.time + "</li>" +
     "<li><b>Lieu :</b> " + (m.lieu ? m.lieu + " (séance en extérieur)" : PLACE) + "</li>" +
-    "<li><b>Acompte réglé :</b> " + m.acompte + " €</li>" +
-    "<li><b>Solde le jour de la séance :</b> " + reste + " €</li>" +
+    (toutRegle
+      ? "<li><b>Séance réglée :</b> " + m.total + " €</li>" +
+        "<li><b>À régler le jour de la séance :</b> rien, tout est payé</li>"
+      : "<li><b>Acompte réglé :</b> " + m.acompte + " €</li>" +
+        "<li><b>Solde le jour de la séance :</b> " + reste + " €</li>") +
     "</ul>" +
-    (m.invPdf ? "<p>Votre facture d'acompte est en pièce jointe. Vous recevrez la facture complète après le dernier règlement, en fin de séance.</p>" : "") +
+    (m.invPdf
+      ? (toutRegle
+          ? "<p>Votre facture, réglée en totalité, est en pièce jointe.</p>"
+          : "<p>Votre facture d'acompte est en pièce jointe. Vous recevrez la facture complète après le dernier règlement, en fin de séance.</p>")
+      : "") +
     "<p>Si vous avez des questions, appelez-moi ou échangeons sur WhatsApp au 06 47 76 54 17.</p>" +
     "<p>Mybabyshoot · mybabyshoot.fr</p>";
   const attachments = m.invPdf
-    ? [{ filename: "Facture-" + (m.invNum || "acompte") + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
+    ? [{ filename: "Facture-" + (m.invNum || (m.integral ? "seance" : "acompte")) + ".pdf", content: m.invPdf, contentType: "application/pdf" }]
     : [];
   await sendMail({
     to: m.email,
@@ -413,28 +423,34 @@ export default async (request) => {
     );
   } catch (e) { /* non bloquant */ }
 
-  // Facture d'acompte (PDF) : numero continu + generation, non bloquant.
+  /* Facture (PDF) : numero continu + generation, non bloquant.
+     En integral la seance est soldee des la reservation, c'est donc une
+     facture normale qui part, pas une facture d'acompte. */
   let invNum = null, invPdf = null;
   try {
+    const dateStr = new Date(now).toLocaleDateString("fr-FR");
     invNum = await nextInvoiceNumber();
-    invPdf = await makeInvoicePdf({
-      number: invNum,
-      dateStr: new Date(now).toLocaleDateString("fr-FR"),
-      client: { name, email },
-      typeLabel: typeLbl,
-      seanceDateFr: frDate(date),
-      time, acompte, total
-    });
+    invPdf = toutRegle
+      ? await makeFinalInvoicePdf({
+          number: invNum, dateStr, client: { name, email },
+          typeLabel: typeLbl, seanceDateFr: frDate(date),
+          total, acompte: 0
+        })
+      : await makeInvoicePdf({
+          number: invNum, dateStr, client: { name, email },
+          typeLabel: typeLbl, seanceDateFr: frDate(date),
+          time, acompte, total
+        });
     await saveInvoice({
-      number: invNum, kind: "acompte", pdf: invPdf,
-      client: { name, email }, montant: acompte,
-      dateStr: new Date(now).toLocaleDateString("fr-FR"),
-      detail: "Acompte " + typeLbl + " du " + frDate(date) + " a " + time
+      number: invNum, kind: toutRegle ? "solde" : "acompte", pdf: invPdf,
+      client: { name, email }, montant: toutRegle ? total : acompte,
+      dateStr,
+      detail: (toutRegle ? "Séance réglée " : "Acompte ") + typeLbl + " du " + frDate(date) + " a " + time
     });
   } catch (e) { /* non bloquant : une facture ratee ne doit pas casser la reservation */ }
 
   // Email de confirmation au client (+ facture jointe, copie a Matt). Best effort.
-  await sendClientEmail({ prenom, email, type, date, time, acompte, total, invNum, invPdf, lieu: md.lieuExt || "" });
+  await sendClientEmail({ prenom, email, type, date, time, acompte, total, invNum, invPdf, integral: toutRegle, lieu: md.lieuExt || "" });
 
   return new Response(JSON.stringify({ received: true, booked: true }), { status: 200 });
 };

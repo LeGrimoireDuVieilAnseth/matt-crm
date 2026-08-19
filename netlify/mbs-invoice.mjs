@@ -136,7 +136,7 @@ export async function makeInvoicePdf(inv){
   page.drawLine({ start: { x: M, y: H - (yTable + 66) }, end: { x: 545, y: H - (yTable + 66) }, thickness: 0.8, color: line });
 
   // Total
-  T(300, yTable + 92, "Total acompte à payer", 11, bold);
+  T(300, yTable + 92, "Acompte réglé", 11, bold);
   T(430, yTable + 92, eur(inv.acompte), 12, bold);
 
   // Mention TVA
@@ -252,18 +252,28 @@ export async function makeFinalInvoicePdf(inv){
 
   T(M, yTable + 30, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr, 11, font);
   T(430, yTable + 30, eur(inv.total), 11, font);
-  T(M, yTable + 52, "Acompte déjà versé", 11, font, soft);
-  T(430, yTable + 52, "- " + eur(inv.acompte), 11, font, soft);
-  page.drawLine({ start: { x: M, y: H - (yTable + 72) }, end: { x: 545, y: H - (yTable + 72) }, thickness: 0.8, color: line });
 
-  const solde = Math.max(0, Number(inv.total) - Number(inv.acompte));
-  T(300, yTable + 98, "Solde réglé", 11, bold);
-  T(430, yTable + 98, eur(solde), 12, bold);
-  T(300, yTable + 120, "Total prestation", 10, font, soft);
-  T(430, yTable + 120, eur(inv.total), 10, font, soft);
+  // Regle en une fois : pas d'acompte anterieur a rappeler, donc pas de
+  // ligne de deduction et pas de "solde", qui laisserait croire qu'il
+  // restait quelque chose a payer.
+  const acompteVerse = Math.max(0, Number(inv.acompte) || 0);
+  let y = yTable + 30;
+  if (acompteVerse > 0) {
+    y += 22;
+    T(M, y, "Acompte déjà versé", 11, font, soft);
+    T(430, y, "- " + eur(acompteVerse), 11, font, soft);
+  }
+  page.drawLine({ start: { x: M, y: H - (y + 20) }, end: { x: 545, y: H - (y + 20) }, thickness: 0.8, color: line });
 
-  T(M, yTable + 158, ISSUER.mentionTva, 9.5, font, soft);
-  T(M, yTable + 188, "Prestation réglée intégralement. Merci de votre confiance.", 10, font);
+  T(300, y + 46, acompteVerse > 0 ? "Solde réglé" : "Total réglé", 11, bold);
+  T(430, y + 46, eur(Math.max(0, Number(inv.total) - acompteVerse)), 12, bold);
+  if (acompteVerse > 0) {
+    T(300, y + 68, "Total prestation", 10, font, soft);
+    T(430, y + 68, eur(inv.total), 10, font, soft);
+  }
+
+  T(M, y + 106, ISSUER.mentionTva, 9.5, font, soft);
+  T(M, y + 136, "Prestation réglée intégralement. Merci de votre confiance.", 10, font);
 
   T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);
 

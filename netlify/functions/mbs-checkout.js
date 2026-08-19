@@ -320,7 +320,7 @@ export default async (request) => {
       // valeur : le prix complet de la seance, pas l'acompte. C'est ce que
       // la vente rapporte vraiment, et c'est la-dessus que Google doit
       // apprendre a optimiser.
-      success_url: site + "/?reservation=ok&valeur=" + total + "&session_id={CHECKOUT_SESSION_ID}",
+      success_url: site + "/?reservation=ok&valeur=" + total + (integral ? "&integral=1" : "") + "&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/?reservation=annulee",
       // La relance part quand Stripe declare la session expiree. Matt la veut
       // le lendemain a la meme heure : Stripe plafonne a 24 h, on prend une
