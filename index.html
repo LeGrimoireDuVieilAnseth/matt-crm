@@ -2536,6 +2536,13 @@ function openFiche(id){
   h+=`<div class="card" style="margin:12px 0;">`;
   if(c.type) h+=kv("Prestation",esc(acc(c.type)));
   if(c.source) h+=kv("Vient de",esc(c.source));
+  /* Provenance reelle de la visite. "Google Ads" est mis en avant : c'est
+     la seule valeur qui coute de l'argent, donc la seule qui compte pour
+     savoir si la publicite se rembourse. */
+  if(c.origineWeb) h+=kv("Provenance",
+    c.origineWeb==="Google Ads"
+      ? '<b style="color:var(--ok,#2E7D32)">Annonce Google Ads</b>'
+      : esc(c.origineWeb));
   if(c.tel) h+=kv("Téléphone",`<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>`);
   if(c.email) h+=kv("Email",`<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>`);
   if(c.insta) h+=kv("Instagram",esc(c.insta));
