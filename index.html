@@ -2539,6 +2539,17 @@ function openFiche(id){
   /* Provenance reelle de la visite. "Google Ads" est mis en avant : c'est
      la seule valeur qui coute de l'argent, donc la seule qui compte pour
      savoir si la publicite se rembourse. */
+  /* Quand la reservation a ete prise. Le premier paiement fait foi : c'est
+     l'instant ou la date a ete bloquee. A defaut, la creation de la fiche. */
+  (function(){
+    const p0=(DB.paiements||[])
+      .filter(p=>p.clientId===c.id&&p.date)
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
+    let d=null;
+    if(p0) d=parseDate(p0.date);
+    else if(c.createdAt) d=new Date(c.createdAt);
+    if(d&&!isNaN(d)) h+=kv("Réservé le",esc(d.toLocaleDateString("fr-FR")));
+  })();
   if(c.origineWeb) h+=kv("Provenance",
     c.origineWeb==="Google Ads"
       ? '<b style="color:var(--ok,#2E7D32)">Annonce Google Ads</b>'
