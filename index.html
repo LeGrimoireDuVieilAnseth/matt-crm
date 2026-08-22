@@ -2224,6 +2224,54 @@ function renderCadeauxList(){
   chargerCadeaux();
 }
 
+/* Honorer un bon cadeau qui n'a pas de code : un bon papier, ou un bon
+   vendu du temps de l'ancien site. On genere un vrai code, la cliente
+   reserve elle-meme sur le site comme n'importe quelle beneficiaire.
+
+   Le montant n'est jamais saisi : on choisit une formule, le serveur
+   applique son prix. Un bon a montant libre serait un trou dans le
+   calcul du prix des seances. */
+async function creerBonManuel(){
+  if(!CLOUD){ alert("Disponible seulement en ligne : les bons sont sur le serveur."); return; }
+  let offres=[];
+  try{
+    const r=await fetch(CP_API+"?offres=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    offres=(j&&j.offres)||[];
+  }catch(e){ alert("Impossible de charger les formules."); return; }
+  if(!offres.length){ alert("Aucune formule disponible."); return; }
+
+  const menu=offres.map((o,i)=>(i+1)+". "+o.nom+" ("+o.prix+" €)").join("\n");
+  const rep=prompt("Quelle formule est offerte ?\n\n"+menu+"\n\nTape le numéro :","2");
+  if(rep===null) return;
+  const offre=offres[parseInt(rep,10)-1];
+  if(!offre){ alert("Numéro inconnu."); return; }
+
+  const beneficiaire=(prompt("Nom de la personne qui va utiliser ce bon :","")||"").trim();
+  if(!beneficiaire){ alert("Le nom est nécessaire, c'est ce qui permet de retrouver le bon."); return; }
+
+  const acheteur=(prompt("D'où vient ce bon ? (facultatif)\nExemple : bon papier ancien site, geste commercial","Bon honoré par le studio")||"").trim();
+
+  if(!confirm("Créer un bon "+offre.nom+" de "+offre.prix+" € pour "+beneficiaire+" ?\n\nIl sera valable 18 mois et utilisable une seule fois.")) return;
+
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"cadeau-manuel",formule:offre.id,beneficiaire,acheteur})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){
+      const exp=j.expiresAt?new Date(j.expiresAt).toLocaleDateString("fr-FR"):"";
+      alert("Bon créé.\n\nCode : "+j.code+"\nFormule : "+j.formule+" ("+j.montant+" €)\n"
+        +(exp?"Valable jusqu'au "+exp+"\n":"")
+        +"\nDonne ce code à "+beneficiaire+" : elle le saisira au moment de réserver sur le site.");
+      chargerCadeaux();
+    } else {
+      alert("Échec : "+((j&&j.error)||"raison inconnue"));
+    }
+  }catch(e){ alert("Erreur réseau."); }
+}
+
 async function chargerCadeaux(){
   const box=document.getElementById("clientsList");
   if(!CLOUD){
@@ -2267,8 +2315,12 @@ function dessinerCadeaux(list){
   const total=l.reduce((s,b)=>s+(Number(b.montant)||0),0);
   document.getElementById("clientCount").textContent=l.length+" bon(s)";
 
+  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:12px" onclick="creerBonManuel()">
+      Créer un bon à la main
+    </button>`;
+
   if(!l.length){
-    box.innerHTML=`<div class="empty">
+    box.innerHTML=boutonManuel+`<div class="empty">
       <svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/></svg>
       <div class="t">Aucun bon cadeau</div>
       <div class="s">Les bons vendus sur le site apparaîtront ici, avec les coordonnées de l'acheteur.</div>
@@ -2276,7 +2328,7 @@ function dessinerCadeaux(list){
     return;
   }
 
-  const stats=`<div class="stat-grid" style="margin-bottom:12px">
+  const stats=boutonManuel+`<div class="stat-grid" style="margin-bottom:12px">
       <div class="stat"><div class="lab">Vendus</div><div class="num">${l.length}</div><div class="foot">${euros(total)} encaissés</div></div>
       <div class="stat"><div class="lab">Encore valables</div><div class="num">${valables.length}</div><div class="foot">${l.length-valables.length} utilisé(s)</div></div>
     </div>`;

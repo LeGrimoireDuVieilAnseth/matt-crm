@@ -2,10 +2,14 @@
 // Gestion des codes de reduction depuis le CRM (protege par CRM_KEY).
 // - GET  ?lots=1        : liste des lots
 // - GET  ?lot=ID        : detail d'un lot (chaque code + son etat)
+// - GET  ?offres=1      : formules disponibles en bon cadeau
 // - POST {action:"creer", nom, nombre, expiresAt}  : genere un lot de codes
+// - POST {action:"cadeau-manuel", formule, beneficiaire, acheteur, message}
+//                       : cree UN bon cadeau, pour honorer un ancien bon
 // - POST {action:"desactiver", lot, off}           : (re)active un lot entier
 // - POST {action:"supprimer", lot}                 : supprime le lot et ses codes
-import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT } from "../mbs-coupons.mjs";
+import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT,
+         createGiftCoupon, offreCadeau, GIFT_OFFRES } from "../mbs-coupons.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +51,10 @@ export default async (request) => {
         });
       }
       return json({ ok: true, cadeaux });
+    }
+    // De quoi remplir le menu du CRM sans y recopier les prix.
+    if (url.searchParams.get("offres")) {
+      return json({ ok: true, offres: GIFT_OFFRES });
     }
     if (url.searchParams.get("lots")) {
       let lots = [];
@@ -108,6 +116,29 @@ export default async (request) => {
   }
 
   // ---------- creation d'un lot ----------
+  /* Un seul bon, pour honorer un bon cadeau papier ou d'un ancien site.
+     Le montant vient de la formule choisie, jamais du navigateur. */
+  if (body.action === "cadeau-manuel") {
+    const offre = offreCadeau(body.formule);
+    if (!offre) return json({ ok: false, error: "formule" }, 400);
+    const beneficiaire = String(body.beneficiaire || "").trim().slice(0, 80);
+    if (!beneficiaire) return json({ ok: false, error: "beneficiaire" }, 400);
+
+    const coupon = await createGiftCoupon(store, {
+      amount: offre.prix,
+      formule: offre.nom,
+      seance: offre.duo ? "duo" : "grossesse",
+      style: "creme",
+      acheteur: { nom: String(body.acheteur || "Bon honoré par le studio").trim().slice(0, 80), email: "" },
+      beneficiaire,
+      message: String(body.message || "").trim().slice(0, 300),
+      sessionId: ""
+    });
+    if (!coupon) return json({ ok: false, error: "code" }, 500);
+    return json({ ok: true, code: prettyGift(coupon.code), montant: coupon.amount,
+                  formule: coupon.formule, expiresAt: coupon.expiresAt });
+  }
+
   if (body.action === "creer") {
     const nom = String(body.nom || "Lot").trim().slice(0, 60) || "Lot";
     let nombre = Math.round(Number(body.nombre));
