@@ -225,6 +225,10 @@
 
   /* ---------- badges ---------- */
   .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;letter-spacing:.01em;white-space:nowrap;}
+  /* Provenance payante. Discrete mais reperable en balayant la liste. */
+  .tag-ads{display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;
+    letter-spacing:.04em;padding:2px 7px;border-radius:999px;white-space:nowrap;
+    background:rgba(58,125,82,.14);color:var(--ok);margin-left:7px;vertical-align:1px}
   .badge.neutral{background:var(--surface-3);color:var(--ink-2);}
   .badge.ok{background:var(--ok-soft);color:var(--ok);}
   .badge.warn{background:var(--warn-soft);color:var(--warn);}
@@ -2126,7 +2130,7 @@ function renderClients(){
     return `<div class="row" data-b="${c.brand}" onclick="openFiche('${c.id}')">
       <div class="avatar" data-b="${c.brand}">${esc(initials(c.name))}</div>
       <div class="row-main">
-        <div class="t">${esc(c.name)}</div>
+        <div class="t">${esc(c.name)}${pastilleAds(c)}</div>
         <div class="s">${esc(sub)}</div>
       </div>
       <div class="row-end">
@@ -3675,6 +3679,27 @@ function renderCA(){
     <div class="hint" style="margin-top:10px">Calculé sur les paiements encaissés : solde complet, ou acompte reçu si le dossier n'est pas soldé.</div>`;
   box.innerHTML=h;
 }
+/* Date a laquelle la reservation a ete prise : le premier paiement fait
+   foi, c'est l'instant ou le creneau a ete bloque. A defaut, la creation
+   de la fiche. Renvoie jj/mm/aaaa, ou "" si on ne sait pas. */
+function dateReservation(c){
+  if(!c) return "";
+  const p0=(DB.paiements||[])
+    .filter(p=>p.clientId===c.id&&p.date)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
+  let d=null;
+  if(p0) d=parseDate(p0.date);
+  else if(c.createdAt) d=new Date(c.createdAt);
+  return (d&&!isNaN(d)) ? d.toLocaleDateString("fr-FR") : "";
+}
+/* Seule la publicite est signalee dans les listes : si on marquait toutes
+   les provenances, plus rien ne ressortirait. */
+function pastilleAds(c){
+  return (c&&c.origineWeb==="Google Ads")
+    ? '<span class="tag-ads" title="Venue par une annonce Google Ads">Ads</span>'
+    : '';
+}
+
 function collectContacts(brand){
   const emails=new Map(), phones=new Map();
   DB.clients.forEach(c=>{
@@ -3717,12 +3742,13 @@ function copyContacts(which){
   document.body.removeChild(ta);
 }
 function downloadContactsCsv(){
-  const rows=[["Nom","Email","Téléphone","Marque","Statut"]];
+  const rows=[["Nom","Email","Téléphone","Marque","Statut","Réservé le","Provenance"]];
   DB.clients.forEach(c=>{
     if(!c) return;
     if(contactsBrand!=="all"&&c.brand!==contactsBrand) return;
     if(!c.email&&!c.tel) return;
-    rows.push([c.name||"",c.email||"",c.tel||"",(BRANDS[c.brand]||{}).name||"",c.status||""]);
+    rows.push([c.name||"",c.email||"",c.tel||"",(BRANDS[c.brand]||{}).name||"",c.status||"",
+      dateReservation(c),c.origineWeb||""]);
   });
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
   const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
