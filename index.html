@@ -310,6 +310,39 @@
   .backlink svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 
   .divider{height:1px;background:var(--line);margin:22px 0;}
+  /* ---------- Le fil : une riviere datee au lieu de huit sections ---------- */
+  .fil-tete{margin:16px 2px 2px}
+  .fil-tete .j{font-size:27px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+  .fil-tete .r{font-size:14px;color:var(--ink-2);margin-top:3px}
+  .fil-jour{position:sticky;top:0;z-index:3;background:var(--bg);
+    padding:16px 2px 7px;font-size:11px;font-weight:700;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .fil-jour.retard{color:var(--danger)}
+  .fil-ev{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:start;
+    background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:13px 15px;margin-bottom:7px;cursor:pointer;transition:.15s}
+  .fil-ev:hover{border-color:var(--line-2);transform:translateY(-1px)}
+  .fil-ev .h{font-size:12.5px;color:var(--ink-3);padding-top:2px;font-variant-numeric:tabular-nums;font-weight:600}
+  .fil-ev .co{min-width:0}
+  .fil-ev .quoi{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;
+    letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px}
+  .fil-ev .quoi::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .fil-ev .nom{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.25}
+  .fil-ev .det{font-size:13px;color:var(--ink-2);line-height:1.45;margin-top:2px}
+  .fil-ev .det b{font-weight:700;color:var(--ink)}
+  .fil-ev .mq{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.02em;
+    padding:1px 7px;border-radius:999px;margin-left:6px;vertical-align:1px;
+    background:var(--surface-2);color:var(--ink-2)}
+  .fil-ev .actes{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+  .fil-nature-seance{color:#B0763F}
+  .fil-nature-argent{color:var(--danger)}
+  .fil-nature-rappel{color:#8A6BB5}
+  .fil-nature-appel{color:#3E6E9C}
+  .fil-nature-mariage{color:var(--lumiere)}
+  .fil-nature-relance{color:#8A6BB5}
+  .fil-vide{background:var(--surface);border:1px dashed var(--line-2);border-radius:14px;
+    padding:18px 16px;font-size:14px;color:var(--ink-3);text-align:center}
+
   .grouplab{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:22px 2px 10px;}
 
   .search{position:relative;margin:14px 0 4px;}
@@ -1848,6 +1881,9 @@ function setFilter(b){
    ACCUEIL - tableau de bord "Aujourd'hui"
    ============================================================ */
 function buildHome(){
+  /* Interrupteur dans Reglages > Apparence, eteint par defaut. Tant qu'il
+     l'est, tout ce qui suit se comporte exactement comme avant. */
+  if(DB.reglages && DB.reglages.accueilFil) return buildFil();
   buildBrandbar();
   const body=document.getElementById("homeBody");
   const clients=DB.clients.filter(c=>passFilter(c.brand)&&c.status!=="Archive");
@@ -1998,6 +2034,168 @@ function buildHome(){
   }
 
   body.innerHTML=h;
+}
+
+/* =====================================================================
+   L'ACCUEIL EN FIL
+
+   Les memes donnees que buildHome, lues avec les memes regles de filtre,
+   mais rangees par date au lieu d'etre rangees par nature.
+   ===================================================================== */
+function filEvenement(o){
+  const acte = o.actes ? '<div class="actes">'+o.actes+'</div>' : "";
+  // Sans heure connue, un tiret : mieux qu'une heure inventee.
+  return '<div class="fil-ev" data-b="'+(o.brand||"")+'" onclick="'+o.ouvrir+'">'
+    + '<div class="h">'+esc(o.heure||"—")+'</div>'
+    + '<div class="co">'
+      + '<div class="quoi fil-nature-'+o.nature+'">'+esc(o.libelle)+'</div>'
+      + '<div class="nom">'+esc(o.nom)+(o.brand&&BRANDS[o.brand]?'<span class="mq">'+esc(BRANDS[o.brand].name)+'</span>':"")+'</div>'
+      + (o.detail?'<div class="det">'+o.detail+'</div>':"")
+      + acte
+    + '</div></div>';
+}
+
+function buildFil(){
+  buildBrandbar();
+  const body=document.getElementById("homeBody");
+  const auj=todayStr();
+  const evs=[];   // { date, heure, rang, html }
+
+  /* --- seances (memes regles que l'accueil actuel : toutes marques) --- */
+  DB.seances
+    .filter(s=>s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo"&&s.date>=auj)
+    .forEach(s=>{
+      const c=s.clientId?clientById(s.clientId):null;
+      /* Un paiement ne porte pas d'identifiant de seance : le seul lien sur
+         lequel on peut compter est sa dueDate, que la reservation en ligne
+         remplit avec la date de la seance. Une cliente revenue une seconde
+         fois a deux paiements, et prendre le premier venu afficherait le
+         montant de l'autre seance. Sans correspondance certaine, on n'ecrit
+         rien : un montant faux est pire qu'un montant absent. */
+      const p=DB.paiements.find(x=>x.clientId===s.clientId&&x.brand===s.brand&&x.dueDate===s.date);
+      let argent="";
+      if(p){
+        const reste=Math.max(0,num(p.total)-num(p.acompte));
+        argent = (p.statut==="Solde"||reste===0)
+          ? "<br><b>Rien à encaisser</b>, séance déjà réglée"
+          : "<br><b>"+euros(reste)+" attendus</b> le jour de la séance";
+      }
+      const heure=(s.time||"").replace(":","h");
+      evs.push({ date:s.date, heure:heure, rang:2,
+        html:filEvenement({ nature:"seance", libelle:"Séance", brand:s.brand, heure:heure,
+          nom:c?c.name:"Sans client",
+          detail:esc(acc(s.type)||"")+(s.place?" · "+esc(s.place):"")+argent,
+          ouvrir:"openSeance('"+s.id+"')" }) });
+    });
+
+  /* --- rendez-vous telephoniques --- */
+  DB.seances
+    .filter(s=>s.type==="RDV telephonique"&&s.status!=="Annulee"&&s.status!=="Faite"&&s.date>=auj&&passFilter(s.brand))
+    .forEach(s=>{
+      const c=s.clientId?clientById(s.clientId):null;
+      const heure=(s.time||"").replace(":","h");
+      evs.push({ date:s.date, heure:heure, rang:3,
+        html:filEvenement({ nature:"appel", libelle:"Appel", brand:"maison-lumiere", heure:heure,
+          nom:c?c.name:"Contact", detail:esc(s.objet||"Premier échange"),
+          actes:(c&&c.tel)?'<a class="btn sm" style="padding:6px 10px" href="tel:'+esc(c.tel.replace(/\s/g,""))+'" onclick="event.stopPropagation()">Appeler</a>':"",
+          ouvrir:"openRdv('"+s.id+"')" }) });
+    });
+
+  /* --- rappels avec echeance --- */
+  DB.taches.filter(t=>!t.done&&t.dueDate).forEach(t=>{
+    evs.push({ date:t.dueDate, heure:"", rang:1,
+      html:filEvenement({ nature:"rappel", libelle:"Rappel", brand:t.brand||"",
+        nom:t.title||t.texte||"Rappel", detail:esc(t.notes||""),
+        ouvrir:"openTask('"+t.id+"')" }) });
+  });
+
+  /* --- soldes attendus, echeance depassee --- */
+  overduePayments().filter(p=>passFilter(p.brand)).forEach(p=>{
+    const c=clientById(p.clientId);
+    const reste=num(p.total)-num(p.acompte);
+    evs.push({ date:p.dueDate, heure:"", rang:0,
+      html:filEvenement({ nature:"argent", libelle:"Solde en retard", brand:p.brand,
+        nom:c?c.name:(p.label||"Prestation"),
+        detail:"<b>"+euros(reste)+" attendus</b> · échéance "+esc(relDay(p.dueDate)),
+        ouvrir:"openPayEdit('"+p.id+"')" }) });
+  });
+
+  /* --- mariages signes --- */
+  if(passFilter("maison-lumiere")){
+    const signes=["Confirme","Seance faite","Livre"];
+    DB.clients.filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=auj&&signes.includes(c.status))
+      .forEach(c=>{
+        evs.push({ date:c.eventDate, heure:"", rang:4,
+          html:filEvenement({ nature:"mariage", libelle:"Mariage", brand:"maison-lumiere",
+            nom:c.name, detail:esc(fmtDate(c.eventDate))+" · "+esc(countdown(c.eventDate)),
+            ouvrir:"openFiche('"+c.id+"')" }) });
+      });
+  }
+
+  evs.sort((a,b)=>(a.date+String(a.rang)+a.heure).localeCompare(b.date+String(b.rang)+b.heure));
+
+  const retards=evs.filter(e=>e.date<auj);
+  const proches=evs.filter(e=>e.date>=auj&&daysBetween(e.date,auj)<=30);
+  const loin=evs.filter(e=>e.date>=auj&&daysBetween(e.date,auj)>30);
+  const relances=staleProspects().filter(c=>passFilter(c.brand));
+
+  /* --- l'entete : la journee en une ligne --- */
+  const now=new Date();
+  const dujour=proches.filter(e=>e.date===auj);
+  const resume=[];
+  const nbS=dujour.filter(e=>e.html.indexOf("fil-nature-seance")>-1).length;
+  if(nbS) resume.push(nbS+" séance"+(nbS>1?"s":""));
+  if(retards.length) resume.push(retards.length+" chose"+(retards.length>1?"s":"")+" en retard");
+  if(!resume.length) resume.push("rien de prévu aujourd'hui");
+
+  let out='<div class="fil-tete"><div class="j">'+JOURS[now.getDay()]+" "+now.getDate()+" "+MOIS[now.getMonth()]
+    +'</div><div class="r">'+esc(resume.join(" · "))+'</div></div>';
+
+  if(retards.length){
+    out+='<div class="fil-jour retard">En retard</div>';
+    retards.forEach(e=>out+=e.html);
+  }
+
+  if(proches.length){
+    let jourCourant="";
+    proches.forEach(e=>{
+      if(e.date!==jourCourant){
+        jourCourant=e.date;
+        const d=parseDate(e.date);
+        const titre = e.date===auj ? "Aujourd'hui"
+          : (daysBetween(e.date,auj)===1 ? "Demain"
+          : JOURS[d.getDay()]+" "+d.getDate()+" "+MOIS[d.getMonth()]);
+        out+='<div class="fil-jour">'+esc(titre)+'</div>';
+      }
+      out+=e.html;
+    });
+  } else if(!retards.length){
+    out+='<div class="fil-jour">Aujourd\'hui</div><div class="fil-vide">Rien de prévu dans les trente jours.</div>';
+  }
+
+  if(loin.length){
+    out+='<div class="fil-jour">Plus loin</div>';
+    loin.slice(0,6).forEach(e=>out+=e.html);
+  }
+
+  if(relances.length){
+    out+='<div class="fil-jour">Sans date · à relancer</div>';
+    relances.slice(0,6).forEach(c=>{
+      const depuis=daysSince(c.relancedAt||c.createdAt);
+      out+=filEvenement({ nature:"relance", libelle:"Relance", brand:c.brand, nom:c.name,
+        detail:esc(acc(c.status))+" · sans nouvelle depuis "+depuis+" jours",
+        actes:(c.tel?'<a class="btn sm" style="padding:6px 10px" href="tel:'+esc(c.tel.replace(/\s/g,""))+'" onclick="event.stopPropagation()">Appeler</a>':"")
+          +'<button class="btn sm ghost" style="padding:6px 10px" onclick="event.stopPropagation();markRelance(\''+c.id+'\')">Relancé</button>',
+        ouvrir:"openFiche('"+c.id+"')" });
+    });
+  }
+
+  out+='<button class="btn ghost wide sm" style="margin-top:16px;position:relative" onclick="openChatList()">'
+    +'<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>Chat du site'
+    +'<span class="tab-dot" id="chatDot" style="display:none;position:absolute;right:14px;top:50%;transform:translateY(-50%)"></span>'
+    +'</button>';
+
+  body.innerHTML=out;
 }
 
 /* ---------- fabrique de lignes reutilisables ---------- */
@@ -3770,6 +3968,20 @@ function renderReglages(){
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap" id="themeRow"></div>
       </div>
+      <div class="grouplab" style="margin-top:18px">Accueil</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          <b>Le fil</b> remplace les sections de l'accueil par une seule liste rangée par date :
+          séances, rappels, soldes attendus et mariages se lisent au jour où ils comptent.
+          Ce qui est en retard reste au-dessus, ce qui n'a pas de date est regroupé en bas.
+          Tu peux revenir à l'ancien accueil quand tu veux, rien n'est perdu.
+        </div>
+        <div style="display:flex;gap:9px">
+          <button class="btn ghost" style="flex:1" onclick="setAccueil(false)">Accueil classique</button>
+          <button class="btn" style="flex:1" onclick="setAccueil(true)">Le fil</button>
+        </div>
+        <div id="accueilEtat" style="font-size:12.5px;color:var(--ink-3);margin-top:9px"></div>
+      </div>
     </div>
 
     <div class="reg-groupe" data-g="notifs">
@@ -3838,6 +4050,7 @@ function renderReglages(){
   if(CLOUD){ const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); cloudPull(); try{ loadConsignes(); }catch(e){} try{ loadLotsCoupons(); }catch(e){} try{ loadBonsCadeaux(); }catch(e){} try{ chargerGalerie(); }catch(e){} try{ chargerTheme(); }catch(e){} }
   else { const ta=document.getElementById("syncBox"); if(ta) ta.value=JSON.stringify(currentData()); }
   majRegOnglets();
+  majEtatAccueil();
   renderSecurity();
   renderNotifs();
   renderCA();
@@ -4661,6 +4874,20 @@ function pubDuMois(mois){
   const v=num(r[mois]);
   return v>0?v:0;
 }
+/* Choix de l'accueil. Reversible a tout moment, aucune donnee touchee :
+   c'est le meme CRM, lu autrement. */
+function setAccueil(fil){
+  DB.reglages=DB.reglages||{};
+  DB.reglages.accueilFil=!!fil;
+  saveDB();
+  majEtatAccueil();
+  toast(fil?"Accueil en fil activé":"Accueil classique rétabli");
+}
+function majEtatAccueil(){
+  const e=document.getElementById("accueilEtat");
+  if(e) e.textContent=(DB.reglages&&DB.reglages.accueilFil)?"Le fil est actif.":"L'accueil classique est actif.";
+}
+
 function setPubDuMois(mois,valeur){
   DB.reglages=DB.reglages||{};
   DB.reglages.pubParMois=DB.reglages.pubParMois||{};
