@@ -322,6 +322,22 @@
     background:var(--surface);border:1px solid var(--line);border-radius:14px;
     padding:13px 15px;margin-bottom:7px;cursor:pointer;transition:.15s}
   .fil-ev:hover{border-color:var(--line-2);transform:translateY(-1px)}
+  /* Une teinte par marque, pour trier du regard dans une liste dense.
+     Le liseret seul, trop fin, ne suffisait pas. La couleur ne remplace
+     jamais le nom de la marque, qui reste ecrit sur chaque ligne. */
+  /* La teinte est posee comme un voile translucide PAR-DESSUS la surface du
+     theme, et non calculee avec color-mix. En theme sombre, color-mix
+     produisait une carte claire sur fond noir : un rectangle blanc au
+     milieu de l'ecran. Un voile suit la surface quelle qu'elle soit. */
+  .fil-ev{border-left-width:3px}
+  .fil-ev[data-b="mybabyshoot"]{border-left-color:var(--baby);
+    background-image:linear-gradient(0deg,rgba(215,138,162,.16),rgba(215,138,162,.16))}
+  .fil-ev[data-b="maison-lumiere"]{border-left-color:var(--lumiere);
+    background-image:linear-gradient(0deg,rgba(176,141,87,.20),rgba(176,141,87,.20))}
+  .fil-ev[data-b="matt-la-photo"]{border-left-color:var(--matt);
+    background-image:linear-gradient(0deg,rgba(232,98,42,.16),rgba(232,98,42,.16))}
+  .fil-ev[data-b="mybabyshoot"] .mq{background:rgba(215,138,162,.22)}
+  .fil-ev[data-b="maison-lumiere"] .mq{background:rgba(176,141,87,.24)}
   .fil-ev .h{font-size:12.5px;color:var(--ink-3);padding-top:2px;font-variant-numeric:tabular-nums;font-weight:600}
   .fil-ev .co{min-width:0}
   .fil-ev .quoi{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;
@@ -2061,9 +2077,11 @@ function buildFil(){
   const auj=todayStr();
   const evs=[];   // { date, heure, rang, html }
 
-  /* --- seances (memes regles que l'accueil actuel : toutes marques) --- */
+  /* --- seances : l'onglet de marque s'applique, comme partout ailleurs.
+         Sur "Tout", les deux metiers se lisent ensemble et se distinguent
+         par la teinte. --- */
   DB.seances
-    .filter(s=>s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo"&&s.date>=auj)
+    .filter(s=>s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo"&&s.date>=auj&&passFilter(s.brand))
     .forEach(s=>{
       const c=s.clientId?clientById(s.clientId):null;
       /* Un paiement ne porte pas d'identifiant de seance : le seul lien sur
