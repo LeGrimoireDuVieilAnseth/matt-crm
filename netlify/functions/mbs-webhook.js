@@ -362,7 +362,7 @@ export default async (request) => {
   );
   if (!client) {
     client = {
-      id: uid(), brand: BRAND, name, status: "Client", type: typeLbl,
+      id: uid(), brand: BRAND, name, status: "Confirme", type: typeLbl,
       tel, email, insta: "", source: "Réservation site Mybabyshoot",
       origineWeb: String(md.origine || "Direct"),
       notes: "", fromSite: true, createdAt: now
@@ -371,7 +371,9 @@ export default async (request) => {
   } else {
     client.tel = client.tel || tel;
     client.email = client.email || email;
-    client.status = client.status || "Client";
+    /* Elle vient de payer : ce n'est plus un prospect a relancer. On ne
+       redescend jamais une fiche deja plus avancee. */
+    if (!["Seance faite", "Livre", "Archive"].includes(client.status)) client.status = "Confirme";
   }
 
   // Seance (apparait dans l'agenda du CRM).
