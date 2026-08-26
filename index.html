@@ -356,6 +356,32 @@
   .fil-nature-appel{color:#3E6E9C}
   .fil-nature-mariage{color:var(--lumiere)}
   .fil-nature-relance{color:#8A6BB5}
+  /* Le fil d'une cliente : memes codes que l'accueil, en plus compact,
+     puisqu'on est deja dans son dossier et que son nom est en haut. */
+  .ffil-arg{display:flex;gap:9px;margin:14px 0 4px}
+  .ffil-arg > div{flex:1;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:11px 13px}
+  .ffil-arg .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .ffil-arg .val{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-top:2px;
+    font-variant-numeric:tabular-nums}
+  .ffil-arg .du .val{color:var(--warn)}
+  .ffil-arg .ok .val{color:var(--ok)}
+  .ffil-sep{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--ink-3);margin:18px 2px 8px}
+  .ffil-ev{display:grid;grid-template-columns:78px 1fr auto;gap:11px;align-items:center;
+    background:var(--surface);border:1px solid var(--line);border-left-width:3px;
+    border-radius:12px;padding:11px 13px;margin-bottom:6px;cursor:pointer;transition:.15s}
+  .ffil-ev:hover{border-color:var(--line-2);transform:translateY(-1px)}
+  .ffil-ev .d{font-size:12px;color:var(--ink-3);font-weight:600;line-height:1.3}
+  .ffil-ev .c{min-width:0}
+  .ffil-ev .c .a{font-size:14.5px;font-weight:600;line-height:1.3}
+  .ffil-ev .c .b{font-size:12.5px;color:var(--ink-2);margin-top:1px}
+  .ffil-ev[data-n="seance"]{border-left-color:var(--baby)}
+  .ffil-ev[data-n="appel"]{border-left-color:var(--lumiere)}
+  .ffil-ev[data-n="argent"]{border-left-color:var(--ok)}
+  .ffil-ev[data-n="rappel"]{border-left-color:var(--ink-3)}
+
   .fil-vide{background:var(--surface);border:1px dashed var(--line-2);border-radius:14px;
     padding:18px 16px;font-size:14px;color:var(--ink-3);text-align:center}
 
@@ -2779,6 +2805,78 @@ function setMbsView(v){
 }
 
 /* ---------- fiche client (detail) ---------- */
+/* L'histoire d'une cliente en une seule liste datee : rendez-vous,
+   seances, paiements et rappels melanges dans l'ordre reel des choses.
+   A venir en premier, puis l'historique du plus recent au plus ancien. */
+function ficheFil(c, seances, pays, totalDu){
+  const auj=todayStr();
+  const evs=[];
+  const ligne=(o)=>'<div class="ffil-ev" data-n="'+o.nature+'" onclick="'+o.ouvrir+'">'
+    +'<div class="d">'+esc(o.quand)+'</div>'
+    +'<div class="c"><div class="a">'+esc(o.titre)+'</div>'
+      +(o.sous?'<div class="b">'+o.sous+'</div>':'')+'</div>'
+    +'<span class="badge '+o.style+'">'+esc(o.etat)+'</span></div>';
+
+  seances.forEach(s=>{
+    const appel = s.type==="RDV telephonique";
+    evs.push({ date:s.date+(s.time||""), html:ligne({
+      nature: appel?"appel":"seance",
+      quand: fmtDate(s.date)+(s.time?" · "+s.time.replace(":","h"):""),
+      titre: appel ? (s.objet||"Rendez-vous téléphonique") : (acc(s.type)||"Séance"),
+      sous: s.place?esc(s.place):"",
+      etat: acc(s.status), style: SEANCE_STYLE[s.status]||"neutral",
+      ouvrir: (appel?"openRdv('":"openSeance('")+s.id+"')" }) });
+  });
+
+  pays.forEach(p=>{
+    const t=num(p.total), encaisse=p.statut==="Solde"?t:num(p.acompte);
+    const reste=Math.max(0,t-encaisse);
+    evs.push({ date:(p.date||p.dueDate||""), html:ligne({
+      nature:"argent",
+      quand: p.date?fmtDate(p.date):"date inconnue",
+      titre: p.label||"Paiement",
+      sous: "<b>"+euros(encaisse)+" encaissés</b>"+(reste>0?" · "+euros(reste)+" attendus":" · rien en attente"),
+      etat: acc(p.statut), style: PAY_STYLE[p.statut]||"neutral",
+      ouvrir: "openPayEdit('"+p.id+"')" }) });
+  });
+
+  (DB.taches||[]).filter(t=>t.clientId===c.id).forEach(t=>{
+    evs.push({ date:(t.dueDate||""), enAttente:!t.done, html:ligne({
+      nature:"rappel",
+      quand: t.dueDate?fmtDate(t.dueDate):"sans date",
+      titre: t.title||"Rappel", sous:"",
+      etat: t.done?"Fait":"À faire", style: t.done?"ok":"warn",
+      ouvrir: "openTask('"+t.id+"')" }) });
+  });
+
+  /* Un rappel pas encore fait n'est jamais de l'histoire, meme si sa date
+     est passee : il reste a faire. Le ranger dans l'historique reviendrait
+     a le presenter comme regle. */
+  const aVenir=evs.filter(e=>e.date>=auj||e.enAttente).sort((a,b)=>a.date.localeCompare(b.date));
+  const passe =evs.filter(e=>e.date< auj&&!e.enAttente).sort((a,b)=>b.date.localeCompare(a.date));
+
+  /* L'argent en tete : "Reste du" etait relegue tout en bas de la fiche,
+     apres la liste des paiements. C'est pourtant ce qu'on vient verifier. */
+  const encaisse=pays.reduce((s,p)=>s+(p.statut==="Solde"?num(p.total):num(p.acompte)),0);
+  let out='<div class="ffil-arg">'
+    +'<div class="ok"><div class="lab">Encaissé</div><div class="val">'+euros(encaisse)+'</div></div>'
+    +'<div class="'+(totalDu>0?"du":"")+'"><div class="lab">Reste attendu</div><div class="val">'+euros(totalDu)+'</div></div>'
+    +'</div>';
+
+  out+='<div class="section-title"><h2 style="font-size:18px">Son histoire</h2>'
+    +'<button class="btn sm ghost" onclick="'+(c.brand==="maison-lumiere"
+        ? "openRdvEdit(null,'"+c.id+"')" : "openSeanceEdit(null,'"+c.id+"')")+'">Ajouter</button></div>';
+
+  if(!evs.length){
+    out+='<div class="fil-vide">Rien d\'enregistré pour cette cliente. Utilise Ajouter, ou le bouton Rappel en bas.</div>';
+    return out;
+  }
+  if(aVenir.length){ out+='<div class="ffil-sep">À venir</div>'; aVenir.forEach(e=>out+=e.html); }
+  if(passe.length){ out+='<div class="ffil-sep">Historique</div>'; passe.forEach(e=>out+=e.html); }
+  out+='<button class="btn ghost sm wide" style="margin-top:8px" onclick="openPayEdit(null,\''+c.id+'\')">Ajouter un paiement</button>';
+  return out;
+}
+
 function openFiche(id){
   const c=clientById(id); if(!c) return;
   const seances=seancesOfClient(id).sort((a,b)=>b.date.localeCompare(a.date));
@@ -2900,6 +2998,10 @@ function openFiche(id){
     h+=`</div>`;
   }
 
+  // Le fil de la cliente remplace les trois listes, si l'accueil en fil est actif.
+  if(DB.reglages && DB.reglages.accueilFil){
+    h+=ficheFil(c, seances, pays, totalDu);
+  } else {
   // RDV telephonique (Maison Lumiere) OU seances (autres marques)
   if(c.brand==="maison-lumiere"){
     const rdvs=seances.filter(s=>s.type==="RDV telephonique").sort((a,b)=>(b.date+(b.time||"")).localeCompare(a.date+(a.time||"")));
@@ -2940,6 +3042,7 @@ function openFiche(id){
     });
     if(totalDu>0) h+=`<div style="text-align:right;font-weight:600;font-size:14px;margin-top:4px;color:var(--warn)">Reste dû : ${euros(totalDu)}</div>`;
   } else h+=`<div style="color:var(--ink-3);font-size:14px;padding:4px 2px 8px">Aucun paiement enregistré.</div>`;
+  }
 
   h+=`<div class="divider"></div>
     <div style="display:flex;gap:10px;">
