@@ -261,6 +261,23 @@
     display:grid;place-items:center;box-shadow:0 8px 24px rgba(20,20,24,.28);transition:.18s;
   }
   .fab:hover{transform:translateY(-2px) rotate(90deg);}
+  /* Posee juste au-dessus du bouton plus : 56 px de hauteur, plus 12 px
+     d'ecart. Volontairement plus petite et plus discrete que lui, parce
+     que creer reste l'action principale. */
+  .fab-chat{
+    position:fixed;right:22px;
+    bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 16px + 56px + 12px);
+    z-index:35;width:48px;height:48px;border-radius:16px;
+    background:var(--surface);color:var(--ink);border:1px solid var(--line-2);cursor:pointer;
+    display:grid;place-items:center;box-shadow:0 6px 18px rgba(20,20,24,.18);transition:.18s;
+  }
+  .fab-chat:hover{transform:translateY(-2px);border-color:var(--ink-3)}
+  /* La hauteur de la bulle est posee depuis le code : elle depend de la
+     presence du bouton plus, que le CSS seul ne connait pas. */
+  .fab-chat svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.9;fill:none;
+    stroke-linecap:round;stroke-linejoin:round}
+  .fab-chat .pt{position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;
+    background:var(--danger);border:2px solid var(--bg);display:none}
   .fab svg{width:26px;height:26px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round;}
 
   /* ---------- forms ---------- */
@@ -540,7 +557,11 @@
 
   /* chat du site (cote CRM) */
   .crm-chat-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;font-size:13.5px;}
-  .crm-chat-msgs{display:flex;flex-direction:column;gap:9px;padding:4px 0 12px;}
+  /* La boite defile toute seule. Avant, elle poussait la page entiere, et
+     le recadrage automatique entrainait tout le document avec lui. */
+  .crm-chat-msgs{display:flex;flex-direction:column;gap:9px;padding:4px 0 12px;
+    overflow-y:auto;overscroll-behavior:contain;
+    min-height:220px;max-height:calc(100vh - 330px);max-height:calc(100dvh - 330px);}
   .cmsg{max-width:84%;padding:10px 13px;border-radius:14px;font-size:14.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;}
   .cmsg.visiteur{background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px;align-self:flex-start;}
   .cmsg.ia{background:var(--fill);color:var(--fill-ink);border-bottom-right-radius:4px;align-self:flex-end;opacity:.92;}
@@ -754,6 +775,10 @@
 </nav>
 
 <!-- FAB -->
+<button class="fab-chat" id="fabChat" onclick="openChatList()" aria-label="Chat du site">
+  <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>
+  <span class="pt" id="fabChatDot"></span>
+</button>
 <button class="fab" id="fab" onclick="openAddMenu()" aria-label="Ajouter">
   <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
 </button>
@@ -1015,6 +1040,12 @@ function setView(id){
   if(id!=="chat"){ try{ stopChatPoll(); }catch(e){} }
   const showFab=["home","clients","agenda","paiements","rappels","demandes"].includes(id);
   document.getElementById("fab").style.display=showFab?"grid":"none";
+  // La bulle suit les memes ecrans, sauf le chat lui-meme : y proposer d'y
+  // aller n'aurait pas de sens.
+  /* La bulle accompagne le bouton plus : elle se montre exactement sur les
+     memes ecrans que lui. Ailleurs, elle flotterait au-dessus du vide. */
+  const bulle=document.getElementById("fabChat");
+  if(bulle) bulle.style.display=showFab?"grid":"none";
   window.scrollTo(0,0);
 }
 function goHome(){ buildHome(); setView("home"); }
@@ -1607,12 +1638,24 @@ function renderChatConv(conv){
     +`<button class="btn sm ghost" style="margin-left:auto" onclick="setChatMode('${manuel?"ia":"matt"}')">${manuel?"Rendre la main à l'assistant":"Reprendre la main"}</button>`
     +`<button class="btn sm danger" onclick="deleteChatConv()">Supprimer</button>`;
   const box=document.getElementById("crmChatMsgs");
+  /* On note l'etat AVANT de reecrire le contenu : reecrire remet le
+     defilement a zero, et la conversation se rafraichit toutes les six
+     secondes. Sans ces trois lignes, Matt est ramene de force en bas
+     chaque fois qu'il relit un message plus haut. */
+  const etaitEnBas = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const positionAvant = box.scrollTop;
+  const nouvelleConv = box.dataset.conv !== String(chatConvId||"");
+
   box.innerHTML=(conv.messages||[]).map(m=>{
     const cls=m.role==="user"?"visiteur":(m.role==="matt"?"matt":"ia");
     const who=m.role==="user"?"Visiteur":(m.role==="matt"?"Toi":"Assistant");
     return `<div class="cmsg ${cls}"><div class="cmsg-who">${who}</div>${esc(m.content).replace(/\n/g,"<br>")}</div>`;
   }).join("");
-  box.scrollIntoView({block:"end"});
+
+  box.dataset.conv = String(chatConvId||"");
+  // On ne descend que si on y etait deja, ou si la conversation vient
+  // d'etre ouverte. Jamais sinon.
+  box.scrollTop = (nouvelleConv || etaitEnBas) ? box.scrollHeight : positionAvant;
 }
 
 /* renommer une conversation a la main (si l'assistant n'a pas eu le nom) */
@@ -2040,6 +2083,8 @@ async function checkChatUnread(){
   }
   const dot=document.getElementById("chatDot");
   if(dot) dot.style.display=total?"block":"none";
+  const dotBulle=document.getElementById("fabChatDot");
+  if(dotBulle) dotBulle.style.display=total?"block":"none";
 }
 
 function toast(msg){
