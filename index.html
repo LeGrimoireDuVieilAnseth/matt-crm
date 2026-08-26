@@ -2335,11 +2335,26 @@ function buildFil(){
   const auj=todayStr();
   const evs=[];   // { date, heure, rang, html }
 
+  /* Les mariages sont determines d'abord : ils servent ensuite a ecarter la
+     seance qui decrit le meme evenement. Un mariage et sa seance tombent le
+     meme jour, le fil les affichait tous les deux. */
+  const signes=["Confirme","Seance faite","Livre"];
+  const mariages = passFilter("maison-lumiere")
+    ? DB.clients.filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=auj&&signes.includes(c.status))
+    : [];
+  // Cle cliente + jour : c'est ce couple qui fait le doublon.
+  const jourDeMariage = new Set(mariages.map(c=>c.id+"|"+c.eventDate));
+
   /* --- seances : l'onglet de marque s'applique, comme partout ailleurs.
          Sur "Tout", les deux metiers se lisent ensemble et se distinguent
          par la teinte. --- */
   DB.seances
     .filter(s=>s.status!=="Annulee"&&s.type!=="RDV telephonique"&&s.type!=="Indispo"&&s.date>=auj&&passFilter(s.brand))
+    /* On n'ecarte la seance que si l'entree Mariage existe VRAIMENT pour
+       cette cliente ce jour-la. Un mariage encore prospect n'en produit
+       pas : sa seance doit rester, sans quoi l'evenement disparaitrait du
+       fil. Une seance d'engagement, a une autre date, reste elle aussi. */
+    .filter(s=>!(s.clientId && jourDeMariage.has(s.clientId+"|"+s.date)))
     .forEach(s=>{
       const c=s.clientId?clientById(s.clientId):null;
       /* Un paiement ne porte pas d'identifiant de seance : le seul lien sur
@@ -2396,17 +2411,13 @@ function buildFil(){
         ouvrir:"openPayEdit('"+p.id+"')" }) });
   });
 
-  /* --- mariages signes --- */
-  if(passFilter("maison-lumiere")){
-    const signes=["Confirme","Seance faite","Livre"];
-    DB.clients.filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=auj&&signes.includes(c.status))
-      .forEach(c=>{
-        evs.push({ date:c.eventDate, heure:"", rang:4,
-          html:filEvenement({ nature:"mariage", libelle:"Mariage", brand:"maison-lumiere",
-            nom:c.name, detail:esc(fmtDate(c.eventDate))+" · "+esc(countdown(c.eventDate)),
-            ouvrir:"openFiche('"+c.id+"')" }) });
-      });
-  }
+  /* --- mariages signes, calcules plus haut --- */
+  mariages.forEach(c=>{
+    evs.push({ date:c.eventDate, heure:"", rang:4,
+      html:filEvenement({ nature:"mariage", libelle:"Mariage", brand:"maison-lumiere",
+        nom:c.name, detail:esc(fmtDate(c.eventDate))+" · "+esc(countdown(c.eventDate)),
+        ouvrir:"openFiche('"+c.id+"')" }) });
+  });
 
   evs.sort((a,b)=>(a.date+String(a.rang)+a.heure).localeCompare(b.date+String(b.rang)+b.heure));
 
