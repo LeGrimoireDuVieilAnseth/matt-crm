@@ -358,6 +358,88 @@
   .fil-nature-relance{color:#8A6BB5}
   /* Le fil d'une cliente : memes codes que l'accueil, en plus compact,
      puisqu'on est deja dans son dossier et que son nom est en haut. */
+  /* Barre de tri de la liste des clients. */
+  /* Chiffres : deux valeurs en tete, le reste en second plan. */
+  /* Paiements : un dossier par cliente. */
+  .pa-tete{display:flex;gap:9px;margin:4px 0 12px}
+  .pa-tete > div{flex:1;background:var(--surface);border:1px solid var(--line);
+    border-radius:16px;padding:14px 15px}
+  .pa-tete .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .pa-tete .val{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:3px;
+    font-variant-numeric:tabular-nums;line-height:1.1}
+  .pa-tete .sous{font-size:12px;color:var(--ink-3);margin-top:3px}
+  .pa-tete .verse .val{color:var(--ok)}
+  .pa-tete .du .val{color:var(--warn)}
+
+  .doss{background:var(--surface);border:1px solid var(--line);border-left-width:3px;
+    border-radius:16px;padding:13px 14px;margin-bottom:8px;transition:.15s}
+  .doss:hover{border-color:var(--line-2)}
+  .doss[data-b="mybabyshoot"]{border-left-color:var(--baby)}
+  .doss[data-b="maison-lumiere"]{border-left-color:var(--lumiere)}
+  .doss-h{display:flex;align-items:center;gap:11px;margin-bottom:10px;cursor:pointer}
+  .doss-h .tx{flex:1;min-width:0}
+  .doss-h .tx b{display:block;font-size:15px;font-weight:600;line-height:1.25}
+  .doss-h .tx span{display:block;font-size:12.5px;color:var(--ink-2);margin-top:1px}
+  .doss-jauge{height:7px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-bottom:9px}
+  .doss-jauge i{display:block;height:100%;background:var(--ok);border-radius:99px}
+  .doss-chiffres{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+  .doss-chiffres span{color:var(--ink-3)}
+  .doss-chiffres b{font-weight:600;font-variant-numeric:tabular-nums}
+  .doss-chiffres .v b{color:var(--ok)}
+  .doss-chiffres .r b{color:var(--warn)}
+  /* Le detail, des qu'un dossier contient plus d'un paiement : un total
+     seul pourrait cacher une seance soldee a cote d'une impayee. */
+  .doss-detail{margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+  .doss-l{display:flex;align-items:center;gap:9px;padding:6px 0;cursor:pointer}
+  .doss-l:hover .a{text-decoration:underline}
+  .doss-l .a{flex:1;min-width:0;font-size:13px;color:var(--ink-2)}
+  .doss-l .m{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;flex:none}
+  .doss-l .badge{flex:none}
+
+  .ch-tete{display:flex;gap:9px;margin:4px 0 10px}
+  .ch-tete > div{flex:1;background:var(--surface);border:1px solid var(--line);
+    border-radius:16px;padding:14px 15px}
+  .ch-tete .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .ch-tete .val{font-size:27px;font-weight:700;letter-spacing:-.02em;margin-top:3px;
+    font-variant-numeric:tabular-nums;line-height:1.1}
+  .ch-tete .sous{font-size:12px;color:var(--ink-3);margin-top:3px;line-height:1.4}
+  .ch-tete .caisse .val{color:var(--ok)}
+  .ch-tete .attente .val{color:var(--warn)}
+  .ch-note{font-size:13px;color:var(--ink-2);line-height:1.55;background:var(--surface-2);
+    border-radius:12px;padding:12px 14px;margin-bottom:14px}
+  .ch-sec{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:4px}
+  .ch-sec > div{flex:1 1 30%;background:var(--surface-2);border-radius:12px;padding:10px 12px}
+  .ch-sec .lab{font-size:11px;color:var(--ink-3);font-weight:600}
+  .ch-sec .val{font-size:17px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums}
+
+  /* Une carte par mois ou par marque, au lieu d'un tableau a sept colonnes. */
+  .ch-carte{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;margin-bottom:8px}
+  .ch-carte .h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+    margin-bottom:9px}
+  .ch-carte .h b{font-size:15.5px;font-weight:600}
+  .ch-carte .h .cs{font-size:12.5px;color:var(--ink-3)}
+  .ch-carte .g{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px}
+  .ch-carte .g > div{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+  .ch-carte .g span{color:var(--ink-3)}
+  .ch-carte .g b{font-weight:600;font-variant-numeric:tabular-nums}
+  .ch-carte .g .fort b{color:var(--ok)}
+
+  .tri-bar{display:flex;align-items:center;gap:7px;margin:2px 0 12px;flex-wrap:wrap}
+  .tri-lab{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-3);margin-right:2px}
+  .tri-b{font-family:inherit;font-size:13px;font-weight:500;color:var(--ink-2);
+    background:var(--surface);border:1px solid var(--line);border-radius:999px;
+    padding:6px 13px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .tri-b:hover{border-color:var(--line-2)}
+  .tri-b.on{background:var(--fill);color:var(--fill-ink);border-color:var(--fill)}
+  .tri-sens{font-family:inherit;font-size:13px;color:var(--ink-2);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;
+    white-space:nowrap}
+  .tri-sens:hover{border-color:var(--line-2)}
+
   .ffil-arg{display:flex;gap:9px;margin:14px 0 4px}
   .ffil-arg > div{flex:1;background:var(--surface);border:1px solid var(--line);
     border-radius:12px;padding:11px 13px}
@@ -557,8 +639,10 @@
 <section id="visites" class="view">
   <div class="pill-row" id="visPills"></div>
   <div class="stat-grid" id="visStats"></div>
-  <div class="section-title"><h2>Visiteurs jour par jour</h2></div>
+  <div class="section-title"><h2 id="visGraphTitre">Visiteurs jour par jour</h2></div>
+  <div class="pill-row" id="visGroupes"></div>
   <div id="visGraph"></div>
+  <div id="visGraphNote" class="aide" style="margin-top:-4px"></div>
   <div class="section-title"><h2 id="visDetailTitre">Jour par jour</h2></div>
   <div id="visDetail"></div>
   <div class="section-title"><h2>D'où viennent-ils</h2></div>
@@ -936,11 +1020,52 @@ function openVisites(){ setView("visites"); chargerVisites(); }
    dans la journee, le serveur ne tient que des compteurs.
    ============================================================ */
 const VIS_API = "/.netlify/functions/mbs-stats";
-const VIS_PERIODES = [["7","7 jours"],["30","30 jours"],["90","3 mois"],["365","1 an"]];
+const VIS_PERIODES = [["7","7 jours"],["30","30 jours"],["90","3 mois"],["365","1 an"],["0","Tout"]];
+/* Le regroupement est independant de la periode : on peut vouloir un an
+   jour par jour, ou trente jours semaine par semaine. */
+const VIS_GROUPES = [["jour","Jour"],["semaine","Semaine"],["mois","Mois"],["annee","Année"]];
+let visGroupe = "jour";
 let visPeriode = "30";
 let visData = null;
 
 function setVisPeriode(p){ visPeriode = p; renderVisites(); }
+function setVisGroupe(g){ visGroupe = g; renderVisites(); }
+
+/* Regroupe des jours bruts selon le pas demande. Renvoie du plus ancien au
+   plus recent, avec un libelle long pour le tableau et un court pour l'axe
+   du graphique. */
+function grouperVisites(jours, groupe){
+  const paquets = new Map();
+  jours.forEach(function(j){
+    let cle, libelle, court;
+    if(groupe === "annee"){
+      cle = j.jour.slice(0,4);
+      libelle = "Année " + cle;
+      court = cle;
+    } else if(groupe === "mois"){
+      cle = j.jour.slice(0,7);
+      libelle = MOIS[Number(j.jour.slice(5,7))-1] + " " + j.jour.slice(0,4);
+      court = MOIS[Number(j.jour.slice(5,7))-1].slice(0,4) + ".";
+    } else if(groupe === "semaine"){
+      const d = parseDate(j.jour) || new Date(j.jour);
+      const lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay()+6)%7));
+      cle = lundi.toISOString().slice(0,10);
+      libelle = "Semaine du " + fmtDate(cle);
+      court = fmtDateShort(cle);
+    } else {
+      cle = j.jour;
+      libelle = fmtDate(j.jour);
+      court = fmtDateShort(j.jour);
+    }
+    if(!paquets.has(cle)) paquets.set(cle, { cle:cle, libelle:libelle, court:court, visiteurs:0, vues:0, duree:0, mesures:0 });
+    const p = paquets.get(cle);
+    p.visiteurs += Number(j.visiteurs)||0;
+    p.vues      += Number(j.vues)||0;
+    p.duree     += Number(j.duree)||0;
+    p.mesures   += Number(j.mesures)||0;
+  });
+  return [...paquets.values()].sort(function(a,b){ return a.cle.localeCompare(b.cle); });
+}
 
 async function chargerVisites(){
   document.getElementById("visStats").innerHTML =
@@ -959,6 +1084,11 @@ function renderVisites(){
     VIS_PERIODES.map(function(p){
       return '<button class="pill ' + (visPeriode===p[0]?"on":"") + '" onclick="setVisPeriode(\'' + p[0] + '\')">' + p[1] + '</button>';
     }).join("");
+  const boiteG = document.getElementById("visGroupes");
+  if(boiteG) boiteG.innerHTML =
+    VIS_GROUPES.map(function(g){
+      return '<button class="pill ' + (visGroupe===g[0]?"on":"") + '" onclick="setVisGroupe(\'' + g[0] + '\')">' + g[1] + '</button>';
+    }).join("");
 
   if(visData === null){
     box.innerHTML = '<div class="stat"><div class="lab">Mesure indisponible</div><div class="foot">Vérifie ta connexion, puis rouvre cet écran.</div></div>';
@@ -970,7 +1100,9 @@ function renderVisites(){
   }
 
   // on ne garde que la periode choisie
-  const limite = new Date(Date.now() - Number(visPeriode) * 86400000).toISOString().slice(0,10);
+  // "Tout" = pas de limite dans le temps
+  const limite = visPeriode === "0" ? "0000-00-00"
+    : new Date(Date.now() - Number(visPeriode) * 86400000).toISOString().slice(0,10);
   const jours = visData.filter(function(j){ return j.jour >= limite; })
                        .sort(function(a,b){ return a.jour.localeCompare(b.jour); });
 
@@ -995,49 +1127,37 @@ function renderVisites(){
     '<div class="stat"><div class="lab">Temps moyen</div><div class="num euro">' + dureeLisible(moyenne) + '</div><div class="foot">sur ' + mesures + ' mesure' + (mesures>1?"s":"") + '</div></div>' +
     '<div class="stat"><div class="lab">Jours mesurés</div><div class="num">' + jours.length + '</div><div class="foot">depuis le ' + fmtDateShort(jours[0].jour) + '</div></div>';
 
-  document.getElementById("visGraph").innerHTML = courbeVisites(jours);
-  document.getElementById("visDetail").innerHTML = tableauVisites(jours);
+  const paquets = grouperVisites(jours, visGroupe);
+  const motGroupe = { jour:"Jour par jour", semaine:"Semaine par semaine",
+                      mois:"Mois par mois", annee:"Année par année" }[visGroupe];
+  const tg = document.getElementById("visGraphTitre");
+  if(tg) tg.textContent = "Visiteurs · " + motGroupe.toLowerCase();
+  const td = document.getElementById("visDetailTitre");
+  if(td) td.textContent = motGroupe;
+
+  document.getElementById("visGraph").innerHTML = courbeVisites(paquets);
+  /* Une seule barre n'est pas une erreur, mais ca ne se devine pas : on
+     explique plutot que de laisser un graphique muet. */
+  const note = document.getElementById("visGraphNote");
+  if(note) note.textContent = paquets.length <= 1
+    ? "Un seul point : la période observée ne couvre qu'un " + visGroupe + ". Choisis un regroupement plus fin, ou une période plus longue."
+    : "";
+  document.getElementById("visDetail").innerHTML = tableauVisites(paquets);
   document.getElementById("visSources").innerHTML = barresCumul(jours, "sources", visiteurs);
   document.getElementById("visClics").innerHTML = barresCumul(jours, "clics", 0);
 }
 
 /* Regroupe les jours selon la periode affichee, pour que le tableau reste
    lisible : 30 lignes se parcourent, 365 non. */
-function tableauVisites(jours){
-  const parSemaine = visPeriode === "90", parMois = visPeriode === "365";
-  const titre = parMois ? "Mois par mois" : (parSemaine ? "Semaine par semaine" : "Jour par jour");
-  const t = document.getElementById("visDetailTitre");
-  if(t) t.textContent = titre;
-
-  const paquets = new Map();
-  jours.forEach(function(j){
-    let cle, libelle;
-    if(parMois){
-      cle = j.jour.slice(0,7);
-      libelle = MOIS[Number(j.jour.slice(5,7))-1] + " " + j.jour.slice(0,4);
-    } else if(parSemaine){
-      // on rattache chaque jour au lundi de sa semaine
-      const d = parseDate(j.jour) || new Date(j.jour);
-      const lundi = new Date(d); lundi.setDate(d.getDate() - ((d.getDay()+6)%7));
-      cle = lundi.toISOString().slice(0,10);
-      libelle = "Semaine du " + fmtDateShort(cle).replace(/.$/, "");
-    } else {
-      cle = j.jour;
-      libelle = fmtDate(j.jour);
-    }
-    if(!paquets.has(cle)) paquets.set(cle, { cle:cle, libelle:libelle, visiteurs:0, vues:0, duree:0, mesures:0 });
-    const p = paquets.get(cle);
-    p.visiteurs += Number(j.visiteurs)||0;
-    p.vues      += Number(j.vues)||0;
-    p.duree     += Number(j.duree)||0;
-    p.mesures   += Number(j.mesures)||0;
-  });
-
-  const lignes = [...paquets.values()].sort(function(a,b){ return b.cle.localeCompare(a.cle); });
+/* Recoit les memes paquets que la courbe : le tableau et le graphique ne
+   peuvent donc jamais raconter deux choses differentes. */
+function tableauVisites(paquets){
+  const enTete = { jour:"Jour", semaine:"Semaine", mois:"Mois", annee:"Année" }[visGroupe] || "Jour";
+  const lignes = paquets.slice().sort(function(a,b){ return b.cle.localeCompare(a.cle); });
   if(!lignes.length) return "";
 
   return '<div class="moisbox"><table class="moistab">'
-    + '<tr><th>' + (parMois ? "Mois" : (parSemaine ? "Semaine" : "Jour")) + '</th>'
+    + '<tr><th>' + enTete + '</th>'
     + '<th class="n">Visiteurs</th><th class="n">Pages vues</th><th class="n">Temps moyen</th></tr>'
     + lignes.map(function(l){
         return '<tr><td>' + esc(l.libelle) + '</td>'
@@ -1054,6 +1174,8 @@ function dureeLisible(s){
   return Math.floor(s/60) + " min " + String(s%60).padStart(2,"0");
 }
 
+/* Recoit des paquets deja regroupes : un point par jour, semaine, mois ou
+   annee selon ce que Matt a choisi. */
 function courbeVisites(jours){
   const L=760, H=190, mg={g:38,d:10,h:12,b:24};
   const v = jours.map(function(j){ return Number(j.visiteurs)||0; });
@@ -1072,7 +1194,7 @@ function courbeVisites(jours){
   const pas = Math.max(1, Math.ceil(jours.length/7));
   jours.forEach(function(j,i){
     if(i % pas) return;
-    g += '<text x="'+x(i).toFixed(1)+'" y="'+(H-8)+'" class="axe" text-anchor="middle">'+fmtDateShort(j.jour)+'</text>';
+    g += '<text x="'+x(i).toFixed(1)+'" y="'+(H-8)+'" class="axe" text-anchor="middle">'+esc(j.court||fmtDateShort(j.jour))+'</text>';
   });
   return '<div class="graphbox"><svg viewBox="0 0 '+L+' '+H+'">'+g+'</svg></div>';
 }
@@ -1216,6 +1338,25 @@ function renderMarques(){
     <td class="n"><b>${euros(b.vendu)}</b></td>
     <td class="n">${euros(b.caisse)}</td>
     <td class="n">${b.reste?'<span class="avenir">'+euros(b.reste)+"</span>":""}</td></tr>`;
+  if(DB.reglages && DB.reglages.accueilFil){
+    box.innerHTML=bilans.map(function(b){
+      return '<div class="ch-carte">'
+        +'<div class="h"><b>'+esc(BRANDS[b.marque].name)+'</b><span class="cs">'+(b.nb||0)+' vente'+(b.nb>1?"s":"")+'</span></div>'
+        +'<div class="g">'
+        +'<div class="fort"><span>Encaissé</span><b>'+euros(b.caisse)+'</b></div>'
+        +'<div><span>Valeur vendue</span><b>'+euros(b.vendu)+'</b></div>'
+        +(b.reste?'<div><span>Reste à encaisser</span><b>'+euros(b.reste)+'</b></div>':'')
+        +'</div></div>';
+    }).join("")
+    +'<div class="ch-carte" style="background:var(--surface-2)">'
+      +'<div class="h"><b>Les deux marques</b><span class="cs">'+t.nb+' vente'+(t.nb>1?"s":"")+'</span></div>'
+      +'<div class="g">'
+      +'<div class="fort"><span>Encaissé</span><b>'+euros(t.caisse)+'</b></div>'
+      +'<div><span>Valeur vendue</span><b>'+euros(t.vendu)+'</b></div>'
+      +(t.reste?'<div><span>Reste à encaisser</span><b>'+euros(t.reste)+'</b></div>':'')
+      +'</div></div>';
+    return;
+  }
   box.innerHTML=`<div class="moisbox"><table class="moistab">
     <tr><th>Marque</th><th class="n">Ventes</th><th class="n">Valeur vendue</th>
         <th class="n">Encaissé</th><th class="n">Reste à encaisser</th></tr>
@@ -1232,6 +1373,24 @@ function renderChiffres(){
   const reste=ventes.reduce((s,v)=>s+v.reste,0);
   const futures=ventes.filter(v=>v.dateSeance&&v.dateSeance>=auj).length;
 
+  if(DB.reglages && DB.reglages.accueilFil){
+    /* Memes nombres, hierarchie differente : ce qui est rentre et ce qu'on
+       attend passent devant, la valeur vendue devient un rappel. */
+    document.getElementById("chiffresStats").innerHTML=
+      '<div class="ch-tete">'
+      +'<div class="caisse"><div class="lab">Rentré en caisse</div><div class="val">'+euros(encaisse)+'</div>'
+        +'<div class="sous">'+nomMarqueActive()+'</div></div>'
+      +'<div class="'+(reste>0?"attente":"")+'"><div class="lab">Reste à encaisser</div><div class="val">'+euros(reste)+'</div>'
+        +'<div class="sous">sur '+futures+' séance'+(futures>1?"s":"")+' à venir</div></div>'
+      +'</div>'
+      +'<div class="ch-note"><b>'+euros(vendu)+'</b> de valeur vendue sur '+ventes.length+' vente'+(ventes.length>1?"s":"")
+        +'. Ce n\'est pas de l\'argent sur ton compte : c\'est ce que tes clientes ont commandé, acomptes et soldes confondus.</div>'
+      +'<div class="ch-sec">'
+      +'<div><div class="lab">Panier moyen</div><div class="val">'+euros(ventes.length?vendu/ventes.length:0)+'</div></div>'
+      +'<div><div class="lab">Séances à venir</div><div class="val">'+futures+'</div></div>'
+      +'<div><div class="lab">Ventes</div><div class="val">'+ventes.length+'</div></div>'
+      +'</div>';
+  } else
   document.getElementById("chiffresStats").innerHTML=`
     <div class="stat"><div class="lab">Valeur vendue</div><div class="num euro">${euros(vendu)}</div><div class="foot">${ventes.length} vente${ventes.length>1?"s":""}</div></div>
     <div class="stat"><div class="lab">Déjà encaissé</div><div class="num euro">${euros(encaisse)}</div><div class="foot">${nomMarqueActive()}</div></div>
@@ -1249,6 +1408,23 @@ function renderChiffres(){
 
   const box=document.getElementById("chiffresMois");
   if(!lignes.length){ box.innerHTML=""; return; }
+  if(DB.reglages && DB.reglages.accueilFil){
+    /* Une carte par mois : chaque nombre garde son etiquette a cote de lui,
+       au lieu de dependre d'un en-tete sorti de l'ecran. */
+    box.innerHTML=lignes.slice().reverse().map(function(l){
+      const nom=MOIS[Number(l.mois.slice(5,7))-1]+" "+l.mois.slice(0,4);
+      return '<div class="ch-carte">'
+        +'<div class="h"><b>'+nom+'</b><span class="cs">'+(l.nb||0)+' vente'+(l.nb>1?"s":"")+'</span></div>'
+        +'<div class="g">'
+        +'<div class="fort"><span>Rentré en caisse</span><b>'+euros(l.caisse)+'</b></div>'
+        +'<div><span>Valeur vendue</span><b>'+euros(l.vendu)+'</b></div>'
+        +'<div><span>Acomptes</span><b>'+euros(l.acomptes)+'</b></div>'
+        +'<div><span>Soldes</span><b>'+euros(l.soldes)+'</b></div>'
+        +(l.aVenir?'<div><span>dont à venir</span><b>'+euros(l.aVenir)+'</b></div>':'')
+        +'</div></div>';
+    }).join("");
+    return;
+  }
   box.innerHTML=`<div class="moisbox"><table class="moistab">
     <tr><th>Mois</th><th class="n">Ventes</th><th class="n">Valeur vendue</th><th class="n">Acomptes</th>
         <th class="n">Soldes</th><th class="n">Rentré en caisse</th><th class="n">dont à venir</th></tr>
@@ -2086,9 +2262,9 @@ function buildHome(){
    ===================================================================== */
 function filEvenement(o){
   const acte = o.actes ? '<div class="actes">'+o.actes+'</div>' : "";
-  // Sans heure connue, un tiret : mieux qu'une heure inventee.
+  // Sans heure connue, un point median : mieux qu'une heure inventee.
   return '<div class="fil-ev" data-b="'+(o.brand||"")+'" onclick="'+o.ouvrir+'">'
-    + '<div class="h">'+esc(o.heure||"—")+'</div>'
+    + '<div class="h">'+esc(o.heure||"·")+'</div>'
     + '<div class="co">'
       + '<div class="quoi fil-nature-'+o.nature+'">'+esc(o.libelle)+'</div>'
       + '<div class="nom">'+esc(o.nom)+(o.brand&&BRANDS[o.brand]?'<span class="mq">'+esc(BRANDS[o.brand].name)+'</span>':"")+'</div>'
@@ -2320,6 +2496,63 @@ function countdown(dateStr){
   return "il y a "+(-d)+" j";
 }
 
+/* Tri de la liste des clients. Retenu d'une fois sur l'autre : c'est une
+   habitude de travail, pas un reglage qu'on vient rechercher. */
+function triClients(){
+  const t=(DB.reglages||{}).triClients||"seance";
+  return ["seance","reservation","nom"].includes(t) ? t : "seance";
+}
+function triClientsDesc(){ return !!(DB.reglages||{}).triClientsDesc; }
+function setTriClients(t){
+  DB.reglages=DB.reglages||{}; DB.reglages.triClients=t;
+  saveDB(); renderClients();
+}
+function inverserTriClients(){
+  DB.reglages=DB.reglages||{};
+  DB.reglages.triClientsDesc=!DB.reglages.triClientsDesc;
+  saveDB(); renderClients();
+}
+
+/* La seance qui compte pour une cliente : la prochaine a venir, et a
+   defaut la derniere passee. On renvoie laquelle des deux, parce que la
+   ligne doit pouvoir le dire au lieu de laisser deviner. */
+function seanceRepere(id){
+  const ss=seancesOfClient(id).filter(s=>s.type!=="RDV telephonique"&&s.status!=="Annulee");
+  const auj=todayStr();
+  const suivante=ss.filter(s=>s.date>=auj).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  if(suivante) return { date:suivante.date, aVenir:true };
+  const derniere=ss.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+  return derniere ? { date:derniere.date, aVenir:false } : null;
+}
+
+/* Date de reservation au format AAAA-MM-JJ, pour pouvoir trier dessus.
+   Meme regle d'origine que la ligne "Reserve le" de la fiche. */
+function dateReservationISO(c){
+  if(!c) return "";
+  const p0=(DB.paiements||[]).filter(p=>p.clientId===c.id&&p.date)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
+  if(p0&&p0.date) return String(p0.date).slice(0,10);
+  if(c.createdAt){ const d=new Date(c.createdAt); if(!isNaN(d)) return d.toISOString().slice(0,10); }
+  return "";
+}
+
+/* Cle de tri. rang 1 = pas de date connue, toujours renvoye en fin de
+   liste, dans un sens comme dans l'autre. */
+function cleTriClient(c,tri){
+  const ts=(d)=>{ const x=Date.parse(d); return isNaN(x)?null:x; };
+  if(tri==="nom") return { rang:0, val:(c.name||"").toLocaleLowerCase("fr") };
+  if(tri==="reservation"){
+    const t=ts(dateReservationISO(c));
+    return t===null ? { rang:1, val:0 } : { rang:0, val:-t };   // recent d'abord
+  }
+  const s=seanceRepere(c.id);
+  const t=s?ts(s.date):null;
+  if(t===null) return { rang:1, val:0 };
+  const auj=ts(todayStr());
+  // a venir en premier, du plus proche ; puis les passees, de la plus recente
+  return s.aVenir ? { rang:0, val:t-auj } : { rang:0, val:1e12+(auj-t) };
+}
+
 function renderClients(){
   // onglets de marque (les 3 categories)
   buildBrandbar();
@@ -2370,8 +2603,19 @@ function renderClients(){
     return blob.includes(q);
   });
 
-  // tri : mariages tries par date d'evenement, sinon par nom
-  if(FILTER==="maison-lumiere"){
+  // tri : celui choisi dans la barre, quand le fil est actif
+  if(DB.reglages && DB.reglages.accueilFil){
+    const tri=triClients(), sens=triClientsDesc()?-1:1;
+    list.sort((a,b)=>{
+      const ka=cleTriClient(a,tri), kb=cleTriClient(b,tri);
+      if(ka.rang!==kb.rang) return ka.rang-kb.rang;
+      const d = (typeof ka.val==="string")
+        ? ka.val.localeCompare(kb.val,"fr")
+        : ka.val-kb.val;
+      if(d) return d*sens;
+      return (a.name||"").localeCompare(b.name||"","fr");
+    });
+  } else if(FILTER==="maison-lumiere"){
     list.sort((a,b)=>{
       const ea=a.eventDate||"9999", eb=b.eventDate||"9999";
       if(ea!==eb) return ea.localeCompare(eb);
@@ -2391,9 +2635,36 @@ function renderClients(){
     </div>`;
     return;
   }
-  box.innerHTML=list.map(c=>{
+  const filActif=!!(DB.reglages && DB.reglages.accueilFil);
+  let barre="";
+  if(filActif){
+    const t=triClients(), desc=triClientsDesc();
+    const b=(id,lab)=>'<button class="tri-b'+(t===id?' on':'')+'" onclick="setTriClients(\''+id+'\')">'+lab+'</button>';
+    /* Le bouton de sens dit ce qu'on obtient, pas une fleche a interpreter. */
+    /* Le libelle colle a ce qu'on trie : une reservation est recente ou
+       ancienne, une seance est proche ou lointaine. */
+    const sens = t==="nom"         ? (desc?"Z vers A":"A vers Z")
+               : t==="reservation" ? (desc?"Les plus anciennes d'abord":"Les plus récentes d'abord")
+               :                     (desc?"Les plus lointaines d'abord":"Les plus proches d'abord");
+    barre='<div class="tri-bar"><span class="tri-lab">Trier par</span>'
+      +b("seance","Prochaine séance")+b("reservation","Réservation")+b("nom","Nom")
+      +'<button class="tri-sens" onclick="inverserTriClients()">'+sens+'</button></div>';
+  }
+
+  box.innerHTML=barre+list.map(c=>{
     let sub, end;
-    if(c.brand==="maison-lumiere" && c.eventDate){
+    /* Quand on trie sur une date, la ligne la montre : une liste rangee
+       selon une date invisible a l'air d'etre en desordre. */
+    if(filActif && triClients()==="reservation"){
+      const d=dateReservationISO(c);
+      sub = d ? "Réservé le "+fmtDate(d) : "Date de réservation inconnue";
+      end = "";
+    } else if(filActif && triClients()==="seance"){
+      const s=seanceRepere(c.id);
+      sub = s ? (s.aVenir ? "Séance "+relDay(s.date) : "Dernière séance "+relDay(s.date))
+              : "Aucune séance enregistrée";
+      end = "";
+    } else if(c.brand==="maison-lumiere" && c.eventDate){
       // pour les mariages : on montre la date du mariage
       sub=`Mariage ${fmtDate(c.eventDate)}`;
       const cd=countdown(c.eventDate);
@@ -3626,6 +3897,8 @@ function renderPaiements(){
     <div class="stat"><div class="lab">Encaisse</div><div class="num euro">${euros(recu)}</div><div class="foot">sur ${euros(total)} facture</div></div>
     <div class="stat"><div class="lab">Reste à encaisser</div><div class="num euro">${euros(du)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} en cours</div></div>`;
 
+  if(DB.reglages && DB.reglages.accueilFil){ renderDossiersPaiement(pays); return; }
+
   const pills=document.getElementById("payPills");
   const opts=[["all","Tous"],["En attente","En attente"],["Acompte recu","Acompte reçu"],["Solde","Soldé"]];
   pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${payFilter===k?"on":""}" onclick="setPay('${k}')">${l}</button>`).join("");
@@ -3661,6 +3934,121 @@ function renderPaiements(){
     </div>`;
   }).join("");
 }
+/* Ce qui reste a encaisser sur un paiement. Une seule definition pour tout
+   l'ecran, pour qu'aucun total ne diverge d'une ligne a l'autre. */
+function resteDu(p){
+  const t=num(p.total);
+  const verse = p.statut==="Solde" ? t : num(p.acompte);
+  return Math.max(0, t-verse);
+}
+function versePaiement(p){ return p.statut==="Solde" ? num(p.total) : num(p.acompte); }
+
+/* Vue courante : en cours par defaut, c'est celle qui demande une action. */
+let payVue = "cours";
+function setPayVue(v){ payVue=v; renderPaiements(); }
+
+function renderDossiersPaiement(pays){
+  /* Un dossier = une cliente pour une marque. Les paiements sans cliente
+     gardent leur propre dossier plutot que d'etre regroupes ensemble. */
+  const dossiers=new Map();
+  pays.forEach(function(p){
+    const cle = p.clientId ? (p.brand+"|"+p.clientId) : ("sans|"+p.id);
+    if(!dossiers.has(cle)) dossiers.set(cle, { cle:cle, brand:p.brand, clientId:p.clientId||"", lignes:[] });
+    dossiers.get(cle).lignes.push(p);
+  });
+
+  const liste=[...dossiers.values()].map(function(d){
+    d.total = d.lignes.reduce(function(s,p){ return s+num(p.total); },0);
+    d.verse = d.lignes.reduce(function(s,p){ return s+versePaiement(p); },0);
+    d.reste = d.lignes.reduce(function(s,p){ return s+resteDu(p); },0);
+    d.client = d.clientId?clientById(d.clientId):null;
+    d.nom = d.client ? d.client.name : (d.lignes[0].label||"Sans client");
+    d.derniere = d.lignes.map(function(p){ return p.date||""; }).sort().pop() || "";
+    d.lignes.sort(function(a,b){ return (b.date||"").localeCompare(a.date||""); });
+    return d;
+  });
+
+  const totalVerse=liste.reduce(function(s,d){ return s+d.verse; },0);
+  const totalReste=liste.reduce(function(s,d){ return s+d.reste; },0);
+  const enCours=liste.filter(function(d){ return d.reste>0; });
+
+  document.getElementById("payStats").innerHTML=
+    '<div class="pa-tete">'
+    +'<div class="verse"><div class="lab">Déjà versé</div><div class="val">'+euros(totalVerse)+'</div>'
+      +'<div class="sous">'+liste.length+' dossier'+(liste.length>1?"s":"")+'</div></div>'
+    +'<div class="'+(totalReste>0?"du":"")+'"><div class="lab">Reste à encaisser</div><div class="val">'+euros(totalReste)+'</div>'
+      +'<div class="sous">'+enCours.length+' en cours</div></div>'
+    +'</div>';
+
+  const vues=[["cours","En cours"],["soldes","Soldés"],["tous","Tous"]];
+  document.getElementById("payPills").innerHTML=vues.map(function(v){
+    return '<button class="pill '+(payVue===v[0]?"on":"")+'" onclick="setPayVue(\''+v[0]+'\')">'+v[1]+'</button>';
+  }).join("");
+
+  let vus=liste;
+  if(payVue==="cours")  vus=liste.filter(function(d){ return d.reste>0; });
+  if(payVue==="soldes") vus=liste.filter(function(d){ return d.reste<=0; });
+  // en cours : les plus gros restes d'abord ; soldes : les plus recents
+  vus.sort(function(a,b){
+    if(payVue==="soldes") return (b.derniere||"").localeCompare(a.derniere||"");
+    if(b.reste!==a.reste) return b.reste-a.reste;
+    return (b.derniere||"").localeCompare(a.derniere||"");
+  });
+
+  document.getElementById("payCount").textContent=vus.length+" dossier"+(vus.length>1?"s":"");
+
+  const box=document.getElementById("payList");
+  if(!vus.length){
+    box.innerHTML='<div class="empty">'
+      +'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>'
+      +'<div class="t">'+(payVue==="cours"?"Tout est encaissé":"Aucun dossier ici")+'</div>'
+      +'<div class="s">'+(payVue==="cours"
+          ?"Aucune somme en attente. Les prochains acomptes apparaîtront ici."
+          :"Change de vue, ou ajoute un paiement depuis une fiche client.")+'</div></div>';
+    return;
+  }
+
+  box.innerHTML=vus.map(function(d){
+    const pct = d.total ? Math.min(100, Math.round(d.verse/d.total*100)) : 0;
+    const etat = d.reste<=0 ? "Soldé" : (d.verse>0 ? "Acompte reçu" : "En attente");
+    const style = d.reste<=0 ? "ok" : (d.verse>0 ? "warn" : "neutral");
+    const sous = d.lignes.length>1
+      ? d.lignes.length+" paiements"+(d.client&&BRANDS[d.brand]?" · "+BRANDS[d.brand].name:"")
+      : (d.lignes[0].label||"")+(d.client&&BRANDS[d.brand]?" · "+BRANDS[d.brand].name:"");
+    const ouvrir = d.client ? "openFiche('"+d.client.id+"')" : "openPayEdit('"+d.lignes[0].id+"')";
+
+    let detail="";
+    /* Un dossier a plusieurs paiements : on les montre. Une jauge a moitie
+       pleine ne dit pas si c'est une seance a moitie payee ou deux seances
+       dont une soldee. */
+    if(d.lignes.length>1){
+      detail='<div class="doss-detail">'+d.lignes.map(function(p){
+        const r=resteDu(p);
+        return '<div class="doss-l" onclick="event.stopPropagation();openPayEdit(\''+p.id+'\')">'
+          +'<span class="a">'+esc(p.label||"Paiement")+(p.date?" · "+fmtDateShort(p.date):"")+'</span>'
+          +'<span class="m"'+(r>0?' style="color:var(--warn)"':'')+'>'+(r>0?euros(r)+" dû":euros(num(p.total)))+'</span>'
+          +'<span class="badge '+(PAY_STYLE[p.statut]||"neutral")+'">'+esc(acc(p.statut))+'</span>'
+          +'</div>';
+      }).join("")+'</div>';
+    }
+
+    return '<div class="doss" data-b="'+esc(d.brand||"")+'">'
+      +'<div class="doss-h" onclick="'+ouvrir+'">'
+        +'<div class="avatar" data-b="'+esc(d.brand||"")+'">'+esc(initials(d.nom))+'</div>'
+        +'<div class="tx"><b>'+esc(d.nom)+'</b><span>'+esc(sous)+'</span></div>'
+        +'<span class="badge '+style+'">'+etat+'</span>'
+      +'</div>'
+      +'<div class="doss-jauge"><i style="width:'+pct+'%"></i></div>'
+      +'<div class="doss-chiffres">'
+        +'<span class="v"><span>Versé </span><b>'+euros(d.verse)+'</b></span>'
+        +'<span class="r"><span>Reste </span><b>'+euros(d.reste)+'</b></span>'
+        +'<span><span>Total </span><b>'+euros(d.total)+'</b></span>'
+      +'</div>'
+      +detail
+    +'</div>';
+  }).join("");
+}
+
 function setPay(k){ payFilter=k; renderPaiements(); }
 
 function openPayEdit(id,clientId){
