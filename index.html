@@ -703,6 +703,12 @@
   <b>Rentré en caisse</b> : ce qui arrive vraiment sur le compte ce mois-là.<br>
   Une séance à 390 € réservée en août compte 390 € de valeur vendue en août, mais seulement
   90 € d'acompte encaissé. Les 300 € restants sont posés sur le mois de la séance.</p>
+  <button class="btn ghost wide" style="margin-top:16px" onclick="exporterVentes()">
+    Télécharger le tableau de ventes
+  </button>
+  <p class="aide">Un fichier ouvrable dans Google Sheets : toutes tes ventes des deux marques,
+  une ligne par vente, suivies des totaux par mois, par marque, par type et par provenance.
+  Les chiffres sont ceux de cet écran.</p>
   <p class="aide">Les charges, l'URSSAF et la publicité ne sont pas calculées ici :
   elles ne tombent pas au rythme des ventes. Cet écran montre ce que tu as vendu et ce qui est
   rentré, rien de plus.</p>
@@ -1306,9 +1312,15 @@ function ventesCRM(marque){
     const total=num(p.total);
     const encaisse=p.statut==="Solde"?total:num(p.acompte);
     const cl=p.clientId?clientById(p.clientId):null;
+    /* Les champs descriptifs servent au tableau exportable. Les consommateurs
+       existants n'utilisent que les montants et les dates : en ajouter ne
+       change rien pour eux, et garantit que l'export et l'ecran Chiffres
+       lisent exactement la meme source. */
     return { total, encaisse, reste:Math.max(0,total-encaisse),
       reserveLe:p.date||"", dateSeance:se?se.date:(p.dueDate||""),
-      origine:(cl&&cl.origineWeb)||"" };
+      origine:(cl&&cl.origineWeb)||"",
+      brand:p.brand||"", clientNom:(cl&&cl.name)||"",
+      label:p.label||"", statut:p.statut||"", typeSeance:(se&&se.type)||"" };
   });
 }
 function moisCRM(ventes,marque){
@@ -1406,6 +1418,123 @@ function renderMarques(){
     ${ligne("Total",t,true)}
   </table></div>`;
 }
+/* ---------------------------------------------------------------
+   TABLEAU DE VENTES EXPORTABLE
+
+   Format francais obligatoire : Google Sheets lit "390.00" comme du
+   texte si la machine est en francais. Point-virgule en separateur,
+   virgule decimale, dates en jj/mm/aaaa, BOM UTF-8 pour les accents.
+   --------------------------------------------------------------- */
+function csvNombre(n){
+  const v = Math.round((Number(n)||0)*100)/100;
+  return String(v).replace(".", ",");
+}
+function csvDate(iso){
+  if(!iso) return "";
+  const p=String(iso).slice(0,10).split("-");
+  return p.length===3 ? p[2]+"/"+p[1]+"/"+p[0] : String(iso);
+}
+function csvLigne(cells){
+  return cells.map(function(c){ return '"'+String(c==null?"":c).replace(/"/g,'""')+'"'; }).join(";");
+}
+
+function exporterVentes(){
+  /* Toutes marques, quel que soit l'onglet en cours : un tableau de ventes
+     ampute de la moitie de l'activite ne servirait a rien. */
+  const filtreAvant = FILTER;
+  FILTER = "all";
+  let ventes, mois;
+  try { ventes = ventesCRM(); mois = moisCRM(ventes); }
+  finally { FILTER = filtreAvant; }
+
+  if(!ventes.length){ toast("Aucune vente à exporter"); return; }
+
+  const nomMarque = function(b){ return (BRANDS[b]||{}).name || b || "Sans marque"; };
+  const L = [];
+
+  L.push(csvLigne(["TABLEAU DE VENTES", "édité le "+csvDate(todayStr())]));
+  L.push("");
+
+  /* --- les ventes --- */
+  L.push(csvLigne(["LES VENTES"]));
+  L.push(csvLigne(["Marque","Cliente","Type de vente","Séance","Réservé le","Date de séance",
+    "Valeur vendue","Encaissé","Reste à encaisser","Statut","Provenance","Mois"]));
+  ventes.slice()
+    .sort(function(a,b){ return (b.reserveLe||"").localeCompare(a.reserveLe||""); })
+    .forEach(function(v){
+      L.push(csvLigne([ nomMarque(v.brand), v.clientNom, v.label, acc(v.typeSeance||""),
+        csvDate(v.reserveLe), csvDate(v.dateSeance),
+        csvNombre(v.total), csvNombre(v.encaisse), csvNombre(v.reste),
+        acc(v.statut), v.origine || "Non renseignée",
+        (v.reserveLe||"").slice(0,7) ]));
+    });
+  L.push("");
+
+  /* --- par mois --- */
+  L.push(csvLigne(["PAR MOIS"]));
+  L.push(csvLigne(["Mois","Ventes","Valeur vendue","Acomptes","Soldes","Rentré en caisse","dont à venir"]));
+  mois.slice().reverse().forEach(function(m){
+    L.push(csvLigne([ MOIS[Number(m.mois.slice(5,7))-1]+" "+m.mois.slice(0,4), m.nb||0,
+      csvNombre(m.vendu), csvNombre(m.acomptes), csvNombre(m.soldes),
+      csvNombre(m.caisse), csvNombre(m.aVenir) ]));
+  });
+  L.push("");
+
+  /* --- regroupements --- */
+  const cumul = function(cle, libelle){
+    const m = new Map();
+    ventes.forEach(function(v){
+      const k = cle(v) || "Non renseigné";
+      if(!m.has(k)) m.set(k, { nb:0, vendu:0, encaisse:0, reste:0 });
+      const e = m.get(k);
+      e.nb++; e.vendu += v.total; e.encaisse += v.encaisse; e.reste += v.reste;
+    });
+    return [...m.entries()].sort(function(a,b){ return b[1].vendu - a[1].vendu; });
+  };
+
+  L.push(csvLigne(["PAR MARQUE"]));
+  L.push(csvLigne(["Marque","Ventes","Valeur vendue","Encaissé","Reste à encaisser"]));
+  cumul(function(v){ return nomMarque(v.brand); }).forEach(function(e){
+    L.push(csvLigne([ e[0], e[1].nb, csvNombre(e[1].vendu), csvNombre(e[1].encaisse), csvNombre(e[1].reste) ]));
+  });
+  L.push("");
+
+  L.push(csvLigne(["PAR TYPE DE VENTE"]));
+  L.push(csvLigne(["Type","Ventes","Valeur vendue","Panier moyen"]));
+  cumul(function(v){ return v.label || acc(v.typeSeance) || "Sans libellé"; }).forEach(function(e){
+    L.push(csvLigne([ e[0], e[1].nb, csvNombre(e[1].vendu), csvNombre(e[1].nb ? e[1].vendu/e[1].nb : 0) ]));
+  });
+  L.push("");
+
+  L.push(csvLigne(["PAR PROVENANCE"]));
+  L.push(csvLigne(["Provenance","Ventes","Valeur vendue"]));
+  // Provenance est feminin : le meme mot que dans le tableau des ventes.
+  cumul(function(v){ return v.origine || "Non renseignée"; }).forEach(function(e){
+    L.push(csvLigne([ e[0], e[1].nb, csvNombre(e[1].vendu) ]));
+  });
+  L.push("");
+
+  /* --- resume --- */
+  const tVendu = ventes.reduce(function(s,v){ return s+v.total; },0);
+  const tEnc   = ventes.reduce(function(s,v){ return s+v.encaisse; },0);
+  const tReste = ventes.reduce(function(s,v){ return s+v.reste; },0);
+  L.push(csvLigne(["RÉSUMÉ"]));
+  L.push(csvLigne(["Nombre de ventes", ventes.length]));
+  L.push(csvLigne(["Valeur vendue", csvNombre(tVendu)]));
+  L.push(csvLigne(["Rentré en caisse", csvNombre(tEnc)]));
+  L.push(csvLigne(["Reste à encaisser", csvNombre(tReste)]));
+  L.push(csvLigne(["Panier moyen", csvNombre(ventes.length ? tVendu/ventes.length : 0)]));
+
+  // BOM UTF-8 : sans lui, Sheets affiche "Ã©" a la place des accents.
+  const blob = new Blob(["\ufeff"+L.join("\r\n")], { type:"text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ventes-"+todayStr()+".csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast(ventes.length+" vente"+(ventes.length>1?"s":"")+" exportée"+(ventes.length>1?"s":""));
+}
+
 function renderChiffres(){
   const ventes=ventesCRM();
   const lignes=moisCRM(ventes);
