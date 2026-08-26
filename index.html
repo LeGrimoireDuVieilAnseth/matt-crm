@@ -361,13 +361,13 @@
   /* Barre de tri de la liste des clients. */
   /* Chiffres : deux valeurs en tete, le reste en second plan. */
   /* Paiements : un dossier par cliente. */
-  .pa-tete{display:flex;gap:9px;margin:4px 0 12px}
-  .pa-tete > div{flex:1;background:var(--surface);border:1px solid var(--line);
+  .pa-tete{display:flex;gap:9px;margin:4px 0 12px;flex-wrap:wrap}
+  .pa-tete > div{flex:1 1 150px;min-width:0;background:var(--surface);border:1px solid var(--line);
     border-radius:16px;padding:14px 15px}
   .pa-tete .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
     text-transform:uppercase;color:var(--ink-3)}
-  .pa-tete .val{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:3px;
-    font-variant-numeric:tabular-nums;line-height:1.1}
+  .pa-tete .val{font-size:clamp(18px,5.6vw,26px);font-weight:700;letter-spacing:-.025em;
+    margin-top:3px;font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
   .pa-tete .sous{font-size:12px;color:var(--ink-3);margin-top:3px}
   .pa-tete .verse .val{color:var(--ok)}
   .pa-tete .du .val{color:var(--warn)}
@@ -383,7 +383,8 @@
   .doss-h .tx span{display:block;font-size:12.5px;color:var(--ink-2);margin-top:1px}
   .doss-jauge{height:7px;border-radius:99px;background:var(--surface-3);overflow:hidden;margin-bottom:9px}
   .doss-jauge i{display:block;height:100%;background:var(--ok);border-radius:99px}
-  .doss-chiffres{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+  .doss-chiffres{display:flex;justify-content:space-between;gap:8px;font-size:13px;flex-wrap:wrap}
+  .doss-chiffres > span{white-space:nowrap}
   .doss-chiffres span{color:var(--ink-3)}
   .doss-chiffres b{font-weight:600;font-variant-numeric:tabular-nums}
   .doss-chiffres .v b{color:var(--ok)}
@@ -397,22 +398,32 @@
   .doss-l .m{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;flex:none}
   .doss-l .badge{flex:none}
 
-  .ch-tete{display:flex;gap:9px;margin:4px 0 10px}
-  .ch-tete > div{flex:1;background:var(--surface);border:1px solid var(--line);
+  /* Les deux cartes s empilent plutot que de s ecraser quand le montant
+     ne rentre plus : mieux vaut deux lignes larges que deux colonnes ou le
+     nombre deborde. */
+  .ch-tete{display:flex;gap:9px;margin:4px 0 10px;flex-wrap:wrap}
+  /* min-width:0 : sans lui, une carte flexible refuse de descendre sous la
+     largeur de son contenu. Les colonnes devenaient inegales et le montant
+     n'avait plus la place de tenir sur une ligne. */
+  .ch-tete > div{flex:1 1 150px;min-width:0;background:var(--surface);border:1px solid var(--line);
     border-radius:16px;padding:14px 15px}
   .ch-tete .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
     text-transform:uppercase;color:var(--ink-3)}
-  .ch-tete .val{font-size:27px;font-weight:700;letter-spacing:-.02em;margin-top:3px;
-    font-variant-numeric:tabular-nums;line-height:1.1}
+  /* Le symbole euro ne quitte jamais son nombre, et la taille suit la
+     largeur de l'ecran pour qu'un montant a cinq chiffres tienne quand
+     meme sur un telephone. */
+  .ch-tete .val{font-size:clamp(18px,5.6vw,27px);font-weight:700;letter-spacing:-.025em;
+    margin-top:3px;font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
   .ch-tete .sous{font-size:12px;color:var(--ink-3);margin-top:3px;line-height:1.4}
   .ch-tete .caisse .val{color:var(--ok)}
   .ch-tete .attente .val{color:var(--warn)}
   .ch-note{font-size:13px;color:var(--ink-2);line-height:1.55;background:var(--surface-2);
     border-radius:12px;padding:12px 14px;margin-bottom:14px}
   .ch-sec{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:4px}
-  .ch-sec > div{flex:1 1 30%;background:var(--surface-2);border-radius:12px;padding:10px 12px}
+  .ch-sec > div{flex:1 1 30%;min-width:0;background:var(--surface-2);border-radius:12px;padding:10px 12px}
   .ch-sec .lab{font-size:11px;color:var(--ink-3);font-weight:600}
-  .ch-sec .val{font-size:17px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums}
+  .ch-sec .val{font-size:clamp(14px,4vw,17px);font-weight:600;margin-top:1px;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
 
   /* Une carte par mois ou par marque, au lieu d'un tableau a sept colonnes. */
   .ch-carte{background:var(--surface);border:1px solid var(--line);border-radius:14px;
@@ -440,13 +451,13 @@
     white-space:nowrap}
   .tri-sens:hover{border-color:var(--line-2)}
 
-  .ffil-arg{display:flex;gap:9px;margin:14px 0 4px}
-  .ffil-arg > div{flex:1;background:var(--surface);border:1px solid var(--line);
+  .ffil-arg{display:flex;gap:9px;margin:14px 0 4px;flex-wrap:wrap}
+  .ffil-arg > div{flex:1 1 130px;min-width:0;background:var(--surface);border:1px solid var(--line);
     border-radius:12px;padding:11px 13px}
   .ffil-arg .lab{font-size:11px;font-weight:700;letter-spacing:.07em;
     text-transform:uppercase;color:var(--ink-3)}
-  .ffil-arg .val{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-top:2px;
-    font-variant-numeric:tabular-nums}
+  .ffil-arg .val{font-size:clamp(15px,4.6vw,19px);font-weight:700;letter-spacing:-.02em;
+    margin-top:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
   .ffil-arg .du .val{color:var(--warn)}
   .ffil-arg .ok .val{color:var(--ok)}
   .ffil-sep{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
