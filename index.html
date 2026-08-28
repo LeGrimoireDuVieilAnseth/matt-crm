@@ -2387,6 +2387,271 @@ async function enregistrerGalerie(){
   }catch(e){ galMsg("Erreur réseau.",true); }
 }
 
+/* ============================================================
+   AJOUTER DES PHOTOS AUX GALERIES DES SITES
+
+   Les photos partent dans les depots GitHub des sites, pas dans un
+   stockage a part : elles sont donc servies comme le reste du site,
+   elles entrent dans les sauvegardes, et chaque publication devient un
+   commit qu'on peut annuler. Voir netlify/functions/galerie-publier.js.
+
+   L'allegement se fait ICI, dans le navigateur, avant tout envoi. Une
+   photo d'appareil pese 5 a 10 Mo ; la meme, ramenee a 1600 px de large,
+   en fait 200 a 300 Ko sans difference visible sur un ecran. Envoyer
+   l'originale ferait payer ce poids a chaque visiteuse, a chaque visite.
+
+   Rien n'est visible en ligne tant que "Publier" n'a pas ete touche :
+   les photos sont d'abord deposees une par une (pour pouvoir afficher
+   une progression), puis un seul envoi les rattache toutes au site.
+   ============================================================ */
+const AP_API = "/.netlify/functions/galerie-publier";
+const AP_GALERIES = [
+  { cle:"ml",  site:"maison-lumiere", galerie:"principale", nom:"Maison Lumière",
+    aide:"L'ordre se règle ici même : les nouvelles photos se placent à la fin." },
+  { cle:"bebe", site:"mybabyshoot", galerie:"bebe", nom:"Bébé",
+    aide:"L'ordre des photos de ce site se règle dans « Galerie du site »." },
+  { cle:"gross", site:"mybabyshoot", galerie:"grossesse", nom:"Grossesse",
+    aide:"L'ordre des photos de ce site se règle dans « Galerie du site »." },
+];
+let apChoix = AP_GALERIES[0];
+let apEnLigne = [];       /* ce qui est deja publie */
+let apNouvelles = [];     /* {nom, blob, apercu, alt, poidsAvant, poidsApres} */
+let apOccupe = false;
+let apDossier = "", apPrefixe = "photo";   /* renseignes par apCharger */
+
+/* Le serveur peut repondre autre chose que du JSON : une page d'erreur de
+   Netlify, ou "introuvable" quand on ouvre le CRM depuis un simple serveur
+   de fichiers. Sans ce filtre, Matt lisait "Unexpected token i". */
+async function apLireJson(r){
+  const texte = await r.text();
+  try{ return JSON.parse(texte); }
+  catch(e){
+    throw new Error(r.ok ? "réponse inattendue du serveur"
+                         : "le service ne répond pas (erreur " + r.status + ")");
+  }
+}
+
+function apMsg(texte, erreur){
+  const el = document.getElementById("apMsg");
+  if(!el) return;
+  el.textContent = texte || "";
+  el.style.color = erreur ? "var(--danger,#c0392b)" : "var(--ink-3)";
+}
+
+function ouvrirAjoutPhotos(){
+  setRegOnglet("ajout-photos");
+  apNouvelles = [];
+  apRendreBarre();
+  apCharger();
+}
+
+function apRendreBarre(){
+  const bar = document.getElementById("apGalerieBar");
+  if(!bar) return;
+  bar.innerHTML = AP_GALERIES.map(g =>
+    `<button class="${g.cle===apChoix.cle?"on":""}" onclick="apChangerGalerie('${g.cle}')">${g.nom}</button>`
+  ).join("");
+}
+
+function apChangerGalerie(cle){
+  if(apOccupe){ apMsg("Attends la fin de l'envoi en cours.", true); return; }
+  const g = AP_GALERIES.find(x => x.cle === cle);
+  if(!g) return;
+  apChoix = g;
+  apNouvelles = [];
+  apRendreBarre();
+  apCharger();
+}
+
+async function apCharger(){
+  const etat = document.getElementById("apEtat");
+  apMsg("");
+  apRendreListe();
+  if(!CLOUD){ if(etat) etat.textContent = "Disponible seulement en ligne."; return; }
+  if(etat) etat.textContent = "Lecture de ce qui est en ligne...";
+  try{
+    const r = await fetch(`${AP_API}?site=${apChoix.site}&galerie=${apChoix.galerie}`, { headers: apiHeaders(false) });
+    if(r.status === 401){ handleUnauthorized(); return; }
+    const j = await apLireJson(r);
+    if(!j || !j.ok) throw new Error((j && j.erreur) || "lecture impossible");
+    apEnLigne = j.photos || [];
+    apDossier = j.dossier; apPrefixe = j.prefixe;
+    if(etat) etat.textContent = `${apEnLigne.length} photo${apEnLigne.length>1?"s":""} en ligne. ${apChoix.aide}`;
+  }catch(e){
+    apEnLigne = [];
+    if(etat) etat.textContent = "Impossible de lire la galerie : " + (e.message || e);
+  }
+}
+
+/* Allege une photo pour le web. Plus large que la compression des photos
+   d'inspiration (1400 px) : celle-ci s'affiche en grand sur un site. */
+function apAlleger(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const max = 1600;
+      let w = img.width, h = img.height;
+      if(w > max || h > max){
+        if(w >= h){ h = Math.round(h * max / w); w = max; }
+        else { w = Math.round(w * max / h); h = max; }
+      }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);  /* un PNG transparent ne vire pas au noir */
+      ctx.drawImage(img, 0, 0, w, h);
+      c.toBlob(b => b ? resolve(b) : reject(new Error("compression impossible")), "image/jpeg", 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("fichier illisible")); };
+    img.src = url;
+  });
+}
+
+/* Un nom libre, qui ne remplacera jamais une photo existante : on repart
+   du plus grand numero deja en ligne. Le rang permet de renumeroter
+   proprement quand une photo est retiree de la liste d'attente. */
+function apNomLibre(rang){
+  let max = 0;
+  for(const p of apEnLigne){
+    const m = String(p.chemin).match(new RegExp(apPrefixe + "-(\\d+)"));
+    if(m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return apPrefixe + "-" + String(max + 1 + rang).padStart(2, "0") + ".jpg";
+}
+
+async function apChoisirPhotos(input){
+  const fichiers = Array.from(input.files || []);
+  input.value = "";
+  if(!fichiers.length) return;
+  if(!CLOUD){ apMsg("Disponible seulement en ligne.", true); return; }
+  apOccupe = true;
+  let i = 0;
+  for(const f of fichiers){
+    if(!f.type.startsWith("image/")){ continue; }
+    apMsg(`Allègement des photos (${++i}/${fichiers.length})...`);
+    try{
+      const blob = await apAlleger(f);
+      apNouvelles.push({
+        nom: apNomLibre(apNouvelles.length),
+        blob,
+        apercu: URL.createObjectURL(blob),
+        alt: "",
+        poidsAvant: f.size,
+        poidsApres: blob.size,
+      });
+      apRendreListe();
+    }catch(e){
+      apMsg(`« ${f.name} » n'a pas pu être lue, elle est ignorée.`, true);
+    }
+  }
+  apOccupe = false;
+  const gagne = apNouvelles.reduce((s, n) => s + (n.poidsAvant - n.poidsApres), 0);
+  if(apNouvelles.length) apMsg(`${apNouvelles.length} photo${apNouvelles.length>1?"s":""} prête${apNouvelles.length>1?"s":""}. ${apPoids(gagne)} économisés.`);
+  apRendreListe();
+}
+
+const apPoids = (o) => o < 1024 ? o + " o" : o < 1048576 ? Math.round(o/1024) + " Ko" : (o/1048576).toFixed(1) + " Mo";
+
+function apRendreListe(){
+  const box = document.getElementById("apListe");
+  const bouton = document.getElementById("apPublier");
+  if(!box) return;
+  if(!apNouvelles.length){
+    box.innerHTML = "";
+    if(bouton) bouton.style.display = "none";
+    return;
+  }
+  const alt = apChoix.site === "maison-lumiere";
+  box.innerHTML = `<div class="grouplab" style="margin:6px 2px 8px">À publier</div>` +
+    apNouvelles.map((n, i) => `
+      <div class="card" style="padding:10px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">
+        <img src="${n.apercu}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 auto">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${n.nom}</div>
+          <div style="font-size:12px;color:var(--ink-3);margin-top:2px">
+            ${apPoids(n.poidsAvant)} &rarr; <b>${apPoids(n.poidsApres)}</b>
+          </div>
+          ${alt ? `<input type="text" value="${(n.alt||"").replace(/"/g,"&quot;")}"
+              placeholder="Décris la photo (pour Google et les malvoyants)"
+              oninput="apNouvelles[${i}].alt=this.value"
+              style="width:100%;margin-top:6px;font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#ddd)">` : ``}
+        </div>
+        <button class="btn ghost" style="padding:6px 10px;flex:0 0 auto" onclick="apRetirer(${i})">Retirer</button>
+      </div>`).join("");
+  if(bouton){
+    bouton.style.display = "";
+    bouton.textContent = `Publier ${apNouvelles.length} photo${apNouvelles.length>1?"s":""} sur le site`;
+  }
+}
+
+function apRetirer(i){
+  if(apOccupe){ apMsg("Attends la fin de l'envoi en cours.", true); return; }
+  const n = apNouvelles[i];
+  if(n && n.apercu) URL.revokeObjectURL(n.apercu);
+  apNouvelles.splice(i, 1);
+  /* Les noms se suivent : apres un retrait, on les recalcule pour ne pas
+     laisser de trou ni deux fois le meme. */
+  apNouvelles.forEach((x, k) => { x.nom = apNomLibre(k); });
+  apRendreListe();
+}
+
+const apEnBase64 = (blob) => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(String(fr.result).split(",")[1]);
+  fr.onerror = () => rej(new Error("lecture impossible"));
+  fr.readAsDataURL(blob);
+});
+
+async function apPublier(){
+  if(apOccupe) return;
+  if(!apNouvelles.length){ apMsg("Aucune photo à publier.", true); return; }
+  if(!CLOUD){ apMsg("Disponible seulement en ligne.", true); return; }
+  const bouton = document.getElementById("apPublier");
+  apOccupe = true;
+  if(bouton) bouton.disabled = true;
+  try{
+    /* 1. Deposer chaque photo. Rien n'est visible en ligne a ce stade. */
+    const deposees = [];
+    for(let i = 0; i < apNouvelles.length; i++){
+      const n = apNouvelles[i];
+      apMsg(`Envoi des photos (${i+1}/${apNouvelles.length})...`);
+      const r = await fetch(AP_API + "?action=televerser", {
+        method: "POST", headers: apiHeaders(true),
+        body: JSON.stringify({ site: apChoix.site, nom: n.nom, contenu: await apEnBase64(n.blob) }),
+      });
+      if(r.status === 401){ handleUnauthorized(); return; }
+      const j = await apLireJson(r);
+      if(!j || !j.ok) throw new Error((j && j.erreur) || "envoi refusé");
+      deposees.push({ chemin: j.chemin, sha: j.sha, alt: n.alt || "" });
+    }
+
+    /* 2. Un seul envoi rattache tout au site : un commit, une mise a jour. */
+    apMsg("Publication...");
+    const photos = apEnLigne.map(p => ({ chemin: p.chemin, alt: p.alt || "" })).concat(deposees);
+    const r2 = await fetch(AP_API + "?action=publier", {
+      method: "POST", headers: apiHeaders(true),
+      body: JSON.stringify({ site: apChoix.site, galerie: apChoix.galerie, photos }),
+    });
+    if(r2.status === 401){ handleUnauthorized(); return; }
+    const j2 = await apLireJson(r2);
+    if(!j2 || !j2.ok) throw new Error((j2 && j2.erreur) || "publication refusée");
+
+    apNouvelles.forEach(n => { if(n.apercu) URL.revokeObjectURL(n.apercu); });
+    apNouvelles = [];
+    apRendreListe();
+    apMsg(j2.message || "Publié.");
+    toast("Galerie publiée");
+    setTimeout(apCharger, 1500);
+  }catch(e){
+    apMsg("Échec : " + (e.message || e) + ". Rien n'a été publié, tu peux réessayer.", true);
+  }finally{
+    apOccupe = false;
+    if(bouton) bouton.disabled = false;
+  }
+}
+
 /* pastille rouge sur l'onglet Chat et sur chaque marque */
 async function checkChatUnread(){
   if(!CLOUD||!authed) return;
@@ -4676,6 +4941,11 @@ function renderReglages(){
           <span class="tx"><b>Galerie du site</b><span>L'ordre des photos sur mybabyshoot.fr</span></span>
           <span class="fl">&rsaquo;</span>
         </button>
+        <button class="reg-ligne" onclick="ouvrirAjoutPhotos()">
+          <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/><path d="M3 19l6-6 3 3"/></svg></span>
+          <span class="tx"><b>Ajouter des photos</b><span>Publier de nouvelles photos sur tes deux sites</span></span>
+          <span class="fl">&rsaquo;</span>
+        </button>
         <button class="reg-ligne" onclick="setRegOnglet('site')">
           <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l2.1 4.6 5 .6-3.7 3.4 1 5-4.4-2.5L7.6 16.6l1-5L4.9 8.2l5-.6z"/></svg></span>
           <span class="tx"><b>Habillage saisonnier</b><span>Passer le site aux couleurs de Noël</span></span>
@@ -4782,6 +5052,33 @@ function renderReglages(){
         <div id="galListe"></div>
         <button class="btn wide" style="margin-top:12px" onclick="enregistrerGalerie()">Enregistrer l'ordre</button>
         <div id="galMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="reg-groupe" data-g="ajout-photos">
+      <button class="reg-retour" onclick="setRegOnglet('')"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Tous les réglages</button>
+      <div class="reg-titre">Ajouter des photos</div>
+      <div class="card" style="padding:16px">
+        <div class="seg brands" id="apGalerieBar" style="margin-bottom:12px"></div>
+        <div style="font-size:13.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55">
+          Choisis tes photos telles qu'elles sortent de ton appareil. Elles sont
+          <b>allégées ici, dans ton navigateur</b>, avant d'être envoyées : une photo de
+          8 Mo en fait environ 200 Ko une fois prête, sans différence visible à l'écran.
+          Rien n'est publié tant que tu n'as pas touché le bouton du bas.
+        </div>
+        <div id="apEtat" style="font-size:12.5px;color:var(--ink-3);margin-bottom:10px"></div>
+
+        <label class="btn ghost wide" style="display:block;text-align:center;cursor:pointer">
+          Choisir des photos
+          <input type="file" accept="image/*" multiple style="display:none" onchange="apChoisirPhotos(this)">
+        </label>
+
+        <div id="apListe" style="margin-top:12px"></div>
+
+        <button class="btn wide" id="apPublier" style="margin-top:12px;display:none" onclick="apPublier()">
+          Publier sur le site
+        </button>
+        <div id="apMsg" style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5"></div>
       </div>
     </div>
 
