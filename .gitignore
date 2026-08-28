@@ -1,0 +1,16 @@
+# Fichiers qui restent sur ce disque et ne partent JAMAIS en ligne.
+
+# Reglages locaux de Claude Code
+.claude/
+
+# Banc d'essai des codes promo : une fausse base de donnees en memoire,
+# pour tester sans toucher aux vraies. Attention, coupon-admin-test.js
+# est range dans netlify/functions/ : s'il partait en ligne, Netlify en
+# ferait une adresse publique, ce qu'on ne veut pas.
+netlify/coupons-test.mjs
+netlify/functions/coupon-admin-test.js
+netlify/functions/faux-store.mjs
+
+# Prototype de l'appli Reciproque : projet a part, il n'a rien a faire
+# sur le site du CRM.
+reciproque-app.html
