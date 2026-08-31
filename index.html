@@ -4237,6 +4237,15 @@ function openClientEdit(id){
     </div>
     <div class="field"><label>Notes</label><textarea id="fNotes" placeholder="Attentes, contexte, détails à retenir...">${c?esc(c.notes||''):''}</textarea></div>
     <div class="field"><label id="wishesLabel">${inspirationLabel(editBrandTmp)}</label><textarea id="fWishes" placeholder="Style souhaité, inspirations, contraintes, demandes spéciales...">${c?esc(c.wishes||''):''}</textarea></div>
+    ${c?``:`
+    <div class="grouplab" style="margin:18px 2px 10px">Séance déjà faite</div>
+    <div class="field two"><label>Date et montant réglé</label>
+      <input id="fDejaDate" type="date" value="">
+      <input id="fDejaMontant" inputmode="decimal" placeholder="Montant réglé (euros)">
+    </div>
+    <div class="hint">À remplir seulement pour une séance <b>déjà réalisée et déjà payée</b>, qui n'était jamais entrée dans le CRM.
+    Une séance « Faite » et un paiement « Soldé » sont créés en même temps que la fiche, pour que le montant compte dans tes chiffres.
+    Le vendu et l'encaissé sont comptés à cette date. Laisse vide dans tous les autres cas.</div>`}
     <div id="logGroup" style="display:${editBrandTmp==='maison-lumiere'?'block':'none'}">
       <div class="grouplab" style="margin:18px 2px 10px">Logistique jour J</div>
       ${logAddrRow("Domaine","fLogDomaineAddr","fLogDomaineTime","Adresse du domaine",lgv('domaineAddr','domaine'),lgv('domaineTime'))}
@@ -4288,7 +4297,40 @@ function saveClient(id){
     }
   };
   if(id){ const ex=clientById(id); if(ex&&ex.photos) data.photos=ex.photos; Object.assign(ex,data); saveDB(); closeModal(); openFiche(id); toast("Fiche mise à jour"); }
-  else { const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc); saveDB(); closeModal(); openFiche(nc.id); toast("Client créé"); }
+  else {
+    const nc=Object.assign({id:uid(),createdAt:Date.now()},data); DB.clients.push(nc);
+    const rattrape=rattraperSeancePassee(nc);
+    saveDB(); closeModal(); openFiche(nc.id);
+    toast(rattrape?"Client créé, séance et paiement enregistrés":"Client créé");
+  }
+}
+
+/* Une seance faite il y a longtemps, jamais entree dans le CRM, n'apparait
+   dans aucun chiffre : le chiffre d'affaires se calcule a partir des
+   paiements, pas des fiches. Deux champs a la creation evitent d'avoir a
+   penser a aller creer la seance puis le paiement separement, ce que
+   personne ne fait de memoire.
+
+   On cree les deux d'un coup : une seance "Faite" pour que la prestation
+   existe dans l'agenda et dans l'historique du client, et un paiement
+   "Solde" pour que l'argent compte. Le paiement porte la meme date des
+   deux cotes (date et echeance), donc le vendu et l'encaisse tombent tous
+   deux sur le mois de la seance. C'est le choix le plus simple a
+   comprendre ; si la reservation datait d'un autre mois et que ca compte
+   pour Matt, il corrige la premiere date depuis l'ecran Paiements. */
+function rattraperSeancePassee(nc){
+  const dEl=document.getElementById("fDejaDate"), mEl=document.getElementById("fDejaMontant");
+  if(!dEl||!mEl) return false;
+  const montant=(mEl.value||"").trim();
+  if(!montant||num(montant)<=0) return false;
+  const date=dEl.value||todayStr();
+  DB.seances.push({ id:uid(), brand:nc.brand, clientId:nc.id, type:nc.type||"",
+    date, time:"", place:"", status:"Faite",
+    notes:"Séance ajoutée après coup, en créant la fiche." });
+  DB.paiements.push({ id:uid(), brand:nc.brand, clientId:nc.id,
+    label:nc.type||"Séance", total:montant, acompte:montant, statut:"Solde",
+    date, dueDate:date, notes:"Réglé en totalité. Saisi après coup, en créant la fiche." });
+  return true;
 }
 function deleteClient(id){
   const c=clientById(id);
