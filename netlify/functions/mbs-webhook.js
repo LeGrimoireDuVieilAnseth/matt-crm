@@ -9,12 +9,10 @@ import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
-
-const SEANCE_TXT = {
-  grossesse: "Séance grossesse",
-  naissance: "Séance naissance",
-  duo:       "Grossesse et naissance"
-};
+/* Le courrier du bon cadeau vit dans son propre module : le CRM peut lui
+   aussi le renvoyer apres une correction, et deux copies d'un meme modele
+   finiraient par diverger. */
+import { htmlBonCadeau, SEANCE_TXT } from "../mbs-bon-mail.mjs";
 
 /* Hotes autorises dans les liens envoyes par email. L'origine vient du
    navigateur de l'acheteur : on ne la suit que si elle est dans cette liste,
@@ -179,34 +177,11 @@ async function traiterBonCadeau(session, md) {
 
   if (email) {
     const site = siteClient(md);
-    const lien = site + "/bon.html?code=" + coupon.code;
-    const html =
-      "<p>Bonjour " + prenom + " !</p>" +
-      "<p>Tout d'abord, merci pour votre confiance !</p>" +
-      "<p>Voici le bon cadeau" + (md.pour ? " pour " + md.pour : "") + ", prêt à être offert.</p>" +
-      "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">Voir et imprimer le bon cadeau</a></p>" +
-      "<p>Ce lien ouvre votre bon en grand : vous pouvez le <b>télécharger en image</b> pour l'imprimer et l'offrir en main propre, ou simplement transmettre le code.</p>" +
-      "<div style=\"border:2px solid #5E4430;border-radius:16px;padding:24px;text-align:center;font-family:Georgia,serif;max-width:420px\">" +
-        "<div style=\"letter-spacing:3px;font-size:12px;color:#8a7a6a\">MYBABYSHOOT</div>" +
-        "<div style=\"font-size:22px;margin:10px 0 4px\">Bon cadeau</div>" +
-        "<div style=\"font-size:18px;font-weight:bold\">" + (md.label || "") + "</div>" +
-        "<div style=\"font-size:15px;color:#8a7a6a;margin-bottom:14px\">" + SEANCE_TXT[coupon.seance] + "</div>" +
-        (md.pour ? "<div style=\"margin-top:8px\">Pour " + md.pour + "</div>" : "") +
-        (md.mot ? "<div style=\"margin-top:8px;font-style:italic\">" + md.mot + "</div>" : "") +
-        "<div style=\"margin:18px 0 4px;font-size:12px;color:#8a7a6a\">CODE À UTILISER</div>" +
-        "<div style=\"font-size:26px;letter-spacing:4px;font-weight:bold\">" + prettyGift(coupon.code) + "</div>" +
-        "<div style=\"margin-top:14px;font-size:12px;color:#8a7a6a\">Valable jusqu'au " + frDateShort(coupon.expiresAt) + "</div>" +
-      "</div>" +
-      // Le montant reste hors du bon : celui qui le recoit n'a pas a decouvrir
-      // le prix du cadeau, meme si l'email lui est transfere.
-      "<p style=\"font-size:13px;color:#888\">Montant réglé : " + montant + " €"
-      + (invPdf ? ", votre facture est en pièce jointe" : "")
-      + ". Le prix n'apparaît nulle part sur le bon.</p>" +
-      "<p style=\"margin-top:18px\">Comment l'utiliser : rendez-vous sur <a href=\"" + site + "/#tarifs\">" + site.replace(/^https?:\/\//, "") + "</a>, "
-      + "puis saisissez le code, choisissez la date et le créneau et réservez. La séance est déjà réglée, il n'y aura rien à payer.</p>" +
-      "<p>Ce bon est à usage unique : gardez le code précieusement.</p>" +
-      "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
-      "<p>À très vite<br>Matteo · Mybabyshoot</p>";
+    const html = htmlBonCadeau({
+      prenom, pour: md.pour || "", mot: md.mot || "", label: md.label || "",
+      seance: coupon.seance, code: coupon.code, expiresAt: coupon.expiresAt,
+      montant, site, avecFacture: !!invPdf
+    });
     await sendMail({
       to: email,
       subject: "Votre bon cadeau Mybabyshoot",
