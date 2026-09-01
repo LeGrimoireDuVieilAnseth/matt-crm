@@ -8,8 +8,18 @@
 //                       : cree UN bon cadeau, pour honorer un ancien bon
 // - POST {action:"desactiver", lot, off}           : (re)active un lot entier
 // - POST {action:"supprimer", lot}                 : supprime le lot et ses codes
+// - POST {action:"cadeau-corriger", code, seance, beneficiaire, message, style}
+//                       : corrige ce qui est ECRIT sur un bon, sans toucher au code
+// - POST {action:"cadeau-renvoyer", code, email, explication}
+//                       : renvoie le bon par email, avec le meme code
 import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT,
-         createGiftCoupon, offreCadeau, GIFT_OFFRES } from "../mbs-coupons.mjs";
+         createGiftCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
+import { htmlBonCadeau, htmlBonCorrige, SEANCE_TXT } from "../mbs-bon-mail.mjs";
+import { sendMail } from "../mbs-mail.mjs";
+
+/* Les trois natures de seance qu'un bon peut porter. C'est la seule liste
+   qui fait foi : une valeur inconnue afficherait un bon muet. */
+const SEANCES_BON = ["grossesse", "naissance", "duo"];
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -113,6 +123,101 @@ export default async (request) => {
       await store.setJSON("gifts", idx.filter(g => g.code !== code));
     } catch (e) {}
     return json({ ok: true, supprime: true });
+  }
+
+  // ---------- corriger ce qui est ECRIT sur un bon ----------
+  /* Un acheteur s'est trompe de case au moment d'acheter : son bon dit
+     "grossesse" alors qu'il voulait "naissance". Rien n'oblige a lui en
+     refaire un : le bon n'est pas un fichier fige, c'est une page que
+     mbs-gift-view recompose a chaque ouverture depuis ce qui est stocke
+     ici. Corriger la donnee corrige donc le bon que l'acheteur a deja,
+     avec le meme lien et le meme code.
+
+     Le montant et la formule ne sont PAS modifiables : ils disent ce qui
+     a ete paye, et une facture existe en face. Changer l'un sans l'autre
+     fabriquerait un bon qui ment sur sa propre valeur. Pour un vrai
+     changement de formule, il faut un complement de paiement, ce qui est
+     une autre histoire. */
+  if (body.action === "cadeau-corriger") {
+    const code = normalizeCode(body.code);
+    if (!code) return json({ ok: false, error: "code" }, 400);
+    let c = null;
+    try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
+    if (!c || c.kind !== "cadeau") return json({ ok: false, error: "introuvable" }, 404);
+
+    const change = [];
+    if (body.seance != null && body.seance !== c.seance) {
+      const s = String(body.seance);
+      if (!SEANCES_BON.includes(s)) return json({ ok: false, error: "seance" }, 400);
+      change.push("séance : " + (SEANCE_TXT[c.seance] || c.seance) + " → " + SEANCE_TXT[s]);
+      c.seance = s;
+    }
+    if (body.beneficiaire != null) {
+      const b = String(body.beneficiaire).trim().slice(0, 80);
+      if (b !== (c.beneficiaire || "")) { change.push("offert à : " + (b || "personne")); c.beneficiaire = b; }
+    }
+    if (body.message != null) {
+      const m = String(body.message).trim().slice(0, 300);
+      if (m !== (c.message || "")) { change.push("mot personnel"); c.message = m; }
+    }
+    if (body.style != null) {
+      const st = styleValide(body.style);
+      if (st !== c.style) { change.push("habillage : " + st); c.style = st; }
+    }
+    if (!change.length) return json({ ok: true, rien: true, message: "Rien n'a changé." });
+
+    c.corrigeLe = Date.now();
+    await store.setJSON("c-" + code, c);
+
+    /* L'index sert la liste du CRM : sans cette mise a jour, l'ecran
+       continuerait d'afficher l'ancienne valeur. */
+    try {
+      const idx = (await store.get("gifts", { type: "json" })) || [];
+      const g = idx.find(x => x.code === code);
+      if (g) { g.seance = c.seance; g.beneficiaire = c.beneficiaire; await store.setJSON("gifts", idx); }
+    } catch (e) {}
+
+    return json({ ok: true, change,
+      coupon: { code: prettyGift(c.code), seance: c.seance, beneficiaire: c.beneficiaire,
+                message: c.message, style: c.style, formule: c.formule, amount: c.amount } });
+  }
+
+  // ---------- renvoyer un bon par email ----------
+  /* Meme code, meme lien : on ne regenere rien. Le courrier est celui du
+     module partage avec le webhook, pour que l'acheteur recoive exactement
+     ce qu'il avait recu la premiere fois. */
+  if (body.action === "cadeau-renvoyer") {
+    const code = normalizeCode(body.code);
+    if (!code) return json({ ok: false, error: "code" }, 400);
+    let c = null;
+    try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
+    if (!c || c.kind !== "cadeau") return json({ ok: false, error: "introuvable" }, 404);
+
+    const email = String(body.email || (c.acheteur && c.acheteur.email) || "").trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return json({ ok: false, error: "email", message: "Aucune adresse valable pour ce bon." }, 400);
+    }
+
+    const site = (process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr").replace(/\/+$/, "");
+    const prenom = String((c.acheteur && c.acheteur.nom) || "").trim().split(/\s+/)[0] || "";
+    const commun = {
+      prenom, pour: c.beneficiaire || "", mot: c.message || "", label: c.formule || "",
+      seance: c.seance, code: c.code, expiresAt: c.expiresAt, montant: c.amount, site,
+    };
+    const explication = String(body.explication || "").trim().slice(0, 300);
+    const corrige = !!body.corrige;
+    const html = corrige ? htmlBonCorrige({ ...commun, explication }) : htmlBonCadeau(commun);
+
+    try {
+      await sendMail({
+        to: email,
+        subject: corrige ? "Votre bon cadeau Mybabyshoot (corrigé)" : "Votre bon cadeau Mybabyshoot",
+        html,
+      });
+    } catch (e) {
+      return json({ ok: false, error: "mail", message: "L'envoi a échoué : " + (e.message || e) }, 502);
+    }
+    return json({ ok: true, envoyeA: email });
   }
 
   // ---------- creation d'un lot ----------

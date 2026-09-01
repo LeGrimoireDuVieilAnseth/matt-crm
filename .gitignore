@@ -14,3 +14,6 @@ netlify/functions/faux-store.mjs
 # Prototype de l'appli Reciproque : projet a part, il n'a rien a faire
 # sur le site du CRM.
 reciproque-app.html
+
+# Dependances installees, jamais versionnees
+node_modules/

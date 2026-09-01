@@ -3583,10 +3583,90 @@ function openBonCadeau(brut){
   if(c&&c.tel) h+=`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`;
   if(c) h+=`<button class="btn ghost wide" style="margin-top:9px" onclick="closeModal();openFiche('${c.id}')">Ouvrir la fiche client</button>`;
   // Annuler garde la trace de la vente ; supprimer efface tout (bons de test).
+  h+=`<div class="grouplab" style="margin-top:18px">Corriger et renvoyer</div>
+    <button class="btn ghost wide" onclick="corrigerBonCadeau('${esc(b.brut||b.code)}')">Corriger ce qui est écrit dessus</button>
+    ${b.email?`<button class="btn ghost wide" style="margin-top:9px" onclick="renvoyerBonCadeau('${esc(b.brut||b.code)}',false)">Renvoyer le bon par email</button>`
+             :`<div class="hint" style="margin-top:9px">Pas d'adresse email pour ce bon : impossible de le renvoyer.</div>`}
+    <div class="hint">Le code et le lien ne changent jamais. Une correction s'applique aussitôt au bon que l'acheteur a déjà.</div>`;
   h+=`<div class="grouplab" style="margin-top:18px">Gérer ce bon</div>
     <button class="btn ghost wide" onclick="annulerBonCadeau('${esc(b.brut||b.code)}',${b.disabled?"false":"true"})">${b.disabled?"Réactiver ce bon":"Annuler ce bon"}</button>
     <button class="btn danger wide" style="margin-top:9px" onclick="supprimerBonCadeau('${esc(b.brut||b.code)}')">Supprimer définitivement</button>`;
   openModal(h);
+}
+
+/* ============================================================
+   CORRIGER UN BON CADEAU DEJA VENDU
+
+   Un acheteur s'est trompe de case : son bon dit "grossesse" alors qu'il
+   voulait "naissance". On ne lui en refait pas un. Le bon n'est pas un
+   fichier fige : c'est une page recomposee a chaque ouverture depuis ce
+   qui est stocke sur le serveur. Corriger la donnee corrige le bon que
+   l'acheteur a deja, avec le meme lien et le meme code.
+
+   Le montant et la formule ne sont pas modifiables ici : ils disent ce
+   qui a ete paye, et une facture existe en face.
+   ============================================================ */
+function corrigerBonCadeau(brut){
+  const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
+  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["duo","Grossesse + naissance"]];
+  let h=`<h2>Corriger le bon ${esc(b.code)}</h2>
+    <div class="hint" style="margin-bottom:14px">Le code reste <b>${esc(b.code)}</b> et le lien déjà envoyé continue de fonctionner :
+    il affichera la version corrigée dès l'enregistrement.</div>
+    <div class="field"><label>Séance</label>
+      <select id="bcSeance">${seances.map(([v,t])=>`<option value="${v}" ${b.seance===v?"selected":""}>${t}</option>`).join("")}</select>
+    </div>
+    <div class="field"><label>Offert à</label>
+      <input id="bcPour" value="${esc(b.beneficiaire||"")}" placeholder="Nom de la personne qui reçoit le bon"></div>
+    <div class="field"><label>Formule</label>
+      <input value="${esc(b.formule||"")} · ${b.montant} €" disabled>
+      <div class="hint">La formule et le montant ne se corrigent pas : ils disent ce qui a été payé, et une facture existe en face.
+      Pour passer à une formule supérieure, il faut un complément de paiement.</div>
+    </div>
+    <button class="btn wide" style="margin-top:6px" onclick="enregistrerCorrectionBon('${esc(brut)}')">Enregistrer la correction</button>`;
+  openModal(h);
+}
+
+async function enregistrerCorrectionBon(brut){
+  const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
+  if(!CLOUD){ alert("Disponible seulement en ligne : les bons sont sur le serveur."); return; }
+  const seance=document.getElementById("bcSeance").value;
+  const beneficiaire=document.getElementById("bcPour").value.trim();
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"cadeau-corriger",code:brut,seance,beneficiaire})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j||!j.ok){ alert("La correction a échoué : "+((j&&(j.message||j.error))||"raison inconnue")); return; }
+    if(j.rien){ toast("Rien n'a changé"); closeModal(); return; }
+    cadeauxCache=null; closeModal(); toast("Bon corrigé");
+    await chargerCadeaux();
+    /* Corriger sans prevenir l'acheteur ne sert a rien : il a l'ancien
+       email sous les yeux. On propose le renvoi dans la foulee. */
+    if(b.email && confirm("Bon corrigé ("+j.change.join(", ")+").\n\nRenvoyer le bon corrigé à "+b.email+" ?")){
+      renvoyerBonCadeau(brut,true,j.change.join(", "));
+    }
+  }catch(e){ alert("Erreur réseau, rien n'a été modifié."); }
+}
+
+/* Renvoie le bon par email. Meme code, meme lien : on ne regenere rien. */
+async function renvoyerBonCadeau(brut,corrige,change){
+  const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
+  if(!CLOUD){ alert("Disponible seulement en ligne."); return; }
+  if(!b.email){ alert("Aucune adresse email connue pour ce bon."); return; }
+  let explication="";
+  if(corrige){
+    const defaut=change?("J'ai corrigé votre bon cadeau ("+change+"). Le voici à jour."):"J'ai corrigé votre bon cadeau, le voici à jour.";
+    explication=prompt("Que veux-tu lui dire ? (cette phrase remplace le remerciement du premier email)",defaut);
+    if(explication===null) return;
+  }else if(!confirm("Renvoyer le bon "+b.code+" à "+b.email+" ?\n\nLe code et le lien ne changent pas.")) return;
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"cadeau-renvoyer",code:brut,corrige:!!corrige,explication})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){ toast("Bon renvoyé à "+j.envoyeA); }
+    else alert("L'envoi a échoué : "+((j&&(j.message||j.error))||"raison inconnue"));
+  }catch(e){ alert("Erreur réseau, l'email n'est pas parti."); }
 }
 
 /* Rend le code inutilisable, sans effacer la vente (elle a une facture). */
