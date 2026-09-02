@@ -2800,6 +2800,7 @@ function ideeRendre(){
         ${i.etat!=="afaire"?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="ideeEtat('${i.id}','afaire')">À refaire</button>`:""}
         ${i.etat!=="fait"?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="ideeEtat('${i.id}','fait')">Fait</button>`:""}
         ${i.etat==="afaire"?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="ideeVersRappel('${i.id}')">En faire un rappel</button>`:""}
+        ${i.etat==="afaire"?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="ideeVersAgenda('${i.id}')">Google Agenda</button>`:""}
         ${i.etat!=="abandon"?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="ideeEtat('${i.id}','abandon')">Abandonner</button>`:""}
         <button class="btn ghost" style="padding:6px 10px;font-size:12.5px;color:var(--danger)" onclick="ideeSupprimer('${i.id}')">Supprimer</button>
       </div>
@@ -2834,6 +2835,48 @@ function ideeVersRappel(id){
   i.etat="fait"; i.updatedAt=Date.now();
   saveDB(); ideeMajBulle(); ideeRendreFiltres(); ideeRendre();
   toast("Rappel créé");
+}
+
+/* Une idee n'a pas de date, et Google Agenda en exige une. On la demande
+   donc au moment de l'ajout plutot que d'en inventer une : poser d'office
+   l'idee sur aujourd'hui remplirait l'agenda de choses a ne pas y faire.
+
+   Le bouton d'ouverture est un vrai lien dont l'adresse se recalcule a
+   chaque frappe, et non un bouton qui appellerait window.open : un
+   window.open declenche apres coup se fait bloquer par les navigateurs. */
+function ideeVersAgenda(id){
+  const i=ideeParId(id); if(!i) return;
+  const demain=new Date(Date.now()+86400000);
+  const p=n=>String(n).padStart(2,"0");
+  const jDemain=demain.getFullYear()+"-"+p(demain.getMonth()+1)+"-"+p(demain.getDate());
+  const titre=(i.titre||i.texte||"Idée").slice(0,90);
+  openModal(`<h2>Ajouter à Google Agenda</h2>
+    <div class="card" style="padding:12px;margin-bottom:12px;font-size:13.5px;line-height:1.5">${esc(titre)}</div>
+    <div class="field two"><label>Quand ?</label>
+      <input id="iaDate" type="date" value="${jDemain}">
+      <input id="iaHeure" type="time">
+    </div>
+    <div class="hint">Sans heure, l'idée est posée sur la journée entière. Le texte complet part dans la description de l'événement.</div>
+    <a id="iaLien" class="btn wide" style="margin-top:12px" target="_blank" rel="noopener"
+       onclick="setTimeout(closeModal,60)">Ouvrir Google Agenda</a>`);
+
+  const maj=()=>{
+    const d=(document.getElementById("iaDate")||{}).value||"";
+    const t=(document.getElementById("iaHeure")||{}).value||"";
+    const lien=document.getElementById("iaLien");
+    if(!lien) return;
+    const u=gcalLink({
+      title:titre, dateISO:d, time:t, durationMin:60,
+      details:[i.texte, i.action?"Première action : "+i.action:""].filter(Boolean).join("\n\n")
+    });
+    if(u){ lien.href=u; lien.style.opacity=""; lien.style.pointerEvents=""; }
+    else { lien.removeAttribute("href"); lien.style.opacity=".45"; lien.style.pointerEvents="none"; }
+  };
+  ["iaDate","iaHeure"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener("input",maj);
+  });
+  maj();
 }
 
 /* Le compteur sur la bulle : uniquement les idees en attente. Compter
