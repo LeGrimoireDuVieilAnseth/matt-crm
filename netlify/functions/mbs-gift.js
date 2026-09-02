@@ -55,9 +55,17 @@ export default async (request) => {
     const origin = request.headers.get("origin") || "";
     const site = (process.env.MBS_SITE_URL || origin || "https://mybabyshoot.fr").replace(/\/+$/, "");
 
+    /* Un seul moyen de paiement par page, celui que l'acheteur vient de
+       choisir sur le site. Presenter la carte a cote de Klarna ferait
+       s'ouvrir la page sur Link, le paiement enregistre de Stripe : il
+       faudrait alors deviner qu'on clique "payer autrement" pour arriver a
+       ce qu'on a demande. Des clientes s'y sont perdues sur les seances,
+       il n'y a pas de raison de refaire l'erreur ici. */
+    const troisFois = String(body.paiement || "") === "3x";
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["card"],
+      payment_method_types: troisFois ? ["klarna"] : ["card"],
       customer_email: email || undefined,
       line_items: [{
         quantity: 1,
