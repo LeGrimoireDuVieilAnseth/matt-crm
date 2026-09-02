@@ -302,8 +302,21 @@ export default async (request) => {
       /* Klarna n'est propose que sur le paiement integral. Sur un acompte de
          90 EUR, fractionner n'aurait aucun sens et couterait plus cher.
          Apple Pay et Google Pay n'ont pas a etre listes : sur les pages
-         hebergees par Stripe, ils sont servis par le type "card". */
-      payment_method_types: integral ? ["card", "klarna"] : ["card"],
+         hebergees par Stripe, ils sont servis par le type "card".
+
+         KLARNA SEUL SUR LE 3 FOIS, ET C'EST DELIBERE.
+         La cliente vient de cliquer "Tout regler, en 3 fois avec Klarna".
+         Tant que "card" figurait aussi dans cette liste, Stripe ouvrait sa
+         page sur Link, son paiement enregistre : il fallait comprendre
+         qu'on demande une adresse email pour un service dont on n'a jamais
+         entendu parler, puis deviner qu'il faut cliquer "payer autrement"
+         pour enfin voir Klarna. Des clientes s'y perdaient, rappelaient, ou
+         abandonnaient. On ne peut pas demander a quelqu'un de choisir deux
+         fois la meme chose.
+         Contrepartie assumee : si Klarna refuse le dossier, il n'y a pas de
+         repli par carte sur cet ecran. La cliente revient en arriere et
+         prend l'acompte, qui lui est toujours propose. */
+      payment_method_types: integral ? ["klarna"] : ["card"],
       customer_email: email || undefined,
       line_items: [{
         quantity: 1,
