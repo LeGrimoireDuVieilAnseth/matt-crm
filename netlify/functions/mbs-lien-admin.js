@@ -61,6 +61,7 @@ export default async (request) => {
     const lien = await creerLien(store, {
       clientId: corps.clientId, prenom: corps.prenom, nom: corps.nom,
       email: corps.email, montant, libelle,
+      argument: corps.argument, gains: corps.gains,
     });
     if (!lien) return json({ ok: false, erreur: "code" }, 500);
     return json({ ok: true, lien: vuePublique(lien), url: adresseDuLien(lien.code) });

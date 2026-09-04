@@ -55,10 +55,16 @@ export function vuePublique(l) {
     prenom: l.prenom || "",
     statut: l.statut,
     troisFois: l.montant >= LIEN_SEUIL_3X,
+    /* Le texte qui explique ce qu'elle gagne. C'est lui qui fait la
+       difference entre "reglez 100 euros" et une proposition qu'on
+       comprend. Matt l'ecrit et peut le modifier a chaque fois. */
+    argument: l.argument || "",
+    gains: Array.isArray(l.gains) ? l.gains : [],
   };
 }
 
-export async function creerLien(store, { clientId, prenom, nom, email, montant, libelle, now = Date.now() }) {
+export async function creerLien(store, { clientId, prenom, nom, email, montant, libelle,
+                                         argument = "", gains = [], now = Date.now() }) {
   let code = "";
   for (let i = 0; i < 8; i++) {
     const essai = makeCode(8);
@@ -73,6 +79,11 @@ export async function creerLien(store, { clientId, prenom, nom, email, montant, 
     nom: String(nom || "").slice(0, 80),
     email: String(email || "").slice(0, 120),
     montant, libelle: String(libelle || "").slice(0, 120),
+    argument: String(argument || "").trim().slice(0, 900),
+    /* Six lignes suffisent a dire ce qu'on gagne. Au-dela, la page devient
+       un catalogue et l'argument se noie. */
+    gains: (Array.isArray(gains) ? gains : [])
+      .map(g => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 6),
     statut: "attente",
     createdAt: now, paidAt: 0, sessionId: "", invoiceNumber: "",
   };

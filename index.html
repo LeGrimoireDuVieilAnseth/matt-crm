@@ -6352,26 +6352,240 @@ async function chargerLiens(clientId){
   if(document.querySelector("#fiche.view.active")) openFiche(clientId);
 }
 
-async function creerLienPaiement(clientId){
+/* ---------- Le catalogue des montees en gamme ----------
+
+   Les prix recopient TARIFS de netlify/mbs-lib.mjs. S'ils changent la-bas,
+   ils doivent changer ici : c'est le seul endroit du CRM ou la grille est
+   dupliquee, et le complement affiche serait faux sans ca.
+
+   Ce catalogue n'existe pas pour lister des options : il existe pour que
+   Matt n'ait pas a reecrire a chaque fois l'argument qui convainc. Chaque
+   proposition dit ce qui CHANGE pour la cliente, jamais "profitez de". */
+const LIEN_FORMULES = [
+  { cle:"essentielle",  nom:"Essentielle",   prix:290, duo:false, retouchees:5  },
+  { cle:"confort",      nom:"Confort",       prix:390, duo:false, retouchees:10, brutes:true },
+  { cle:"prestige",     nom:"Prestige",      prix:490, duo:false, toutes:true,   brutes:true },
+  { cle:"duo-essentiel",nom:"Duo Essentiel", prix:590, duo:true,  retouchees:15 },
+  { cle:"duo-confort",  nom:"Duo Confort",   prix:690, duo:true,  retouchees:30, brutes:true },
+  { cle:"duo-prestige", nom:"Duo Prestige",  prix:890, duo:true,  toutes:true,   brutes:true },
+];
+const formuleParCle = k => LIEN_FORMULES.find(f=>f.cle===k) || null;
+
+/* Ce que la cliente gagne, ligne par ligne, en comparant les deux formules.
+   On ne liste que les DIFFERENCES : lui rappeler ce qu'elle a deja donne
+   l'impression qu'on lui revend ce qu'elle a paye. */
+function gainsEntre(de,vers){
+  const g=[];
+  if(vers.toutes && !de.toutes){
+    g.push("Toutes les photos réussies de la séance, retouchées");
+  }else if(vers.retouchees && de.retouchees && vers.retouchees>de.retouchees){
+    g.push(vers.retouchees+" photos retouchées au lieu de "+de.retouchees);
+  }
+  if(vers.brutes && !de.brutes){
+    g.push("Toute votre galerie en photos brutes, offerte");
+  }
+  if(vers.duo && !de.duo){
+    g.push("La séance naissance en plus, dans les 10 jours de bébé");
+  }
+  return g;
+}
+
+/* L'argument. Il n'y a pas de texte generique qui marche : ce qui convainc
+   depuis l'Essentielle n'est pas ce qui convainc depuis la Confort. */
+function argumentEntre(de,vers,prenom){
+  const bonjour = prenom ? "Bonjour "+prenom+" !\n\n" : "";
+  /* Le passage le plus fort de tous : la galerie complete s'ouvre. */
+  if(!de.brutes && vers.brutes && !vers.duo && !de.duo){
+    return bonjour+"J'ai pensé à vous en préparant votre galerie.\n\n"
+      +"Avec la formule "+vers.nom+", "+(vers.toutes
+        ? "je retouche toutes les photos réussies de la séance"
+        : "vous passez de "+de.retouchees+" à "+vers.retouchees+" photos retouchées")
+      +", et surtout toute votre galerie devient disponible : vous récupérez l'intégralité "
+      +"des photos au naturel, pas seulement celles que vous aviez choisies.\n\n"
+      +"C'est le passage qui change le plus de choses, et il ne coûte que la différence "
+      +"entre les deux formules.";
+  }
+  if(vers.duo && !de.duo){
+    return bonjour+"Votre séance grossesse est faite, et il reste la plus courte.\n\n"
+      +"En passant sur la formule "+vers.nom+", j'ajoute la séance naissance dans les dix "
+      +"jours qui suivent l'arrivée de votre bébé, et vous avez "
+      +(vers.toutes?"toutes les photos réussies retouchées":vers.retouchees+" photos retouchées")
+      +" à répartir sur les deux séances.\n\n"
+      +"Ces dix jours-là ne reviennent pas. C'est la séance que les parents regrettent "
+      +"le plus de ne pas avoir faite.";
+  }
+  if(vers.toutes && !de.toutes){
+    return bonjour+"Une proposition, après avoir vu vos photos.\n\n"
+      +"Vous avez déjà toute votre galerie au naturel. Avec la formule "+vers.nom+", "
+      +"je retouche l'ensemble des photos réussies de la séance, et plus seulement "
+      +de.retouchees+". Vous n'avez plus à choisir lesquelles garder.\n\n"
+      +"Vous ne réglez que la différence entre les deux formules.";
+  }
+  return bonjour+"Avec la formule "+vers.nom+", vous passez à "
+    +(vers.toutes?"toutes les photos retouchées":vers.retouchees+" photos retouchées")
+    +". Vous ne réglez que la différence entre les deux formules.";
+}
+
+/* Les propositions possibles a partir de ce qu'elle a deja pris. */
+function propositionsPour(cleActuelle,prenom){
+  const de=formuleParCle(cleActuelle);
+  const out=[];
+  if(de){
+    LIEN_FORMULES.forEach(vers=>{
+      if(vers.prix<=de.prix) return;              /* on ne descend pas en gamme */
+      if(de.duo && !vers.duo) return;             /* un duo ne redevient pas simple */
+      /* Une proposition ne doit RIEN retirer. Sans cette regle, on proposait
+         le Duo Essentiel a une cliente en Confort : elle payait 200 euros de
+         plus et perdait ses photos brutes. Une cliente a qui on propose de
+         payer pour perdre quelque chose ne redemande jamais rien. */
+      if(de.brutes && !vers.brutes) return;
+      if(de.toutes && !vers.toutes) return;
+      if(!de.toutes && !vers.toutes && de.retouchees && vers.retouchees
+         && vers.retouchees < de.retouchees) return;
+      out.push({
+        titre:"Passage en formule "+vers.nom,
+        montant:vers.prix-de.prix,
+        argument:argumentEntre(de,vers,prenom),
+        gains:gainsEntre(de,vers)
+      });
+    });
+  }
+  /* Options qui ne dependent pas de la formule. */
+  [3,5,10].forEach(n=>out.push({
+    titre:n+" photos retouchées en plus",
+    montant:n*20,
+    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")
+      +"Vous m'avez demandé "+n+" photos retouchées de plus que ce que comprend votre formule.\n\n"
+      +"Voici le lien pour les régler. Je les prépare dès réception et je les ajoute à votre galerie.",
+    gains:[n+" photos retouchées supplémentaires (20 € l'unité)"]
+  }));
+  out.push({
+    titre:"Album photo imprimé",
+    montant:140,
+    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")
+      +"Voici le lien pour votre album.\n\n"
+      +"C'est le seul format qui sort les photos de l'écran : imprimé, relié, "
+      +"posé sur une table. Dans dix ans, c'est celui-là qu'on ouvrira, pas un téléphone.",
+    gains:["Album photo imprimé et relié"]
+  });
+  out.push({ titre:"Autre montant", montant:0, libre:true,
+    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")+"Voici le lien pour régler ",
+    gains:[] });
+  return out;
+}
+
+/* Ce qu'elle a deja pris, devine depuis son paiement. Une supposition,
+   jamais une certitude : Matt corrige d'un clic si elle est fausse. */
+function formuleDevinee(c){
+  const p=(DB.paiements||[]).filter(x=>x.clientId===c.id&&x.brand==="mybabyshoot")
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+  if(!p) return "";
+  const t=((p.label||"")+" "+(p.notes||"")).toLowerCase();
+  const montant=num(p.total);
+  for(const f of LIEN_FORMULES){ if(t.includes(f.nom.toLowerCase())) return f.cle; }
+  const parPrix=LIEN_FORMULES.find(f=>f.prix===montant);
+  return parPrix?parPrix.cle:"";
+}
+
+let lienChoix=null;   /* la proposition selectionnee dans la fenetre */
+
+function creerLienPaiement(clientId){
   const c=clientById(clientId); if(!c) return;
   if(!CLOUD){ alert("Disponible seulement en ligne."); return; }
-  const libelle=(prompt("Que règle-t-elle ?\nCe texte apparaît sur la page de paiement ET sur sa facture.\n\nExemple : Passage en formule Confort",
-    "Passage en formule supérieure")||"").trim();
-  if(!libelle) return;
-  const brut=(prompt("Montant à régler, en euros :","100")||"").trim();
-  if(!brut) return;
+  const prenom=(c.name||"").split(" ")[0]||"";
+  const devinee=formuleDevinee(c);
+  lienChoix=null;
+
+  const h=`<h2>Lui proposer un complément</h2>
+    <div class="hint" style="margin-bottom:14px">Pour <b>${esc(c.name||"")}</b>${c.email?" · "+esc(c.email):""}</div>
+
+    <div class="field"><label>Ce qu'elle a déjà pris</label>
+      <select id="lpDe" onchange="lienRefaireChoix('${c.id}')">
+        <option value="">Je ne sais pas / autre</option>
+        ${LIEN_FORMULES.map(f=>`<option value="${f.cle}" ${devinee===f.cle?"selected":""}>${f.nom} · ${f.prix} €</option>`).join("")}
+      </select>
+      ${devinee?`<div class="hint">Deviné d'après son paiement. Corrige si c'est faux.</div>`:""}
+    </div>
+
+    <div class="grouplab" style="margin:14px 2px 8px">Ce que tu lui proposes</div>
+    <div id="lpChoix"></div>
+
+    <div class="field" style="margin-top:14px"><label>Le texte qu'elle verra sur la page</label>
+      <textarea id="lpTexte" rows="9" style="font-size:14px;line-height:1.55"
+        placeholder="Choisis une proposition ci-dessus, le texte s'écrit tout seul. Tu peux le modifier."></textarea>
+      <div class="hint">Écris ce que tu veux. C'est ce texte, et pas le montant, qui décide si elle dit oui.</div>
+    </div>
+
+    <div id="lpResume" class="hint"></div>
+    <button class="btn wide" style="margin-top:10px" id="lpGo" onclick="validerLienPaiement('${c.id}')">Créer le lien</button>`;
+  openModal(h);
+  lienRefaireChoix(c.id);
+}
+
+function lienRefaireChoix(clientId){
+  const c=clientById(clientId); if(!c) return;
+  const prenom=(c.name||"").split(" ")[0]||"";
+  const de=(document.getElementById("lpDe")||{}).value||"";
+  const props=propositionsPour(de,prenom);
+  lienChoix=null;
+  const box=document.getElementById("lpChoix");
+  box.innerHTML=props.map((p,i)=>`
+    <button type="button" class="reg-ligne" style="width:100%;text-align:left" onclick="lienChoisir(${i},'${c.id}')">
+      <span class="tx"><b>${esc(p.titre)}</b><span>${p.libre?"Tu saisis le montant":"+ "+p.montant+" €"}${p.gains.length?" · "+esc(p.gains[0]):""}</span></span>
+      <span class="fl">&rsaquo;</span>
+    </button>`).join("");
+  lienPropositions=props;
+  document.getElementById("lpTexte").value="";
+  document.getElementById("lpResume").textContent="";
+}
+let lienPropositions=[];
+
+function lienChoisir(i,clientId){
+  const p=lienPropositions[i]; if(!p) return;
+  lienChoix=JSON.parse(JSON.stringify(p));
+  if(p.libre){
+    const brut=(prompt("Montant à régler, en euros :","100")||"").trim();
+    const n=Math.round(Number(brut.replace(",",".")));
+    if(!n||n<10){ toast("Montant invalide"); lienChoix=null; return; }
+    lienChoix.montant=n;
+    const lib=(prompt("Que règle-t-elle ? (apparaît sur la page et sur sa facture)","Complément")||"").trim();
+    if(!lib){ lienChoix=null; return; }
+    lienChoix.titre=lib;
+    lienChoix.argument=lienChoix.argument+lib.toLowerCase()+".";
+  }
+  document.getElementById("lpTexte").value=lienChoix.argument;
+  document.getElementById("lpResume").innerHTML=
+    `<b>${esc(lienChoix.titre)}</b> · <b>${lienChoix.montant} €</b>`
+    +(lienChoix.gains.length?"<br>Elle verra : "+lienChoix.gains.map(esc).join(" · "):"")
+    +(lienChoix.montant>=150?"<br>Le paiement en 3 fois lui sera proposé.":"");
+  document.querySelectorAll("#lpChoix .reg-ligne").forEach((b,k)=>b.classList.toggle("on",k===i));
+}
+
+async function validerLienPaiement(clientId){
+  const c=clientById(clientId); if(!c) return;
+  if(!lienChoix){ toast("Choisis d'abord ce que tu lui proposes"); return; }
+  const texte=(document.getElementById("lpTexte").value||"").trim();
+  if(!texte){ toast("Le texte est vide : c'est lui qui la convainc"); return; }
+  const b=document.getElementById("lpGo");
+  b.disabled=true; b.textContent="Création…";
   try{
     const r=await fetch(LIEN_API,{method:"POST",headers:apiHeaders(true),
-      body:JSON.stringify({action:"creer",clientId,libelle,montant:brut,
+      body:JSON.stringify({action:"creer",clientId,
+        libelle:lienChoix.titre, montant:String(lienChoix.montant),
+        argument:texte, gains:lienChoix.gains,
         prenom:(c.name||"").split(" ")[0],nom:c.name||"",email:c.email||""})});
     if(r.status===401){ handleUnauthorized(); return; }
     const j=await r.json();
-    if(!j||!j.ok){ alert(j&&j.message?j.message:"Création impossible."); return; }
+    if(!j||!j.ok){ alert(j&&j.message?j.message:"Création impossible."); b.disabled=false; b.textContent="Créer le lien"; return; }
     liensCache=null;
-    toast("Lien créé");
+    closeModal();
+    toast("Lien créé et copié");
     copierLien(j.url);
     openFiche(clientId);
-  }catch(e){ alert("Erreur réseau, le lien n'a pas été créé."); }
+  }catch(e){
+    alert("Erreur réseau, le lien n'a pas été créé.");
+    b.disabled=false; b.textContent="Créer le lien";
+  }
 }
 
 function copierLien(url){
