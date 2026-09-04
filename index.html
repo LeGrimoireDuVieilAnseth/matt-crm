@@ -4226,6 +4226,7 @@ function openFiche(id){
   }
 
   h+=blocMailFinal(c);
+  h+=blocLiensPaiement(c);
 
   // infos
   h+=`<div class="card" style="margin:12px 0;">`;
@@ -6281,6 +6282,129 @@ function saveAvisLinks(){
   DB.reglages.codeFairePart=cfp?cfp.value.trim().toUpperCase().slice(0,24):"";
   saveDB();
   toast("Réglages enregistrés");
+}
+
+/* ============================================================
+   LIENS DE PAIEMENT
+
+   Une cliente arrive avec un bon cadeau pour la formule a 290 euros et
+   veut celle du dessus : il manque 100 euros. Plutot que de reclamer un
+   virement, Matt lui envoie un lien. Elle paie, la facture part toute
+   seule, la recette entre dans le CRM.
+
+   Le lien mene sur payer.html du site, pas sur une page Stripe nue : meme
+   domaine, meme habillage, la cliente reconnait ou elle est.
+
+   Un point qui a decide de toute l'architecture : une session Stripe
+   expire au bout de 24 heures. Un lien envoye par SMS un vendredi soir
+   serait mort le samedi. On envoie donc un CODE, et la page cree la
+   session au moment du clic. Le lien ne perime jamais.
+   ============================================================ */
+const LIEN_API = "/.netlify/functions/mbs-lien-admin";
+let liensCache = null;   /* {clientId: [liens]} */
+
+function blocLiensPaiement(c){
+  if(c.brand==="maison-lumiere") return "";
+  const liste=(liensCache&&liensCache[c.id])||null;
+  let h=`<div class="grouplab" style="margin:16px 2px 8px">Liens de paiement</div>`;
+  if(liste===null){
+    h+=`<div class="card" style="padding:12px 15px;font-size:13px;color:var(--ink-3)">Chargement…</div>`;
+    setTimeout(()=>chargerLiens(c.id),0);
+  }else if(!liste.length){
+    h+=`<div class="card" style="padding:12px 15px;font-size:13px;color:var(--ink-3);line-height:1.5">
+      Aucun lien pour l'instant. Sers-t'en pour un complément de formule, des tirages en plus,
+      ou un déplacement.</div>`;
+  }else{
+    h+=liste.map(l=>{
+      const etat=l.statut==="paye"?`<span class="badge ok">réglé</span>`
+                :l.statut==="annule"?`<span class="badge neutral">annulé</span>`
+                :`<span class="badge warn">en attente</span>`;
+      const quand=new Date(l.createdAt||Date.now()).toLocaleDateString("fr-FR");
+      return `<div class="card" style="padding:12px 15px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+          <b style="font-size:14px">${esc(l.libelle)}</b><b>${l.montant} €</b>
+        </div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:3px">${etat} · créé le ${quand}</div>
+        ${l.statut==="attente"?`<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">
+          <button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="copierLien('${esc(l.url)}')">Copier le lien</button>
+          ${c.email?`<button class="btn ghost" style="padding:6px 10px;font-size:12.5px" onclick="envoyerLienMail('${l.code}','${c.id}')">Envoyer par mail</button>`:""}
+          ${c.tel?`<a class="btn ghost" style="padding:6px 10px;font-size:12.5px" href="sms:${esc(c.tel.replace(/\s/g,''))}?&body=${encodeURIComponent("Bonjour "+(c.name||"").split(" ")[0]+", voici le lien pour régler "+l.libelle+" ("+l.montant+" €) : "+l.url)}">Envoyer par SMS</a>`:""}
+          <button class="btn ghost" style="padding:6px 10px;font-size:12.5px;color:var(--danger)" onclick="annulerLien('${l.code}','${c.id}')">Annuler</button>
+        </div>`:""}
+      </div>`;
+    }).join("");
+  }
+  h+=`<button class="btn ghost sm wide" onclick="creerLienPaiement('${c.id}')">
+    <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+    Créer un lien de paiement</button>`;
+  return h;
+}
+
+async function chargerLiens(clientId){
+  if(!CLOUD) return;
+  try{
+    const r=await fetch(LIEN_API+"?client="+encodeURIComponent(clientId),{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    liensCache=liensCache||{};
+    liensCache[clientId]=(j&&j.liens)||[];
+  }catch(e){ liensCache=liensCache||{}; liensCache[clientId]=[]; }
+  if(document.querySelector("#fiche.view.active")) openFiche(clientId);
+}
+
+async function creerLienPaiement(clientId){
+  const c=clientById(clientId); if(!c) return;
+  if(!CLOUD){ alert("Disponible seulement en ligne."); return; }
+  const libelle=(prompt("Que règle-t-elle ?\nCe texte apparaît sur la page de paiement ET sur sa facture.\n\nExemple : Passage en formule Confort",
+    "Passage en formule supérieure")||"").trim();
+  if(!libelle) return;
+  const brut=(prompt("Montant à régler, en euros :","100")||"").trim();
+  if(!brut) return;
+  try{
+    const r=await fetch(LIEN_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"creer",clientId,libelle,montant:brut,
+        prenom:(c.name||"").split(" ")[0],nom:c.name||"",email:c.email||""})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j||!j.ok){ alert(j&&j.message?j.message:"Création impossible."); return; }
+    liensCache=null;
+    toast("Lien créé");
+    copierLien(j.url);
+    openFiche(clientId);
+  }catch(e){ alert("Erreur réseau, le lien n'a pas été créé."); }
+}
+
+function copierLien(url){
+  try{
+    navigator.clipboard.writeText(url);
+    toast("Lien copié");
+  }catch(e){ prompt("Copie ce lien :",url); }
+}
+
+async function envoyerLienMail(code,clientId){
+  const c=clientById(clientId);
+  if(!c||!c.email){ alert("Cette fiche n'a pas d'email."); return; }
+  if(!confirm("Envoyer le lien de paiement à "+c.email+" ?")) return;
+  try{
+    const r=await fetch(LIEN_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"envoyer",code,email:c.email})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok) toast("Lien envoyé à "+j.envoyeA);
+    else alert(j&&j.message?j.message:"L'envoi a échoué.");
+  }catch(e){ alert("Erreur réseau, l'email n'est pas parti."); }
+}
+
+async function annulerLien(code,clientId){
+  if(!confirm("Annuler ce lien ? Il ne sera plus payable.")) return;
+  try{
+    const r=await fetch(LIEN_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"annuler",code})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){ liensCache=null; toast("Lien annulé"); openFiche(clientId); }
+    else alert(j&&j.message?j.message:"Annulation impossible.");
+  }catch(e){ alert("Erreur réseau."); }
 }
 
 /* Cette cliente est-elle venue avec un bon cadeau qui couvrait tout ?
