@@ -6393,7 +6393,8 @@ function gainsEntre(de,vers){
 /* L'argument. Il n'y a pas de texte generique qui marche : ce qui convainc
    depuis l'Essentielle n'est pas ce qui convainc depuis la Confort. */
 function argumentEntre(de,vers,prenom){
-  const bonjour = prenom ? "Bonjour "+prenom+" !\n\n" : "";
+  /* Pas de salutation ici : la page de paiement la dit deja en titre. */
+  const bonjour = "";
   /* Le passage le plus fort de tous : la galerie complete s'ouvre. */
   if(!de.brutes && vers.brutes && !vers.duo && !de.duo){
     return bonjour+"J'ai pensé à vous en préparant votre galerie.\n\n"
@@ -6454,22 +6455,20 @@ function propositionsPour(cleActuelle,prenom){
   [3,5,10].forEach(n=>out.push({
     titre:n+" photos retouchées en plus",
     montant:n*20,
-    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")
-      +"Vous m'avez demandé "+n+" photos retouchées de plus que ce que comprend votre formule.\n\n"
+    argument:"Vous m'avez demandé "+n+" photos retouchées de plus que ce que comprend votre formule.\n\n"
       +"Voici le lien pour les régler. Je les prépare dès réception et je les ajoute à votre galerie.",
     gains:[n+" photos retouchées supplémentaires (20 € l'unité)"]
   }));
   out.push({
     titre:"Album photo imprimé",
     montant:140,
-    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")
-      +"Voici le lien pour votre album.\n\n"
+    argument:"Voici le lien pour votre album.\n\n"
       +"C'est le seul format qui sort les photos de l'écran : imprimé, relié, "
       +"posé sur une table. Dans dix ans, c'est celui-là qu'on ouvrira, pas un téléphone.",
     gains:["Album photo imprimé et relié"]
   });
   out.push({ titre:"Autre montant", montant:0, libre:true,
-    argument:(prenom?"Bonjour "+prenom+" !\n\n":"")+"Voici le lien pour régler ",
+    argument:"Voici le lien pour régler ",
     gains:[] });
   return out;
 }
