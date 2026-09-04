@@ -103,6 +103,24 @@ function htmlDepuisTexte(texte, ctx) {
    numero pour une seance deja facturee creerait un doublon comptable. On
    n'en genere une que s'il n'y en a aucune.
    --------------------------------------------------------------- */
+/* Une seance entierement reglee par un bon cadeau n'a pas de facture a
+   envoyer a la beneficiaire : c'est l'ACHETEUR qui a paye, et c'est lui qui
+   a recu sa facture le jour de l'achat. En emettre une seconde au nom de
+   celle qui vient ferait apparaitre deux fois la meme recette, et lui
+   presenterait un document a 0 euro qui n'a aucun sens pour elle.
+
+   Le repere est le champ giftCode du paiement. Il n'est pose que par
+   mbs-checkout, quand le bon couvre la totalite et qu'il n'y a rien a
+   encaisser. Un simple code de reduction laisse toujours quelque chose a
+   payer (le total plancher est de 190 euros) : la reservation passe alors
+   par Stripe et le webhook, qui ne pose pas ce champ. Le repere ne peut
+   donc pas confondre les deux. */
+function regleParBonCadeau(client, data) {
+  return (data.paiements || []).some(p =>
+    p && p.clientId === client.id && p.brand === "mybabyshoot"
+    && String(p.giftCode || "").trim());
+}
+
 async function factureDeSolde(client, data) {
   const store = invoiceStore();
   const mail = String(client.email || "").toLowerCase();
@@ -195,9 +213,17 @@ export default async (request) => {
       message: "Les factures ne sont émises que pour Mybabyshoot." }, 400);
   }
 
-  // Facture de solde : uniquement Mybabyshoot, la seule marque facturee ici.
+  // Facture de solde : uniquement Mybabyshoot, la seule marque facturee ici,
+  // et uniquement si la seance n'a pas ete reglee par un bon cadeau.
+  const parBonCadeau = !mariage && regleParBonCadeau(client, data);
+
+  if (factureSeule && parBonCadeau) {
+    return json({ ok: false, error: "bon_cadeau",
+      message: "Séance réglée par un bon cadeau : la facture est déjà partie chez l'acheteur." }, 400);
+  }
+
   let facture = null;
-  if (!mariage) {
+  if (!mariage && !parBonCadeau) {
     try { facture = await factureDeSolde(client, data); } catch (e) { facture = null; }
     if (!facture) return json({ ok: false, error: "sans_facture" }, 400);
   }
@@ -248,7 +274,8 @@ export default async (request) => {
     ok: true,
     destinataire: client.email,
     facture: facture ? facture.number : "",
-    factureCreee: !!(facture && facture.nouvelle)
+    factureCreee: !!(facture && facture.nouvelle),
+    bonCadeau: parBonCadeau   /* pour que le CRM annonce le bon resultat */
   });
 };
 

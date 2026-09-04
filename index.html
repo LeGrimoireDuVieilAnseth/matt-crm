@@ -6283,6 +6283,18 @@ function saveAvisLinks(){
   toast("Réglages enregistrés");
 }
 
+/* Cette cliente est-elle venue avec un bon cadeau qui couvrait tout ?
+   Le champ giftCode n'est pose sur le paiement que dans ce cas precis :
+   un code de reduction laisse toujours un montant a payer, la reservation
+   passe alors par Stripe qui ne pose pas ce champ. Meme regle que cote
+   serveur, dans crm-mail-final.js, pour que l'ecran et l'envoi ne puissent
+   pas dire deux choses differentes. */
+function venuAvecBonCadeau(c){
+  if(!c || c.brand==="maison-lumiere") return false;
+  return (DB.paiements||[]).some(p=>
+    p && p.clientId===c.id && p.brand==="mybabyshoot" && String(p.giftCode||"").trim());
+}
+
 /* ---------- fiche : l'etat de l'envoi et le bouton ---------- */
 function blocMailFinal(c){
   if(!c.email){
@@ -6299,7 +6311,11 @@ function blocMailFinal(c){
       ${m.galerie?`<div style="margin-top:7px;font-size:13px;word-break:break-all"><a href="${esc(m.galerie)}" target="_blank" rel="noopener">${esc(m.galerie)}</a></div>`:""}
     </div>`;
   }
-  const nomBouton = c.brand==="maison-lumiere" ? "la galerie" : "galerie + facture";
+  /* Une seance offerte n'a pas de facture a envoyer a celle qui vient :
+     l'acheteur du bon a paye et recu la sienne. Le bouton doit donc dire
+     exactement ce qu'il fait, sinon Matt croit joindre un document. */
+  const nomBouton = (c.brand==="maison-lumiere" || venuAvecBonCadeau(c))
+    ? "la galerie" : "galerie + facture";
   h+=`<button class="btn ${m&&m.date?"ghost":""} wide sm" style="margin-bottom:4px" onclick="openMailFinal('${c.id}')">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
     ${m&&m.date?"Renvoyer":"Envoyer"} ${nomBouton}</button>`;
@@ -6313,11 +6329,18 @@ function openMailFinal(id){
   const marque=c.brand==="maison-lumiere"?"Maison Lumière":"Mybabyshoot";
   const dejaFait=c.mailFinal&&c.mailFinal.date;
 
-  const mbs=c.brand!=="maison-lumiere";
+  const cadeau=venuAvecBonCadeau(c);
+  const mbs=c.brand!=="maison-lumiere" && !cadeau;
   let h=`<h2>${dejaFait?"Renvoyer":"Envoyer"} ${mbs?"galerie + facture":"la galerie"}</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       À <b>${esc(c.email)}</b>, au nom de ${esc(marque)}.
     </div>`;
+
+  if(cadeau){
+    h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
+      Séance offerte : <b>aucune facture ne part avec ce mail</b>. Elle a déjà été envoyée
+      à la personne qui a acheté le bon, le jour de l'achat. Il n'y a rien à facturer ici.</div>`;
+  }
 
   if(mbs){
     const p=DB.paiements.filter(x=>x.clientId===c.id&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
@@ -6385,6 +6408,7 @@ async function envoyerMailFinal(id){
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok){
       const raisons={ galerie:"Ce lien de galerie n'est pas valide.",
+                      bon_cadeau:"Séance réglée par un bon cadeau : la facture est déjà partie chez l'acheteur.",
                       sans_facture:"Aucun montant enregistré pour cette séance : ajoute le paiement d'abord.",
                       sans_texte:"Le texte du mail est vide.",
                       sans_email:"Cette fiche n'a pas d'adresse email.",
@@ -6406,7 +6430,7 @@ async function envoyerMailFinal(id){
     saveDB();
     closeModal();
     openFiche(id);
-    toast(j.facture?("Mail envoyé, facture "+j.facture+" jointe"):"Mail envoyé");
+    toast(j.facture?("Mail envoyé, facture "+j.facture+" jointe"):(j.bonCadeau?"Galerie envoyée, sans facture (séance offerte)":"Mail envoyé"));
   }catch(e){
     toast("Pas de réseau, réessaie");
     if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
@@ -6602,6 +6626,13 @@ function blocFactureSolde(s){
     return `<div class="card" style="margin-top:6px;padding:12px 15px;font-size:13px;color:var(--ink-3);line-height:1.5">
       Aucun montant enregistré : ajoute le paiement pour pouvoir facturer.</div>`;
   }
+  /* Seance offerte : proposer un bouton qui emettrait une facture a 0 euro
+     serait une invitation a creer un document faux. On explique a la place. */
+  if(venuAvecBonCadeau(c)){
+    return `<div class="card" style="margin-top:6px;padding:12px 15px;font-size:13px;color:var(--ink-3);line-height:1.5">
+      Séance réglée par un bon cadeau : rien à facturer ici. La facture est partie
+      chez la personne qui a acheté le bon, le jour de l'achat.</div>`;
+  }
   const solde=num(p.total)-num(p.acompte);
   const deja=s.factureEnvoyee;
   let h="";
@@ -6637,6 +6668,7 @@ async function envoyerFactureSolde(id){
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok){
       const raisons={ sans_facture:"Aucun montant enregistré : ajoute le paiement d'abord.",
+                      bon_cadeau:"Séance offerte : la facture est déjà partie chez l'acheteur du bon.",
                       sans_email:"Cette fiche n'a pas d'adresse email.",
                       introuvable:"Fiche introuvable côté serveur, synchronise puis réessaie.",
                       marque:"Les factures ne sont émises que pour Mybabyshoot.",
