@@ -7,7 +7,7 @@
 //   POST {action:"annuler", code}: eteint un lien non paye
 //   POST {action:"envoyer", code}: envoie le lien par mail a la cliente
 import { lienStore, creerLien, majIndex, normaliserCode, montantValide,
-         vuePublique, LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
+         vuePublique, optionsDe, LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
@@ -48,20 +48,33 @@ export default async (request) => {
 
   /* ---------- creer ---------- */
   if (corps.action === "creer") {
-    const montant = montantValide(corps.montant);
-    if (montant === null) {
-      return json({ ok: false, erreur: "montant",
-        message: `Le montant doit être un nombre entre ${LIEN_MIN} et ${LIEN_MAX} euros.` }, 400);
-    }
-    const libelle = String(corps.libelle || "").trim();
-    if (!libelle) {
-      return json({ ok: false, erreur: "libelle",
-        message: "Écris ce que la cliente règle : elle le verra sur la page et sur sa facture." }, 400);
+    /* Le CRM envoie soit une liste de marches, soit un montant unique
+       (l'ancienne forme, et celle du "autre montant"). On verifie ce qu'on
+       recoit avant de creer : un lien sans prix ou sans libelle produirait
+       une page muette, et une facture sans intitule. */
+    const marches = Array.isArray(corps.options) ? corps.options : [];
+    if (marches.length) {
+      const mauvaise = marches.find(o =>
+        montantValide(o && o.montant) === null || !String((o && o.titre) || "").trim());
+      if (mauvaise) {
+        return json({ ok: false, erreur: "options",
+          message: `Chaque proposition doit avoir un intitulé et un montant entre ${LIEN_MIN} et ${LIEN_MAX} euros.` }, 400);
+      }
+    } else {
+      if (montantValide(corps.montant) === null) {
+        return json({ ok: false, erreur: "montant",
+          message: `Le montant doit être un nombre entre ${LIEN_MIN} et ${LIEN_MAX} euros.` }, 400);
+      }
+      if (!String(corps.libelle || "").trim()) {
+        return json({ ok: false, erreur: "libelle",
+          message: "Écris ce que la cliente règle : elle le verra sur la page et sur sa facture." }, 400);
+      }
     }
     const lien = await creerLien(store, {
       clientId: corps.clientId, prenom: corps.prenom, nom: corps.nom,
-      email: corps.email, montant, libelle,
-      argument: corps.argument, gains: corps.gains,
+      email: corps.email,
+      montant: montantValide(corps.montant), libelle: String(corps.libelle || "").trim(),
+      argument: corps.argument, gains: corps.gains, options: marches,
     });
     if (!lien) return json({ ok: false, erreur: "code" }, 500);
     return json({ ok: true, lien: vuePublique(lien), url: adresseDuLien(lien.code) });
@@ -100,10 +113,23 @@ export default async (request) => {
       return json({ ok: false, erreur: "email", message: "Aucune adresse valable pour cette cliente." }, 400);
     }
     const lien = adresseDuLien(l.code);
+    /* Le mail ne refait pas l'argumentaire : c'est la page qui le porte, et
+       Matt l'y a relu. Il dit juste ce qui l'attend, et quand il y a
+       plusieurs marches il les nomme -- sinon le mail annoncerait un seul
+       montant et la page en montrerait trois. */
+    const marches = optionsDe(l);
+    const plusieurs = marches.length > 1;
+    const intro = plusieurs
+      ? "<p>Voici les possibilités dont nous avons parlé. Vous choisissez celle que vous voulez sur la page, il n'y a aucune obligation.</p>"
+        + "<ul style=\"padding-left:18px;line-height:1.7\">"
+        + marches.map(o => "<li>" + esc(o.titre) + " · <b>" + o.montant + " €</b></li>").join("")
+        + "</ul>"
+      : "<p>Voici le lien pour régler " + esc(l.libelle) + ".</p>";
+    const texteBouton = plusieurs ? "Voir les possibilités" : "Régler " + l.montant + " €";
     const html =
       "<p>Bonjour " + esc(l.prenom) + " !</p>" +
-      "<p>Voici le lien pour régler " + esc(l.libelle) + ".</p>" +
-      "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">Régler " + l.montant + " €</a></p>" +
+      intro +
+      "<p style=\"margin:22px 0\"><a href=\"" + lien + "\" style=\"background:#5E4430;color:#FAF4EA;padding:14px 26px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold\">" + texteBouton + "</a></p>" +
       "<p style=\"font-size:13px;color:#888\">Le paiement se fait en ligne, de façon sécurisée. Votre facture vous sera envoyée automatiquement dès le règlement.</p>" +
       "<p>Si le bouton ne fonctionne pas, copiez cette adresse dans votre navigateur :<br>" +
       "<span style=\"font-size:13px\">" + lien + "</span></p>" +

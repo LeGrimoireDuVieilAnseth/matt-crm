@@ -6,13 +6,16 @@
 // Ne renvoie jamais l'email ni le nom de famille : un lien se transfere,
 // et se lit par-dessus une epaule.
 //
-//   GET  ?code=XXXX                     : ce qu'il y a a regler
-//   POST ?code=XXXX {paiement:"carte"}  : ouvre le paiement, rend l'adresse Stripe
+//   GET  ?code=XXXX                                : ce qu'il y a a regler
+//   POST ?code=XXXX {paiement:"carte", option:"o2"} : ouvre le paiement
 //
-// LE MONTANT EST LU ICI, PAS RECU DU NAVIGATEUR. C'est ce qui empeche de
-// changer le prix en trafiquant l'adresse.
+// LE MONTANT EST LU ICI, PAS RECU DU NAVIGATEUR. La page n'envoie que
+// l'identifiant de la marche choisie ; le prix qui va chez Stripe est
+// relu dans le stockage. C'est ce qui empeche de changer le prix en
+// trafiquant l'adresse ou la requete.
 import Stripe from "stripe";
-import { lienStore, normaliserCode, vuePublique, LIEN_SEUIL_3X } from "../mbs-liens.mjs";
+import { lienStore, normaliserCode, vuePublique, optionChoisie,
+         LIEN_SEUIL_3X } from "../mbs-liens.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -49,9 +52,17 @@ export default async (request) => {
 
   let corps = {};
   try { corps = await request.json(); } catch (e) {}
+
+  /* La marche qu'elle a choisie. Le navigateur n'envoie qu'un identifiant :
+     le titre et le prix sont relus ici. Si l'identifiant ne correspond a
+     rien, on refuse plutot que de deviner : facturer la mauvaise marche
+     serait pire que de lui redemander de cliquer. */
+  const choix = optionChoisie(lien, corps.option);
+  if (!choix) return json({ ok: false, erreur: "option" }, 400);
+
   /* Le 3 fois n'est propose qu'au-dessus du seuil, et c'est le serveur qui
      tranche : une requete forgee ne peut pas l'obtenir sur 40 euros. */
-  const troisFois = String(corps.paiement || "") === "3x" && lien.montant >= LIEN_SEUIL_3X;
+  const troisFois = String(corps.paiement || "") === "3x" && choix.montant >= LIEN_SEUIL_3X;
 
   try {
     const stripe = new Stripe(secret);
@@ -67,9 +78,9 @@ export default async (request) => {
         quantity: 1,
         price_data: {
           currency: "eur",
-          unit_amount: lien.montant * 100,
+          unit_amount: choix.montant * 100,
           product_data: {
-            name: lien.libelle,
+            name: choix.titre,
             description: "Complément Mybabyshoot" + (lien.prenom ? " pour " + lien.prenom : "")
           }
         }
@@ -78,8 +89,12 @@ export default async (request) => {
       cancel_url: site + "/payer.html?c=" + code,
       metadata: {
         app: "mbs-lien", lienCode: code,
-        clientId: lien.clientId || "", montant: String(lien.montant),
-        libelle: lien.libelle, prenom: lien.prenom || "", nom: lien.nom || "",
+        clientId: lien.clientId || "", montant: String(choix.montant),
+        /* optionId dit laquelle des marches a ete prise : c'est lui qui
+           decidera du libelle de la facture, meme si Matt a propose trois
+           formules a des prix voisins. */
+        optionId: choix.id, libelle: choix.titre,
+        prenom: lien.prenom || "", nom: lien.nom || "",
         email: lien.email || "", site
       }
     });

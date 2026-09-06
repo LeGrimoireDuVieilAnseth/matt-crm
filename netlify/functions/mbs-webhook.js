@@ -8,7 +8,7 @@ import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
-import { lienStore, normaliserCode, majIndex } from "../mbs-liens.mjs";
+import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi } from "../mbs-liens.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 /* Le courrier du bon cadeau vit dans son propre module : le CRM peut lui
    aussi le renvoyer apres une correction, et deux copies d'un meme modele
@@ -100,6 +100,11 @@ async function traiterLien(session, md) {
 
   const now = Date.now();
   const montant = Math.round((session.amount_total || 0) / 100) || Number(md.montant) || 0;
+  /* Un lien peut avoir porte deux ou trois marches. Ce qui doit figurer
+     sur la facture et dans le CRM, c'est celle qu'elle a prise, pas la
+     premiere de la liste. */
+  const choix = optionChoisie(lien, md.optionId);
+  const libelle = titreChoisi(lien, md);
   const nom = [md.prenom, md.nom].filter(Boolean).join(" ").trim() || lien.nom || "Cliente";
   const email = (md.email || session.customer_email || lien.email || "").trim();
   const troisFois = String(session.payment_method_types || "").includes("klarna");
@@ -111,12 +116,12 @@ async function traiterLien(session, md) {
     invNum = await nextInvoiceNumber();
     invPdf = await makeComplementInvoicePdf({
       number: invNum, dateStr, client: { name: nom, email },
-      libelle: lien.libelle, montant, troisFois
+      libelle: libelle, montant, troisFois
     });
     await saveInvoice({
       number: invNum, kind: "complement", pdf: invPdf,
       client: { name: nom, email }, montant, dateStr,
-      detail: lien.libelle + " (lien " + code + ")"
+      detail: libelle + " (lien " + code + ")"
     });
   } catch (e) { invNum = null; invPdf = null; }
 
@@ -127,7 +132,7 @@ async function traiterLien(session, md) {
     if (!(data.paiements || []).some(p => p.stripeSession === session.id)) {
       data.paiements.push({
         id: uid(), brand: BRAND, clientId: lien.clientId || "",
-        label: lien.libelle,
+        label: libelle,
         total: String(montant), acompte: String(montant), statut: "Solde",
         date: new Date(now).toISOString().slice(0, 10), dueDate: "",
         notes: "Complément réglé en ligne par lien de paiement." +
@@ -142,17 +147,21 @@ async function traiterLien(session, md) {
 
   lien.statut = "paye"; lien.paidAt = now; lien.sessionId = session.id;
   lien.invoiceNumber = invNum || "";
+  /* On garde la marche retenue et le montant reel : la liste du CRM doit
+     montrer ce qui a ete encaisse, pas ce qui avait ete propose. */
+  lien.choix = { id: (choix && choix.id) || "", titre: libelle, montant };
+  lien.libelle = libelle; lien.montant = montant;
   try { await lstore.setJSON("l-" + code, lien); } catch (e) {}
-  await majIndex(lstore, code, { statut: "paye", paidAt: now });
+  await majIndex(lstore, code, { statut: "paye", paidAt: now, montant, libelle });
 
   try {
-    await notifyAll("Complément réglé", nom + " · " + montant + " € · " + lien.libelle, "/");
+    await notifyAll("Complément réglé", nom + " · " + montant + " € · " + libelle, "/");
   } catch (e) {}
 
   if (email) {
     const html =
       "<p>Bonjour " + (md.prenom || lien.prenom || "") + " !</p>" +
-      "<p>Votre règlement de <b>" + montant + " €</b> est bien enregistré : " + lien.libelle + ".</p>" +
+      "<p>Votre règlement de <b>" + montant + " €</b> est bien enregistré : " + libelle + ".</p>" +
       (invPdf ? "<p>Votre facture est en pièce jointe.</p>" : "") +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
       "<p>À très vite<br>Matteo · Mybabyshoot</p>";
