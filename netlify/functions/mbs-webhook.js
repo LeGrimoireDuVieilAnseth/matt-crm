@@ -140,6 +140,30 @@ async function traiterLien(session, md) {
                (invNum ? " Facture " + invNum + "." : ""),
         stripeSession: session.id, invoiceNumber: invNum || "", lienCode: code
       });
+
+      /* UN RAPPEL, PAS SEULEMENT UNE NOTIFICATION.
+         Derriere ce paiement il y a du travail : sa galerie doit etre
+         remise a jour selon ce qu'elle vient de prendre. Une notification
+         push se rate (telephone en silencieux, 23 heures, au volant), et
+         une ligne de plus dans Paiements ressemble a de l'argent, pas a
+         une tache. On pose donc un rappel qui reste jusqu'a ce que Matt
+         le coche.
+         Echeance aujourd'hui, sinon il ne remonte pas sur l'accueil :
+         seuls les rappels dates du jour ou en retard y apparaissent. */
+      data.taches = data.taches || [];
+      data.taches.push({
+        id: uid(), done: false,
+        title: libelle + " — " + nom,
+        dueDate: new Date(now).toISOString().slice(0, 10),
+        priority: "Haute",
+        clientId: lien.clientId || "",
+        notes: "Réglé " + montant + " € en ligne par lien de paiement"
+          + (troisFois ? " (3 fois avec Klarna)" : "") + "."
+          + (invNum ? " Facture " + invNum + "." : "")
+          + "\nÀ faire : mettre sa galerie à jour selon ce qu'elle vient de prendre.",
+        stripeSession: session.id, lienCode: code
+      });
+
       data.t = now;
       await store.setJSON("data", data);
     }
@@ -155,7 +179,10 @@ async function traiterLien(session, md) {
   await majIndex(lstore, code, { statut: "paye", paidAt: now, montant, libelle });
 
   try {
-    await notifyAll("Complément réglé", nom + " · " + montant + " € · " + libelle, "/");
+    /* La notification dit aussi ce qu'il y a a faire : "200 € encaissés" ne
+       declenche aucun geste, "sa galerie est à mettre à jour" si. */
+    await notifyAll("Complément réglé · " + montant + " €",
+      nom + " · " + libelle + " — sa galerie est à mettre à jour.", "/");
   } catch (e) {}
 
   if (email) {
