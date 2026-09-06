@@ -3565,12 +3565,15 @@ function renderClients(){
      pastille « Archivé », et le nombre masqué est affiché : rien ne
      disparaît en silence. */
   let nbArchivees=0;
-  if(clientStatusFilter==="all"){
+  if(clientStatusFilter!=="all"){
+    list=list.filter(c=>c.status===clientStatusFilter);
+  } else if(!q){
+    /* On ne masque les archivees que sur la liste au repos. Des que Matt
+       tape une recherche, il cherche quelqu'un de precis : lui cacher une
+       ancienne cliente parce qu'elle est archivee serait absurde. */
     const avantFiltre=list.length;
     list=list.filter(c=>c.status!=="Archive");
     nbArchivees=avantFiltre-list.length;
-  } else {
-    list=list.filter(c=>c.status===clientStatusFilter);
   }
   if(q) list=list.filter(c=>{
     const blob=[c.name,c.tel,c.email,c.insta,c.notes,c.type].join(" ").toLowerCase();
@@ -5914,7 +5917,14 @@ function devinerColonnes(entetes){
     prenom: complet>=0 ? -1 : prenom,
     nom:    complet>=0 ? complet : (nom>=0 ? nom : cherche("nom","name")),
     email:  cherche("e-mail","email","mail","courriel"),
-    tel:    cherche("téléphone","telephone","phone","mobile","portable")
+    tel:    cherche("téléphone","telephone","phone","mobile","portable"),
+    /* La colonne qui dit qui a demande a ne plus etre contacte. Tous les
+       exports de mailing en ont une, sous un nom ou un autre. */
+    desab:  cherche("désabonn","desabonn","abonné aux e-mail","abonne aux e-mail",
+                    "subscriber status","unsubscri","opt-out","optout"),
+    /* Ce que la personne a achete ou d'ou elle vient : chez Wix c'est
+       "Libellés" ("Pack duo MINI", "Offre Avantage Grossesse"). */
+    info:   cherche("libellé","libelle","étiquette","etiquette","label","source","tag")
   };
 }
 
@@ -5950,6 +5960,12 @@ function ecranImportContacts(){
     <div class="field"><label>Nom</label><select id="impNom" onchange="majApercuImport()">${opts(impMap.nom)}</select></div>
     <div class="field"><label>Email</label><select id="impEmail" onchange="majApercuImport()">${opts(impMap.email)}</select></div>
     <div class="field"><label>Téléphone</label><select id="impTel" onchange="majApercuImport()">${opts(impMap.tel)}</select></div>
+    <div class="field"><label>Désabonnement <span style="font-weight:400;color:var(--ink-3)">(facultatif)</span></label>
+      <select id="impDesab" onchange="majApercuImport()">${opts(impMap.desab)}</select>
+      <div class="hint">Les personnes marquées « désabonné » dans cette colonne ne seront pas importées du tout.</div></div>
+    <div class="field"><label>Information à garder <span style="font-weight:400;color:var(--ink-3)">(facultatif)</span></label>
+      <select id="impInfo" onchange="majApercuImport()">${opts(impMap.info)}</select>
+      <div class="hint">Recopiée dans les notes de la fiche : ce qu'elle a acheté, d'où elle vient…</div></div>
     <div class="field"><label>À classer dans</label>
       <select id="impMarque" onchange="majApercuImport()">
         ${BRAND_ORDER.map(b=>`<option value="${b}" ${b==="mybabyshoot"?"selected":""}>${esc((BRANDS[b]||{}).name||b)}</option>`).join("")}
@@ -5965,12 +5981,17 @@ function ecranImportContacts(){
    derniers chiffres du numero : "+33 6 47 76 54 17" et "06 47 76 54 17"
    sont le meme telephone ecrit de deux facons. */
 const impCleMail = e => String(e||"").trim().toLowerCase();
+/* Wix, comme Excel, prefixe les numeros internationaux d'une apostrophe
+   pour les forcer en texte : "'+33 6 47 76 54 17". Gardee telle quelle,
+   elle s'afficherait sur la fiche et casserait le lien d'appel. */
+const impNettoyerTel = t => String(t||"").trim().replace(/^['\u2019\s]+/, "").trim();
 const impCleTel  = t => { const d=String(t||"").replace(/\D/g,""); return d.length>=9?d.slice(-9):""; };
 
 function lireMapImport(){
   const v=id=>{ const el=document.getElementById(id); return el?Number(el.value):-1; };
   const m=document.getElementById("impMarque");
   return { prenom:v("impPrenom"), nom:v("impNom"), email:v("impEmail"), tel:v("impTel"),
+           desab:v("impDesab"), info:v("impInfo"),
            marque:(m&&m.value)||"mybabyshoot" };
 }
 
@@ -5984,11 +6005,20 @@ function analyserImport(){
     const t=impCleTel(c.tel);    if(t) dejaTels.add(t);
   });
   const vus=new Set();
-  const nouveaux=[], doublons=[], vides=[];
+  const nouveaux=[], doublons=[], vides=[], desabonnes=[];
   impLignes.forEach(l=>{
     const val=i=>(i>=0&&i<l.length)?String(l[i]||"").trim():"";
-    const email=val(m.email), tel=val(m.tel);
+    const email=val(m.email), tel=impNettoyerTel(val(m.tel));
     const nom=[val(m.prenom),val(m.nom)].filter(Boolean).join(" ").trim();
+    /* Qui a demande a ne plus etre contacte n'entre pas du tout. Le laisser
+       entrer "pour information" finirait un jour dans un export de
+       campagne : la seule protection sure est de ne pas l'avoir.
+       Attention a ne pas confondre avec "Jamais abonné", qui veut seulement
+       dire qu'elle n'a jamais coche de case newsletter. */
+    const etat=val(m.desab);
+    if(etat && /désabonn|desabonn|unsubscri|opt.?out|désinscri|desinscri/i.test(etat)){
+      desabonnes.push(1); return;
+    }
     /* Sans email ni telephone, la fiche ne sert a rien : on ne la cree pas. */
     if(!email && !tel){ vides.push(1); return; }
     const ce=impCleMail(email), ct=impCleTel(tel);
@@ -5996,9 +6026,10 @@ function analyserImport(){
     const cle=ce||ct;
     if(vus.has(cle)){ doublons.push(1); return; }
     vus.add(cle);
-    nouveaux.push({nom,email,tel});
+    nouveaux.push({nom,email,tel,info:val(m.info)});
   });
-  return {nouveaux, doublons:doublons.length, vides:vides.length, marque:m.marque};
+  return {nouveaux, doublons:doublons.length, vides:vides.length,
+          desabonnes:desabonnes.length, marque:m.marque};
 }
 
 function majApercuImport(){
@@ -6014,6 +6045,8 @@ function majApercuImport(){
   box.innerHTML=`<div class="grouplab" style="margin:16px 2px 8px">Ce qui va se passer</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       ${stat("Nouveaux",r.nouveaux.length)}${stat("Déjà connus",r.doublons)}${stat("Sans contact",r.vides)}</div>
+    ${r.desabonnes?`<div class="hint" style="margin:0 2px 10px;color:var(--danger)">
+      ${r.desabonnes} personne(s) désabonnée(s) : écartée(s), elles n'entreront pas dans le CRM.</div>`:""}
     ${ex?`<div class="hint" style="margin:0 2px 2px">Les trois premiers, tels qu'ils seront créés :</div>${ex}`
        :`<div class="hint">Aucune ligne exploitable avec ces colonnes. Vérifie les correspondances ci-dessus.</div>`}`;
   const b=document.getElementById("impGo");
@@ -6039,6 +6072,7 @@ function validerImportContacts(){
       status:"Archive", type:"", tel:n.tel, email:n.email, insta:"",
       source:"Ancien client",
       notes:"Importé depuis "+impNomFichier+" le "+quand+"."
+        +(n.info?"\n"+n.info:"")
     });
   });
   saveDB();
