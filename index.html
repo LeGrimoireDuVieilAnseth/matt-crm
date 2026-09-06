@@ -6501,13 +6501,30 @@ function argumentEntre(de,vers){
    pas apres l'accouchement, et la proposer a une maman qui vient
    d'accoucher est la meilleure facon de passer pour un robot. */
 function typeSeanceDe(c){
+  /* On ne lit QUE les champs structurés : le type de la fiche, celui des
+     séances, le libellé des paiements. Surtout pas les notes : c'est du
+     texte libre où « grossesse » peut apparaître pour mille raisons
+     (« elle m'avait écrit pendant sa grossesse »), et une phrase de Matt
+     ne doit pas décider d'une proposition commerciale. Le libellé des
+     paiements, lui, porte toujours le type — voir mbs-webhook.js. */
   const bouts=[c.type||""];
   (DB.seances||[]).forEach(s=>{ if(s.clientId===c.id) bouts.push(s.type||""); });
-  (DB.paiements||[]).forEach(p=>{ if(p.clientId===c.id) bouts.push((p.label||"")+" "+(p.notes||"")); });
-  const t=bouts.join(" ").toLowerCase();
-  if(/grossesse\s*\+\s*naissance|\bduo\b/.test(t)) return "duo";
-  if(/grossesse/.test(t)) return "grossesse";
-  if(/naissance|nouveau/.test(t)) return "naissance";
+  (DB.paiements||[]).forEach(p=>{ if(p.clientId===c.id) bouts.push(p.label||""); });
+  const t=bouts.join(" § ").toLowerCase();
+
+  const duo=/grossesse\s*\+\s*naissance|\bduo\b/.test(t);
+  const naissance=/naissance|nouveau-?n/.test(t);
+  const grossesse=/grossesse/.test(t);
+
+  /* L'ARRIVÉE DU BÉBÉ FERME LA FENÊTRE. Dès qu'une séance naissance est au
+     dossier, on ne propose plus d'« ajouter la séance naissance » : soit
+     elle est déjà faite, soit elle est déjà prévue. C'est pour ça que
+     naissance passe AVANT grossesse, et pas l'inverse : une cliente qui a
+     fait sa grossesse puis sa naissance porte les deux mots, et l'ordre
+     naïf lui aurait reproposé ce qu'elle a déjà. */
+  if(duo || (grossesse && naissance)) return "duo";
+  if(naissance) return "naissance";
+  if(grossesse) return "grossesse";
   return "autre";
 }
 
