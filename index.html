@@ -3559,7 +3559,19 @@ function renderClients(){
 
   const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
   let list=DB.clients.filter(c=>FILTER==="all"||c.brand===FILTER);
-  if(clientStatusFilter!=="all") list=list.filter(c=>c.status===clientStatusFilter);
+  /* Les fiches archivées ne remontent plus dans « Tous ». Sans ça, les
+     centaines de contacts importés pour les campagnes noieraient les
+     quelques clientes en cours. Elles restent à une touche, sur la
+     pastille « Archivé », et le nombre masqué est affiché : rien ne
+     disparaît en silence. */
+  let nbArchivees=0;
+  if(clientStatusFilter==="all"){
+    const avantFiltre=list.length;
+    list=list.filter(c=>c.status!=="Archive");
+    nbArchivees=avantFiltre-list.length;
+  } else {
+    list=list.filter(c=>c.status===clientStatusFilter);
+  }
   if(q) list=list.filter(c=>{
     const blob=[c.name,c.tel,c.email,c.insta,c.notes,c.type].join(" ").toLowerCase();
     return blob.includes(q);
@@ -3613,6 +3625,9 @@ function renderClients(){
       +'<button class="tri-sens" onclick="inverserTriClients()">'+sens+'</button></div>';
   }
 
+  if(nbArchivees){
+    barre+=`<div class="hint" style="margin:0 2px 10px">${nbArchivees} fiche(s) archivée(s) masquée(s). <button type="button" class="btn ghost" style="padding:3px 9px;font-size:12px;width:auto" onclick="setClientStatus('Archive')">Les voir</button></div>`;
+  }
   box.innerHTML=barre+list.map(c=>{
     let sub, end;
     /* Quand on trie sur une date, la ligne la montre : une liste rangee
@@ -5779,6 +5794,7 @@ function renderContacts(brand){
       <button class="btn ghost sm wide" onclick="copyContacts('emails')">Copier les emails</button>
       <button class="btn ghost sm wide" onclick="copyContacts('phones')">Copier les numéros</button>
       <button class="btn ghost sm wide" onclick="downloadContactsCsv()">Telecharger en CSV (Excel)</button>
+      <button class="btn ghost sm wide" onclick="ouvrirImportContacts()">Importer une liste (CSV)</button>
     </div>
     <div id="contactsMsg" style="font-size:12.5px;color:var(--ink-2);margin-top:9px"></div>
     <div class="hint" style="margin-top:8px">Pense a n'utiliser ces contacts que pour des personnes qui ont accepte d'etre recontactees.</div>`;
@@ -5809,6 +5825,226 @@ function downloadContactsCsv(){
   a.download="contacts-"+contactsBrand+".csv"; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
   const msg=document.getElementById("contactsMsg"); if(msg) msg.textContent="Fichier CSV telecharge.";
+}
+
+/* ---------- Importer une liste de contacts ----------
+
+   Matt a des centaines de clientes d'avant ce CRM : celles qui ont reserve
+   ou achete un bon cadeau du temps de Wix. Elles n'existent nulle part ici,
+   et sans elles une campagne mail ne toucherait que les nouvelles.
+
+   ELLES ARRIVENT EN FICHES ARCHIVEES. Elles comptent dans "Contacts et
+   campagnes", mais ne remontent ni sur l'accueil ni dans la liste des
+   clientes : sept cents fiches au milieu de la dizaine en cours rendraient
+   le CRM inutilisable. La pastille "Archivé" les remet a l'ecran.
+
+   ON NE DEVINE PAS LES COLONNES TOUT SEUL. Le fichier de Wix, celui de
+   Stripe et un carnet d'adresses n'ont ni les memes en-tetes ni le meme
+   ordre ; certains coupent prenom et nom en deux. Le CRM propose une
+   correspondance, Matt la corrige, et voit trois lignes en exemple avant
+   de valider. */
+
+let impLignes=null, impEntetes=[], impNomFichier="";
+let impMap={prenom:-1,nom:-1,email:-1,tel:-1};
+
+/* Excel francais ecrit des points-virgules, la plupart des exports
+   anglo-saxons des virgules. On compte hors guillemets, sinon une adresse
+   "Paris, France" fausserait le decompte. */
+function csvSeparateur(ligne){
+  let meilleur=";", score=-1;
+  [";",",","\t"].forEach(sep=>{
+    let n=0, guill=false;
+    for(let i=0;i<ligne.length;i++){
+      const ch=ligne[i];
+      if(ch==='"') guill=!guill;
+      else if(ch===sep && !guill) n++;
+    }
+    if(n>score){ score=n; meilleur=sep; }
+  });
+  return meilleur;
+}
+
+/* Un vrai analyseur, pas un split : un nom contient des guillemets, une
+   adresse des virgules, et une note peut tenir sur deux lignes. */
+function csvAnalyser(texte,sep){
+  const lignes=[]; let champ="", ligne=[], guill=false;
+  for(let i=0;i<texte.length;i++){
+    const ch=texte[i];
+    if(guill){
+      if(ch==='"'){
+        if(texte[i+1]==='"'){ champ+='"'; i++; }   /* "" = un guillemet */
+        else guill=false;
+      } else champ+=ch;
+    }
+    else if(ch==='"') guill=true;
+    else if(ch===sep){ ligne.push(champ); champ=""; }
+    else if(ch==="\n"){ ligne.push(champ); lignes.push(ligne); ligne=[]; champ=""; }
+    else if(ch!=="\r") champ+=ch;
+  }
+  if(champ!=="" || ligne.length){ ligne.push(champ); lignes.push(ligne); }
+  return lignes.filter(l=>l.some(v=>String(v).trim()!==""));
+}
+
+/* Certains exports sortent en Windows-1252. Lus en UTF-8 ils donnent
+   "SÃ©verine" ou des losanges : on relit dans l'autre encodage plutot que
+   d'importer sept cents noms abimes. */
+function decoderCsv(buffer){
+  let t=new TextDecoder("utf-8").decode(buffer);
+  if(/�|Ã©|Ã¨|Ã |Ã´|Ã»|Ã§|Ã®|â€™/.test(t)){
+    try{ t=new TextDecoder("windows-1252").decode(buffer); }catch(e){}
+  }
+  return t.replace(/^﻿/,"");
+}
+
+/* Les en-tetes rencontres en pratique : Wix ecrit "First Name"/"Last Name"
+   meme sur un compte francais, Stripe "Name"/"Email"/"Phone". */
+function devinerColonnes(entetes){
+  const t=entetes.map(e=>String(e||"").toLowerCase().trim());
+  const cherche=(...motifs)=>{
+    for(const m of motifs){ const i=t.findIndex(e=>e.includes(m)); if(i>=0) return i; }
+    return -1;
+  };
+  const complet=cherche("nom complet","full name","display name");
+  const prenom =cherche("prénom","prenom","first name","first_name","firstname");
+  /* "nom" tout court arriverait avant "nom de famille" : on cherche le plus
+     precis d'abord, sinon un fichier francais mettrait le nom entier dans
+     la colonne du nom de famille. */
+  const nom    =cherche("nom de famille","last name","last_name","lastname","surname");
+  return {
+    prenom: complet>=0 ? -1 : prenom,
+    nom:    complet>=0 ? complet : (nom>=0 ? nom : cherche("nom","name")),
+    email:  cherche("e-mail","email","mail","courriel"),
+    tel:    cherche("téléphone","telephone","phone","mobile","portable")
+  };
+}
+
+function ouvrirImportContacts(){
+  const inp=document.createElement("input");
+  inp.type="file"; inp.accept=".csv,.txt,text/csv,text/plain";
+  inp.onchange=()=>{ if(inp.files&&inp.files[0]) lireFichierContacts(inp.files[0]); };
+  inp.click();
+}
+
+async function lireFichierContacts(fichier){
+  try{
+    const texte=decoderCsv(await fichier.arrayBuffer());
+    const lignes=csvAnalyser(texte, csvSeparateur(texte.split("\n")[0]||""));
+    if(lignes.length<2){ alert("Ce fichier ne contient pas de tableau lisible."); return; }
+    impEntetes=lignes[0].map(v=>String(v).trim());
+    impLignes=lignes.slice(1);
+    impNomFichier=fichier.name;
+    impMap=devinerColonnes(impEntetes);
+    ecranImportContacts();
+  }catch(e){ alert("Lecture impossible : "+((e&&e.message)||e)); }
+}
+
+function ecranImportContacts(){
+  const opts=sel=>['<option value="-1">— aucune —</option>'].concat(
+    impEntetes.map((e,i)=>`<option value="${i}" ${sel===i?"selected":""}>${esc(e||("colonne "+(i+1)))}</option>`)
+  ).join("");
+  const h=`<h2>Importer des contacts</h2>
+    <div class="hint" style="margin-bottom:14px"><b>${esc(impNomFichier)}</b> · ${impLignes.length} ligne(s) lue(s)</div>
+
+    <div class="grouplab" style="margin:0 2px 8px">Quelle colonne contient quoi</div>
+    <div class="field"><label>Prénom</label><select id="impPrenom" onchange="majApercuImport()">${opts(impMap.prenom)}</select></div>
+    <div class="field"><label>Nom</label><select id="impNom" onchange="majApercuImport()">${opts(impMap.nom)}</select></div>
+    <div class="field"><label>Email</label><select id="impEmail" onchange="majApercuImport()">${opts(impMap.email)}</select></div>
+    <div class="field"><label>Téléphone</label><select id="impTel" onchange="majApercuImport()">${opts(impMap.tel)}</select></div>
+    <div class="field"><label>À classer dans</label>
+      <select id="impMarque" onchange="majApercuImport()">
+        ${BRAND_ORDER.map(b=>`<option value="${b}" ${b==="mybabyshoot"?"selected":""}>${esc((BRANDS[b]||{}).name||b)}</option>`).join("")}
+      </select></div>
+
+    <div id="impResume"></div>
+    <button class="btn wide" style="margin-top:12px" id="impGo" onclick="validerImportContacts()">Importer</button>`;
+  openModal(h);
+  majApercuImport();
+}
+
+/* Deux contacts sont la meme personne s'ils partagent l'email, ou les neuf
+   derniers chiffres du numero : "+33 6 47 76 54 17" et "06 47 76 54 17"
+   sont le meme telephone ecrit de deux facons. */
+const impCleMail = e => String(e||"").trim().toLowerCase();
+const impCleTel  = t => { const d=String(t||"").replace(/\D/g,""); return d.length>=9?d.slice(-9):""; };
+
+function lireMapImport(){
+  const v=id=>{ const el=document.getElementById(id); return el?Number(el.value):-1; };
+  const m=document.getElementById("impMarque");
+  return { prenom:v("impPrenom"), nom:v("impNom"), email:v("impEmail"), tel:v("impTel"),
+           marque:(m&&m.value)||"mybabyshoot" };
+}
+
+function analyserImport(){
+  const m=lireMapImport();
+  /* Ce que le CRM connait deja, pour ne pas creer un doublon de chaque
+     cliente qui a reserve depuis. */
+  const dejaMails=new Set(), dejaTels=new Set();
+  (DB.clients||[]).forEach(c=>{
+    const e=impCleMail(c.email); if(e) dejaMails.add(e);
+    const t=impCleTel(c.tel);    if(t) dejaTels.add(t);
+  });
+  const vus=new Set();
+  const nouveaux=[], doublons=[], vides=[];
+  impLignes.forEach(l=>{
+    const val=i=>(i>=0&&i<l.length)?String(l[i]||"").trim():"";
+    const email=val(m.email), tel=val(m.tel);
+    const nom=[val(m.prenom),val(m.nom)].filter(Boolean).join(" ").trim();
+    /* Sans email ni telephone, la fiche ne sert a rien : on ne la cree pas. */
+    if(!email && !tel){ vides.push(1); return; }
+    const ce=impCleMail(email), ct=impCleTel(tel);
+    if((ce&&dejaMails.has(ce))||(ct&&dejaTels.has(ct))){ doublons.push(1); return; }
+    const cle=ce||ct;
+    if(vus.has(cle)){ doublons.push(1); return; }
+    vus.add(cle);
+    nouveaux.push({nom,email,tel});
+  });
+  return {nouveaux, doublons:doublons.length, vides:vides.length, marque:m.marque};
+}
+
+function majApercuImport(){
+  const box=document.getElementById("impResume"); if(!box||!impLignes) return;
+  const r=analyserImport();
+  const stat=(lab,n)=>`<div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)">
+    <div class="lab">${lab}</div><div class="num" style="font-size:22px">${n}</div></div>`;
+  const ex=r.nouveaux.slice(0,3).map(n=>
+    `<div style="font-size:13px;padding:8px 0;border-top:1px solid var(--line)">
+      <b>${esc(n.nom||"(sans nom)")}</b><br>
+      <span style="color:var(--ink-3)">${esc(n.email||"pas d'email")} · ${esc(n.tel||"pas de numéro")}</span>
+    </div>`).join("");
+  box.innerHTML=`<div class="grouplab" style="margin:16px 2px 8px">Ce qui va se passer</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      ${stat("Nouveaux",r.nouveaux.length)}${stat("Déjà connus",r.doublons)}${stat("Sans contact",r.vides)}</div>
+    ${ex?`<div class="hint" style="margin:0 2px 2px">Les trois premiers, tels qu'ils seront créés :</div>${ex}`
+       :`<div class="hint">Aucune ligne exploitable avec ces colonnes. Vérifie les correspondances ci-dessus.</div>`}`;
+  const b=document.getElementById("impGo");
+  if(b){
+    b.disabled=!r.nouveaux.length;
+    b.textContent=r.nouveaux.length?("Importer "+r.nouveaux.length+" contacts"):"Rien à importer";
+  }
+}
+
+function validerImportContacts(){
+  const r=analyserImport();
+  if(!r.nouveaux.length) return;
+  if(!confirm("Créer "+r.nouveaux.length+" fiches archivées ?\n\n"
+    +"Elles compteront dans « Contacts et campagnes », mais n'apparaîtront pas "
+    +"dans ta liste de clientes ni sur l'accueil.")) return;
+  const quand=new Date().toLocaleDateString("fr-FR");
+  r.nouveaux.forEach(n=>{
+    DB.clients.push({
+      id:uid(), brand:r.marque,
+      /* Une fiche sans nom casse le tri de la liste : a defaut, on prend ce
+         qu'il y a devant l'arobase. */
+      name:n.nom || (n.email?n.email.split("@")[0]:"Contact"),
+      status:"Archive", type:"", tel:n.tel, email:n.email, insta:"",
+      source:"Ancien client",
+      notes:"Importé depuis "+impNomFichier+" le "+quand+"."
+    });
+  });
+  saveDB();
+  closeModal();
+  toast(r.nouveaux.length+" contacts importés");
+  renderContacts(contactsBrand);
 }
 async function renderSecurity(){
   const box=document.getElementById("securityCard");
