@@ -5771,24 +5771,44 @@ function pastilleAds(c){
     : '';
 }
 
-function collectContacts(brand){
+/* A-t-elle deja payé quelque chose ? Un paiement dans le CRM tranche seul ;
+   pour les contacts importes d'avant le CRM, c'est l'import qui l'a marque
+   d'apres la colonne provenance. */
+function aAchete(c){
+  if(!c) return false;
+  if((DB.paiements||[]).some(p=>p&&p.clientId===c.id)) return true;
+  return c.achat===true;
+}
+
+let contactsAchat=false;
+
+function collectContacts(brand,acheteursSeuls){
   const emails=new Map(), phones=new Map();
   DB.clients.forEach(c=>{
     if(!c) return;
     if(brand!=="all"&&c.brand!==brand) return;
+    if(acheteursSeuls && !aAchete(c)) return;
     const e=(c.email||"").trim(); if(e){ const k=e.toLowerCase(); if(!emails.has(k)) emails.set(k,e); }
     const t=(c.tel||"").trim(); if(t){ const k=t.replace(/\s/g,""); if(!phones.has(k)) phones.set(k,t); }
   });
   return { emails:[...emails.values()], phones:[...phones.values()] };
 }
+function setContactsAchat(v){ contactsAchat=!!v; renderContacts(contactsBrand); }
+
 function renderContacts(brand){
   contactsBrand=brand||"all";
   const box=document.getElementById("contactsCard");
   if(!box) return;
-  const {emails,phones}=collectContacts(contactsBrand);
+  const {emails,phones}=collectContacts(contactsBrand,contactsAchat);
+  const tous=collectContacts(contactsBrand,false).emails.length;
+  const acheteurs=collectContacts(contactsBrand,true).emails.length;
   const chips=[["all","Tout"]].concat(BRAND_ORDER.map(b=>[b,(BRANDS[b]||{}).name||b]));
   let h=`<div class="pill-row" style="margin:0 0 12px">`+
     chips.map(([k,l])=>`<button class="pill ${contactsBrand===k?"on":""}" onclick="renderContacts('${k}')">${l}</button>`).join("")+`</div>`;
+  h+=`<div class="pill-row" style="margin:0 0 12px">
+    <button class="pill ${contactsAchat?"":"on"}" onclick="setContactsAchat(false)">Tout le monde (${tous})</button>
+    <button class="pill ${contactsAchat?"on":""}" onclick="setContactsAchat(true)">Ont acheté (${acheteurs})</button>
+  </div>`;
   h+=`<div style="display:flex;gap:10px;margin-bottom:12px">
       <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Emails</div><div class="num" style="font-size:24px">${emails.length}</div></div>
       <div class="stat" style="flex:1;box-shadow:none;border-color:var(--line)"><div class="lab">Numéros</div><div class="num" style="font-size:24px">${phones.length}</div></div>
@@ -5800,11 +5820,13 @@ function renderContacts(brand){
       <button class="btn ghost sm wide" onclick="ouvrirImportContacts()">Importer une liste (CSV)</button>
     </div>
     <div id="contactsMsg" style="font-size:12.5px;color:var(--ink-2);margin-top:9px"></div>
-    <div class="hint" style="margin-top:8px">Pense a n'utiliser ces contacts que pour des personnes qui ont accepte d'etre recontactees.</div>`;
+    <div class="hint" style="margin-top:8px">${contactsAchat
+      ? "Ce sont celles qui ont déjà réglé quelque chose, ici ou du temps de l'ancien site. C'est la liste la plus sûre pour une annonce : démarcher ses anciens clients pour une prestation similaire est admis, à condition qu'un lien de désabonnement figure dans l'envoi."
+      : "Tout le monde, y compris celles qui t'ont seulement écrit sans jamais rien acheter. Pour une annonce, préfère « Ont acheté »."}</div>`;
   box.innerHTML=h;
 }
 function copyContacts(which){
-  const {emails,phones}=collectContacts(contactsBrand);
+  const {emails,phones}=collectContacts(contactsBrand,contactsAchat);
   const list=which==="emails"?emails:phones;
   const txt=list.join(which==="emails"?", ":"\n");
   const msg=document.getElementById("contactsMsg");
@@ -5814,18 +5836,19 @@ function copyContacts(which){
   document.body.removeChild(ta);
 }
 function downloadContactsCsv(){
-  const rows=[["Nom","Email","Téléphone","Marque","Statut","Réservé le","Provenance"]];
+  const rows=[["Nom","Email","Téléphone","Marque","Statut","A acheté","Réservé le","Provenance"]];
   DB.clients.forEach(c=>{
     if(!c) return;
     if(contactsBrand!=="all"&&c.brand!==contactsBrand) return;
+    if(contactsAchat && !aAchete(c)) return;
     if(!c.email&&!c.tel) return;
     rows.push([c.name||"",c.email||"",c.tel||"",(BRANDS[c.brand]||{}).name||"",c.status||"",
-      dateReservation(c),c.origineWeb||""]);
+      aAchete(c)?"oui":"non",dateReservation(c),c.origineWeb||""]);
   });
   const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
   const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-  a.download="contacts-"+contactsBrand+".csv"; document.body.appendChild(a); a.click();
+  a.download="contacts-"+contactsBrand+(contactsAchat?"-acheteurs":"")+".csv"; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
   const msg=document.getElementById("contactsMsg"); if(msg) msg.textContent="Fichier CSV telecharge.";
 }
@@ -5922,9 +5945,13 @@ function devinerColonnes(entetes){
        exports de mailing en ont une, sous un nom ou un autre. */
     desab:  cherche("désabonn","desabonn","abonné aux e-mail","abonne aux e-mail",
                     "subscriber status","unsubscri","opt-out","optout"),
-    /* Ce que la personne a achete ou d'ou elle vient : chez Wix c'est
-       "Libellés" ("Pack duo MINI", "Offre Avantage Grossesse"). */
-    info:   cherche("libellé","libelle","étiquette","etiquette","label","source","tag")
+    /* Ce que la personne a achete : chez Wix c'est "Libellés"
+       ("Pack duo MINI", "Offre Avantage Grossesse"). */
+    info:   cherche("libellé","libelle","étiquette","etiquette","label","tag"),
+    /* D'ou vient le contact. C'est cette colonne, et elle seule, qui dit
+       qui a vraiment achete : chez Wix "Réservation de service" et
+       "Wix Boutique" sont des achats, "Envoi d'un formulaire" non. */
+    prov:   cherche("source","provenance","origine","canal")
   };
 }
 
@@ -5965,7 +5992,11 @@ function ecranImportContacts(){
       <div class="hint">Les personnes marquées « désabonné » dans cette colonne ne seront pas importées du tout.</div></div>
     <div class="field"><label>Information à garder <span style="font-weight:400;color:var(--ink-3)">(facultatif)</span></label>
       <select id="impInfo" onchange="majApercuImport()">${opts(impMap.info)}</select>
-      <div class="hint">Recopiée dans les notes de la fiche : ce qu'elle a acheté, d'où elle vient…</div></div>
+      <div class="hint">Recopiée dans les notes de la fiche : ce qu'elle a acheté…</div></div>
+    <div class="field"><label>Provenance <span style="font-weight:400;color:var(--ink-3)">(facultatif)</span></label>
+      <select id="impProv" onchange="majValeursAchat()">${opts(impMap.prov)}</select>
+      <div class="hint">C'est elle qui permet de retrouver, plus tard, celles qui ont vraiment acheté.</div>
+      <div id="impAchatBox"></div></div>
     <div class="field"><label>À classer dans</label>
       <select id="impMarque" onchange="majApercuImport()">
         ${BRAND_ORDER.map(b=>`<option value="${b}" ${b==="mybabyshoot"?"selected":""}>${esc((BRANDS[b]||{}).name||b)}</option>`).join("")}
@@ -5976,6 +6007,45 @@ function ecranImportContacts(){
   openModal(h);
   majApercuImport();
 }
+
+/* Les valeurs de la colonne provenance, avec le nombre de lignes pour
+   chacune. Matt coche celles qui sont des achats : lui seul sait ce que
+   veulent dire les libelles de son ancien site. On en pre-coche ce qui y
+   ressemble, pour ne pas lui faire tout cocher a la main. */
+let impValeursProv=[], impAchats=new Set();
+
+function majValeursAchat(){
+  const box=document.getElementById("impAchatBox"); if(!box) return;
+  const el=document.getElementById("impProv");
+  const i=el?Number(el.value):-1;
+  impValeursProv=[]; impAchats=new Set();
+  if(i<0 || !impLignes){ box.innerHTML=""; majApercuImport(); return; }
+  const compte=new Map();
+  impLignes.forEach(l=>{
+    const v=String(l[i]||"").trim()||"(vide)";
+    compte.set(v,(compte.get(v)||0)+1);
+  });
+  impValeursProv=[...compte.entries()].sort((a,b)=>b[1]-a[1]);
+  const ressemble=/réservation|reservation|boutique|achat|commande|order|booking|shop|store|vente/i;
+  impValeursProv.forEach(([v])=>{ if(ressemble.test(v)) impAchats.add(v); });
+  box.innerHTML='<div class="hint" style="margin:10px 2px 4px">Coche ce qui correspond à un achat :</div>'
+    +impValeursProv.map(([v,n],k)=>
+      '<label style="display:flex;align-items:center;gap:9px;padding:5px 2px;font-size:13.5px;cursor:pointer">'
+      +'<input type="checkbox" '+(impAchats.has(v)?"checked":"")+' onchange="basculerValeurAchat('+k+',this.checked)">'
+      +'<span>'+esc(v)+' <span style="color:var(--ink-3)">· '+n+'</span></span></label>').join("");
+  majApercuImport();
+}
+
+function basculerValeurAchat(k,coche){
+  const e=impValeursProv[k]; if(!e) return;
+  if(coche) impAchats.add(e[0]); else impAchats.delete(e[0]);
+  majApercuImport();
+}
+
+/* Une fiche creee par l'import porte cette phrase. C'est a elle, et a elle
+   seule, que l'import a le droit de toucher lors d'un second passage : une
+   fiche cliente que Matt entretient ne doit jamais etre reecrite. */
+const impEstImportee = c => /^Importé depuis /m.test(String((c&&c.notes)||""));
 
 /* Deux contacts sont la meme personne s'ils partagent l'email, ou les neuf
    derniers chiffres du numero : "+33 6 47 76 54 17" et "06 47 76 54 17"
@@ -5991,7 +6061,7 @@ function lireMapImport(){
   const v=id=>{ const el=document.getElementById(id); return el?Number(el.value):-1; };
   const m=document.getElementById("impMarque");
   return { prenom:v("impPrenom"), nom:v("impNom"), email:v("impEmail"), tel:v("impTel"),
-           desab:v("impDesab"), info:v("impInfo"),
+           desab:v("impDesab"), info:v("impInfo"), prov:v("impProv"),
            marque:(m&&m.value)||"mybabyshoot" };
 }
 
@@ -5999,13 +6069,15 @@ function analyserImport(){
   const m=lireMapImport();
   /* Ce que le CRM connait deja, pour ne pas creer un doublon de chaque
      cliente qui a reserve depuis. */
-  const dejaMails=new Set(), dejaTels=new Set();
+  /* On garde la fiche elle-meme, pas seulement sa cle : un second passage
+     doit pouvoir la completer. */
+  const dejaMails=new Map(), dejaTels=new Map();
   (DB.clients||[]).forEach(c=>{
-    const e=impCleMail(c.email); if(e) dejaMails.add(e);
-    const t=impCleTel(c.tel);    if(t) dejaTels.add(t);
+    const e=impCleMail(c.email); if(e && !dejaMails.has(e)) dejaMails.set(e,c);
+    const t=impCleTel(c.tel);    if(t && !dejaTels.has(t))  dejaTels.set(t,c);
   });
   const vus=new Set();
-  const nouveaux=[], doublons=[], vides=[], desabonnes=[];
+  const nouveaux=[], doublons=[], vides=[], desabonnes=[], completer=[];
   impLignes.forEach(l=>{
     const val=i=>(i>=0&&i<l.length)?String(l[i]||"").trim():"";
     const email=val(m.email), tel=impNettoyerTel(val(m.tel));
@@ -6021,15 +6093,31 @@ function analyserImport(){
     }
     /* Sans email ni telephone, la fiche ne sert a rien : on ne la cree pas. */
     if(!email && !tel){ vides.push(1); return; }
+    const prov=val(m.prov), info=val(m.info);
+    const achat=impAchats.has(prov||"(vide)");
+    const noteSup=[(prov?((achat?"A acheté — ":"Provenance : ")+prov):""), info]
+      .filter(Boolean).join("\n");
+
     const ce=impCleMail(email), ct=impCleTel(tel);
-    if((ce&&dejaMails.has(ce))||(ct&&dejaTels.has(ct))){ doublons.push(1); return; }
+    const dejaLa=(ce&&dejaMails.get(ce))||(ct&&dejaTels.get(ct))||null;
+    if(dejaLa){
+      /* Deuxieme passage sur une fiche que l'import a creee : on la complete
+         au lieu de la sauter. Une fiche cliente normale, jamais. */
+      if(impEstImportee(dejaLa)){
+        const manqueAchat = achat && dejaLa.achat!==true;
+        const manqueNote  = noteSup && !String(dejaLa.notes||"").includes(noteSup);
+        if(manqueAchat || manqueNote) completer.push({id:dejaLa.id, achat, noteSup});
+      }
+      doublons.push(1); return;
+    }
     const cle=ce||ct;
     if(vus.has(cle)){ doublons.push(1); return; }
     vus.add(cle);
-    nouveaux.push({nom,email,tel,info:val(m.info)});
+    nouveaux.push({nom,email,tel,achat,noteSup});
   });
   return {nouveaux, doublons:doublons.length, vides:vides.length,
-          desabonnes:desabonnes.length, marque:m.marque};
+          desabonnes:desabonnes.length, completer,
+          acheteurs:nouveaux.filter(n=>n.achat).length, marque:m.marque};
 }
 
 function majApercuImport(){
@@ -6045,22 +6133,32 @@ function majApercuImport(){
   box.innerHTML=`<div class="grouplab" style="margin:16px 2px 8px">Ce qui va se passer</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       ${stat("Nouveaux",r.nouveaux.length)}${stat("Déjà connus",r.doublons)}${stat("Sans contact",r.vides)}</div>
+    ${r.acheteurs?`<div class="hint" style="margin:0 2px 8px"><b>${r.acheteurs}</b> d'entre elles ont acheté : elles seront retrouvables dans « Ont acheté ».</div>`:""}
+    ${r.completer.length?`<div class="hint" style="margin:0 2px 8px"><b>${r.completer.length}</b> fiche(s) déjà importée(s) seront complétées (achat, provenance).</div>`:""}
     ${r.desabonnes?`<div class="hint" style="margin:0 2px 10px;color:var(--danger)">
       ${r.desabonnes} personne(s) désabonnée(s) : écartée(s), elles n'entreront pas dans le CRM.</div>`:""}
     ${ex?`<div class="hint" style="margin:0 2px 2px">Les trois premiers, tels qu'ils seront créés :</div>${ex}`
        :`<div class="hint">Aucune ligne exploitable avec ces colonnes. Vérifie les correspondances ci-dessus.</div>`}`;
   const b=document.getElementById("impGo");
   if(b){
-    b.disabled=!r.nouveaux.length;
-    b.textContent=r.nouveaux.length?("Importer "+r.nouveaux.length+" contacts"):"Rien à importer";
+    const total=r.nouveaux.length+r.completer.length;
+    b.disabled=!total;
+    b.textContent=!total?"Rien à importer"
+      :r.nouveaux.length?("Importer "+r.nouveaux.length+" contacts"
+        +(r.completer.length?" et compléter "+r.completer.length:""))
+      :("Compléter "+r.completer.length+" fiches");
   }
 }
 
 function validerImportContacts(){
   const r=analyserImport();
-  if(!r.nouveaux.length) return;
-  if(!confirm("Créer "+r.nouveaux.length+" fiches archivées ?\n\n"
-    +"Elles compteront dans « Contacts et campagnes », mais n'apparaîtront pas "
+  if(!r.nouveaux.length && !r.completer.length) return;
+  const quoi=[
+    r.nouveaux.length?("créer "+r.nouveaux.length+" fiches archivées"):"",
+    r.completer.length?("compléter "+r.completer.length+" fiches déjà importées"):""
+  ].filter(Boolean).join(" et ");
+  if(!confirm("Confirmer : "+quoi+" ?\n\n"
+    +"Elles comptent dans « Contacts et campagnes », mais n'apparaissent pas "
     +"dans ta liste de clientes ni sur l'accueil.")) return;
   const quand=new Date().toLocaleDateString("fr-FR");
   r.nouveaux.forEach(n=>{
@@ -6070,14 +6168,24 @@ function validerImportContacts(){
          qu'il y a devant l'arobase. */
       name:n.nom || (n.email?n.email.split("@")[0]:"Contact"),
       status:"Archive", type:"", tel:n.tel, email:n.email, insta:"",
-      source:"Ancien client",
+      source:"Ancien client", achat:!!n.achat,
       notes:"Importé depuis "+impNomFichier+" le "+quand+"."
-        +(n.info?"\n"+n.info:"")
+        +(n.noteSup?"\n"+n.noteSup:"")
     });
+  });
+  /* Les fiches d'un import precedent : on ajoute ce qui manque, on
+     n'ecrase rien. */
+  r.completer.forEach(x=>{
+    const c=clientById(x.id); if(!c) return;
+    if(x.achat) c.achat=true;
+    if(x.noteSup && !String(c.notes||"").includes(x.noteSup)){
+      c.notes=String(c.notes||"").trimEnd()+"\n"+x.noteSup;
+    }
   });
   saveDB();
   closeModal();
-  toast(r.nouveaux.length+" contacts importés");
+  toast([r.nouveaux.length?r.nouveaux.length+" importés":"",
+         r.completer.length?r.completer.length+" complétées":""].filter(Boolean).join(", "));
   renderContacts(contactsBrand);
 }
 async function renderSecurity(){
