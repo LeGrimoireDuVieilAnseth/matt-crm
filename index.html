@@ -6378,8 +6378,14 @@ function showLock(){
     passZone.style.display="none";
     if(sub) sub.textContent="Déverrouille avec ton empreinte.";
     if(retry) retry.style.display="inline-block";
-    // tentative automatique (echoue en silence sur mobile sans geste, le bouton prend le relais)
-    setTimeout(()=>{ if(!authed) unlockWithBio(true); }, 150);
+    /* Tentative automatique : utile sur ordinateur (Windows Hello s'ouvre
+       seul). Sur telephone elle ne reussit jamais sans geste, et elle peut
+       rester EN SUSPENS : l'appui sur le bouton lance alors une seconde
+       demande que le navigateur refuse aussitot, sans rien afficher. C'est
+       ce qui faisait "l'empreinte n'apparait pas". Sur ecran tactile, on
+       attend donc l'appui. */
+    const tactile = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+    if(!tactile) setTimeout(()=>{ if(!authed) unlockWithBio(true); }, 150);
     // premier appui sur l'ecran : declenche l'empreinte
     armBioOnTap();
   } else {
@@ -6458,8 +6464,20 @@ async function bioAvailable(){
   }catch(e){ return false; }
 }
 async function offerBioIfPossible(){
-  if(bioEnabled()) return;
+  /* Deja active et rien n'a echoue : rien a proposer. Mais si l'empreinte
+     vient d'echouer, le telephone l'a peut-etre oubliee (mise a jour,
+     gestionnaire de mots de passe reinitialise, autre application choisie
+     pour les cles d'acces). La reenregistrer est alors la seule reparation,
+     et sans cette proposition Matt ne saurait pas qu'elle existe. */
+  if(bioEnabled() && !bioAEchoue) return;
   if(!await bioAvailable()) return;
+  if(bioEnabled() && bioAEchoue){
+    openModal(`<h2>Réenregistrer l'empreinte</h2>
+      <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 18px">L'empreinte n'a pas fonctionné à l'ouverture. Si ton téléphone l'a oubliée — une mise à jour suffit —, il faut simplement la réenregistrer. Ça prend deux secondes.</p>
+      <button class="btn wide" onclick="enableBioFromPrompt()">Réenregistrer l'empreinte</button>
+      <button class="btn ghost wide" style="margin-top:9px" onclick="closeModal()">Plus tard</button>`);
+    return;
+  }
   openModal(`<h2>Déverrouillage par empreinte</h2>
     <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 18px">Sur cet appareil, tu peux ouvrir le CRM avec ton empreinte digitale au lieu de retaper ton mot de passe.</p>
     <button class="btn wide" onclick="enableBioFromPrompt()">Activer l'empreinte</button>
@@ -6476,7 +6494,7 @@ async function enableBio(){
       authenticatorSelection:{ authenticatorAttachment:"platform", userVerification:"required", residentKey:"preferred" },
       timeout:60000, attestation:"none"
     }});
-    if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); toast("Empreinte activée"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
+    if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); bioAEchoue=false; toast("Empreinte activée"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
   }catch(e){ toast(e&&e.name==="NotAllowedError" ? "Activation annulee, reessaie" : "Empreinte indisponible sur cet appareil"); }
 }
 function disableBio(){
@@ -6484,20 +6502,64 @@ function disableBio(){
   toast("Empreinte désactivée");
   if(document.querySelector("#reglages.active")) renderReglages();
 }
+/* Une seule demande d'empreinte a la fois. Le navigateur refuse une
+   deuxieme demande tant que la premiere n'est pas terminee, et il le fait
+   sans rien montrer. Un appui reel passe donc toujours devant une tentative
+   silencieuse : il l'annule, puis lance la sienne. */
+let bioEnCours=null;
+/* Vrai des qu'un appui sur l'empreinte a echoue : l'entree par mot de passe
+   proposera alors de la reenregistrer. */
+let bioAEchoue=false;
+
+/* L'ancien message disait "non reconnue" pour TOUT : doigt mal pose,
+   demande annulee, empreinte effacee du telephone. Impossible de savoir
+   quoi faire. On dit la raison, et on garde le code technique en petit :
+   c'est lui qui permet de diagnostiquer a distance. */
+function messageBio(e){
+  const n=(e&&e.name)||"";
+  if(n==="NotAllowedError")
+    return "L'empreinte a été annulée, ou ce téléphone ne la connaît plus. "
+      +"Réessaie une fois ; sinon entre ton mot de passe, je te proposerai de la réenregistrer.";
+  if(n==="InvalidStateError")
+    return "Une demande d'empreinte était déjà en cours. Réessaie dans un instant.";
+  if(n==="SecurityError")
+    return "Le navigateur refuse l'empreinte sur cette adresse. Ouvre le CRM depuis son adresse habituelle.";
+  return "L'empreinte n'a pas pu s'ouvrir. Entre ton mot de passe, je te proposerai de la réenregistrer.";
+}
+
 async function unlockWithBio(silent){
   const err=document.getElementById("lockErr");
   const id=localStorage.getItem(BIO_STORE);
   if(!id){ return; }
+  if(bioEnCours){
+    /* une tentative silencieuse n'interrompt jamais une demande en cours */
+    if(silent) return;
+    try{ bioEnCours.abort(); }catch(e){}
+    bioEnCours=null;
+    /* le navigateur libere la demande annulee au tour suivant : sans cette
+       pause, la nouvelle serait refusee pour la meme raison */
+    await new Promise(r=>setTimeout(r,80));
+  }
+  const ctrl=new AbortController();
+  bioEnCours=ctrl;
   try{
     err.textContent="";
     const assertion=await navigator.credentials.get({ publicKey:{
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       allowCredentials:[{ type:"public-key", id: unb64(id) }],
       userVerification:"required", timeout:60000
-    }});
-    if(assertion){ onAuthenticated(); }
+    }, signal: ctrl.signal });
+    if(assertion){ bioAEchoue=false; onAuthenticated(); }
   }catch(e){
-    if(!silent){ err.textContent="Empreinte non reconnue. Tu peux utiliser ton mot de passe."; }
+    /* annulee par un appui plus recent : ce n'est pas un echec */
+    if(ctrl.signal.aborted) return;
+    if(!silent){
+      bioAEchoue=true;
+      err.innerHTML=esc(messageBio(e))
+        +'<div style="font-size:11.5px;opacity:.65;margin-top:5px">code : '+esc((e&&e.name)||"inconnu")+'</div>';
+    }
+  }finally{
+    if(bioEnCours===ctrl) bioEnCours=null;
   }
 }
 function logout(){
