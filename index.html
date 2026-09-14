@@ -893,6 +893,8 @@
     </div>
 
     <div id="lockErr" class="lock-err"></div>
+    <!-- ce qui tourne sur l'appareil : a dicter en cas de souci -->
+    <div id="lockVersion" style="font-size:11px;color:var(--ink-4);margin-top:26px;letter-spacing:.03em"></div>
   </div>
 </div>
 
@@ -6663,9 +6665,114 @@ async function renderNotifs(){
   box.innerHTML=h;
 }
 
+/* ---------- rester a jour ----------
+
+   Une application installee sur un telephone peut tourner des jours sur une
+   vieille copie de la page : Android la garde en memoire, et la rouvrir ne
+   la recharge pas. Le 14/09/2026, la correction de l'empreinte etait en
+   ligne depuis la veille et le telephone de Matt affichait encore l'ancien
+   message. Aucune correction ne l'atteignait.
+
+   On compare donc le code qui tourne a celui qui est en ligne. On compare
+   le CODE, pas l'etiquette ETag : Netlify en change la fin selon la
+   compression ("-ssl" ou "-ssl-df"), ce qui aurait fait recharger en boucle.
+   Et on ne prend que le plus long script de la page, l'application : un
+   petit script ajoute a l'affichage ne doit pas passer pour une mise a jour. */
+function majCodePrincipal(scripts){
+  let long="";
+  for(const sc of scripts){ if(!sc.src && (sc.text||"").length>long.length) long=sc.text; }
+  return long;
+}
+function majEmpreinte(t){
+  let h=2166136261>>>0;                           /* FNV-1a, 32 bits */
+  for(let i=0;i<t.length;i++){ h^=t.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  return ("0000000"+h.toString(16)).slice(-8);
+}
+let majIci="", majEtagVerifie="", majDerniere=0, majEnCours=false;
+const MAJ_ECART_MS=5*60*1000;
+
+function majVersionIci(){
+  if(!majIci) majIci=majEmpreinte(majCodePrincipal(document.scripts));
+  return majIci;
+}
+
+/* Recharger ne peut rien faire perdre sur l'ecran de verrouillage : on n'y
+   saisit rien d'autre qu'un mot de passe. Partout ailleurs, une fiche en
+   cours de saisie ou un envoi de photos pourrait s'interrompre : Matt
+   choisit le moment. */
+function majSurVerrou(){
+  const l=document.getElementById("lockScreen");
+  return !!l && getComputedStyle(l).display!=="none";
+}
+
+async function verifierMiseAJour(force){
+  if(!CLOUD || majEnCours) return;
+  if(!force && Date.now()-majDerniere<MAJ_ECART_MS) return;
+  majEnCours=true; majDerniere=Date.now();
+  try{
+    const page=location.pathname.replace(/[^/]*$/,"")||"/";
+    /* d'abord l'etiquette seule : si elle n'a pas bouge depuis la derniere
+       verification, inutile de retelecharger la page */
+    const tete=await fetch(page,{method:"HEAD",cache:"no-store"});
+    const etag=String(tete.headers.get("etag")||"").replace(/"/g,"").split("-")[0];
+    if(etag && etag===majEtagVerifie) return;
+    const r=await fetch(page,{cache:"no-store"});
+    if(!r.ok) return;
+    const doc=new DOMParser().parseFromString(await r.text(),"text/html");
+    const enLigne=majEmpreinte(majCodePrincipal(doc.scripts));
+    if(enLigne===majVersionIci()){ majEtagVerifie=etag; return; }
+    appliquerMiseAJour(enLigne);
+  }catch(e){ /* hors ligne : on reessaiera au prochain retour */ }
+  finally{ majEnCours=false; }
+}
+
+function appliquerMiseAJour(version){
+  /* Garde-fou : jamais deux rechargements automatiques vers la meme version
+     en moins de deux minutes. Si le telephone ressert malgre tout l'ancienne
+     page, on s'arrete et on laisse le bandeau. */
+  let dernier={};
+  try{ dernier=JSON.parse(sessionStorage.getItem("studio_maj")||"{}"); }catch(e){}
+  const deja = dernier.v===version && Date.now()-(dernier.t||0)<2*60*1000;
+  if(majSurVerrou() && !deja){
+    try{ sessionStorage.setItem("studio_maj",JSON.stringify({v:version,t:Date.now()})); }catch(e){}
+    majRecharger(version);
+    return;
+  }
+  afficherBandeauMaj(version);
+}
+
+/* Une adresse jamais vue n'est dans aucun cache : la page arrive forcement
+   fraiche. Le parametre est retire des l'ouverture. */
+function majRecharger(version){
+  location.replace(location.pathname+"?maj="+encodeURIComponent(version||Date.now()));
+}
+
+function afficherBandeauMaj(version){
+  if(document.getElementById("bandeauMaj")) return;
+  const b=document.createElement("button");
+  b.id="bandeauMaj"; b.type="button";
+  b.textContent="Mise à jour disponible · toucher ici";
+  b.style.cssText="position:fixed;left:50%;transform:translateX(-50%);"
+    +"bottom:calc(86px + env(safe-area-inset-bottom));z-index:90;"
+    +"background:var(--fill,#1a1a1c);color:var(--fill-ink,#fff);border:0;border-radius:999px;"
+    +"padding:11px 18px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;"
+    +"box-shadow:0 10px 30px -10px rgba(0,0,0,.45);width:max-content;max-width:calc(100% - 32px);text-align:center;line-height:1.35";
+  b.onclick=()=>{
+    const ouvert=document.querySelector("#modalBg.on");
+    if(ouvert && !confirm("Une fenêtre est ouverte. Mettre à jour maintenant ? Ce qui n'est pas enregistré sera perdu.")) return;
+    majRecharger(version);
+  };
+  document.body.appendChild(b);
+}
+
 /* ============================================================
    INIT
    ============================================================ */
+/* Le parametre de mise a jour a fait son travail : on le retire de l'adresse
+   avant que quoi que ce soit ne s'en serve. */
+if(/[?&]maj=/.test(location.search)){
+  try{ history.replaceState(history.state,"",location.pathname); }catch(e){}
+}
 if(CLOUD && "serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
 loadDB();
 buildHome();
@@ -6686,6 +6793,19 @@ if(CLOUD){
 } else {
   // fichier local, pas de cloud : pas de verrou
   authed=true;
+}
+
+/* Mise a jour : peu apres l'ouverture, a chaque retour sur l'appli, et quand
+   le telephone ressort une page gardee en memoire telle quelle (pageshow
+   "persisted") -- c'est exactement le cas qui a bloque l'empreinte. */
+{
+  const v=document.getElementById("lockVersion");
+  if(v) v.textContent="version "+majVersionIci();
+}
+if(CLOUD){
+  setTimeout(()=>verifierMiseAJour(true),1200);
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden) verifierMiseAJour(false); });
+  window.addEventListener("pageshow",e=>{ if(e.persisted) verifierMiseAJour(true); });
 }
 
 /* raccourci clavier Echap pour fermer le modal */
