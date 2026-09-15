@@ -6472,7 +6472,22 @@ async function offerBioIfPossible(){
      pour les cles d'acces). La reenregistrer est alors la seule reparation,
      et sans cette proposition Matt ne saurait pas qu'elle existe. */
   if(bioEnabled() && !bioAEchoue) return;
-  if(!await bioAvailable()) return;
+  const dispo=await bioAvailable();
+  /* L'empreinte vient d'echouer ET le telephone ne la propose plus : sans
+     ce message, Matt entrerait son mot de passe et ne verrait plus rien. */
+  if(!dispo && bioEnabled() && bioAEchoue){
+    openModal(`<h2>Ton téléphone ne propose plus l'empreinte</h2>
+      <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 14px">Pour l'instant, ton téléphone n'offre plus l'empreinte aux sites internet. Ce n'est pas le CRM : ton mot de passe continue de marcher.</p>
+      <p style="font-size:14px;color:var(--ink-2);line-height:1.55;margin:0 0 10px"><b>À essayer, dans cet ordre :</b></p>
+      <ol style="font-size:14px;color:var(--ink-2);line-height:1.6;margin:0 0 14px;padding-left:20px">
+        <li>Dans les <b>Paramètres</b> du téléphone, tape « <b>clés d'accès</b> » dans la recherche, et vérifie que <b>Google</b> est activé.</li>
+        <li>Dans le <b>Play Store</b>, mets à jour <b>Chrome</b> et <b>Services Google Play</b>.</li>
+        <li>Redémarre le téléphone, puis réessaie.</li>
+      </ol>
+      <button class="btn wide" onclick="closeModal()">Compris</button>`);
+    return;
+  }
+  if(!dispo) return;
   if(bioEnabled() && bioAEchoue){
     openModal(`<h2>Réenregistrer l'empreinte</h2>
       <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 18px">L'empreinte n'a pas fonctionné à l'ouverture. Si ton téléphone l'a oubliée — une mise à jour suffit —, il faut simplement la réenregistrer. Ça prend deux secondes.</p>
@@ -6497,7 +6512,23 @@ async function enableBio(){
       timeout:60000, attestation:"none"
     }});
     if(cred){ localStorage.setItem(BIO_STORE, b64(cred.rawId)); bioAEchoue=false; toast("Empreinte activée"); if(typeof renderReglages==="function"&&document.querySelector("#reglages.active")) renderReglages(); }
-  }catch(e){ toast(e&&e.name==="NotAllowedError" ? "Activation annulee, reessaie" : "Empreinte indisponible sur cet appareil"); }
+  }catch(e){
+    const n=(e&&e.name)||"";
+    /* Annule a la main : un simple rappel suffit. */
+    if(n==="NotAllowedError"){ toast("Enregistrement annulé, réessaie"); return; }
+    /* Tout le reste vient du telephone. Un message ephemere ne se dicte pas :
+       on laisse une fenetre, avec le code. */
+    openModal(`<h2>L'empreinte n'a pas pu être enregistrée</h2>
+      <p style="font-size:14.5px;color:var(--ink-2);line-height:1.55;margin:0 0 14px">Le CRM a bien demandé l'empreinte, mais ton téléphone a refusé de la créer. Le souci vient du service Android qui garde les clés d'accès, pas du CRM. Ton mot de passe continue de marcher.</p>
+      <p style="font-size:14px;color:var(--ink-2);line-height:1.55;margin:0 0 10px"><b>À essayer, dans cet ordre :</b></p>
+      <ol style="font-size:14px;color:var(--ink-2);line-height:1.6;margin:0 0 14px;padding-left:20px">
+        <li>Dans les <b>Paramètres</b> du téléphone, tape « <b>clés d'accès</b> » dans la recherche, et vérifie que <b>Google</b> est activé.</li>
+        <li>Dans le <b>Play Store</b>, mets à jour <b>Chrome</b> et <b>Services Google Play</b>.</li>
+        <li>Redémarre le téléphone, puis réessaie.</li>
+      </ol>
+      <div class="hint" style="word-break:break-word">code : ${esc(n||"inconnu")}${(e&&e.message)?" · "+esc(String(e.message).slice(0,140)):""}</div>
+      <button class="btn wide" style="margin-top:14px" onclick="closeModal()">Compris</button>`);
+  }
 }
 function disableBio(){
   try{ localStorage.removeItem(BIO_STORE); }catch(e){}
@@ -6526,6 +6557,13 @@ function messageBio(e){
     return "Une demande d'empreinte était déjà en cours. Réessaie dans un instant.";
   if(n==="SecurityError")
     return "Le navigateur refuse l'empreinte sur cette adresse. Ouvre le CRM depuis son adresse habituelle.";
+  /* C'est le telephone lui-meme -- le service Android qui garde les cles
+     d'acces -- qui n'arrive plus a utiliser la cle enregistree. Ni le doigt
+     ni le CRM n'y sont pour rien. Vu chez Matt le 15/09/2026 (OperationError)
+     sur une empreinte enregistree en juillet et jamais touchee depuis. */
+  if(n==="OperationError"||n==="NotReadableError"||n==="UnknownError")
+    return "Ton téléphone n'arrive plus à utiliser l'empreinte enregistrée pour le CRM. "
+      +"Entre ton mot de passe : je te propose aussitôt de la réenregistrer, c'est ce qui la répare.";
   return "L'empreinte n'a pas pu s'ouvrir. Entre ton mot de passe, je te proposerai de la réenregistrer.";
 }
 
@@ -6546,19 +6584,28 @@ async function unlockWithBio(silent){
   bioEnCours=ctrl;
   try{
     err.textContent="";
-    const assertion=await navigator.credentials.get({ publicKey:{
+    const demande={ publicKey:{
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       allowCredentials:[{ type:"public-key", id: unb64(id) }],
       userVerification:"required", timeout:60000
-    }, signal: ctrl.signal });
+    }};
+    /* L'annulation ne sert qu'aux tentatives silencieuses : ce sont les
+       seules qu'un appui vient interrompre. Une demande lancee par un appui
+       garde exactement la forme qui a marche de juillet a septembre. */
+    if(silent) demande.signal=ctrl.signal;
+    const assertion=await navigator.credentials.get(demande);
     if(assertion){ bioAEchoue=false; onAuthenticated(); }
   }catch(e){
     /* annulee par un appui plus recent : ce n'est pas un echec */
     if(ctrl.signal.aborted) return;
     if(!silent){
       bioAEchoue=true;
+      /* Le code, et la phrase technique qui l'accompagne : c'est ce qui a
+         permis de trouver OperationError. Lisible, pour pouvoir le dicter. */
       err.innerHTML=esc(messageBio(e))
-        +'<div style="font-size:11.5px;opacity:.65;margin-top:5px">code : '+esc((e&&e.name)||"inconnu")+'</div>';
+        +'<div style="font-size:12px;opacity:.8;margin-top:6px;word-break:break-word">code : '
+        +esc((e&&e.name)||"inconnu")
+        +((e&&e.message)?' · '+esc(String(e.message).slice(0,140)):'')+'</div>';
     }
   }finally{
     if(bioEnCours===ctrl) bioEnCours=null;
@@ -6727,6 +6774,9 @@ async function verifierMiseAJour(force){
 }
 
 function appliquerMiseAJour(version){
+  /* Jamais pendant une demande d'empreinte : recharger fermerait la fenetre
+     sous le doigt de Matt. On reverifiera au prochain retour sur l'appli. */
+  if(bioEnCours){ majDerniere=0; return; }
   /* Garde-fou : jamais deux rechargements automatiques vers la meme version
      en moins de deux minutes. Si le telephone ressert malgre tout l'ancienne
      page, on s'arrete et on laisse le bandeau. */
