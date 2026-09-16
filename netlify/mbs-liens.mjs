@@ -2,19 +2,15 @@
 // Les liens de paiement : ce qu'une cliente peut encore regler apres sa
 // seance, envoye par SMS ou par mail.
 //
-// A QUOI CA SERT
-// Une cliente arrive avec un bon cadeau pour la formule a 290 euros. Elle
-// voit ses photos. Il lui manque 100 euros pour passer a la formule du
-// dessus. Plutot que de lui demander un virement, Matt lui envoie un lien.
-//
-// POURQUOI PLUSIEURS MARCHES SUR UN MEME LIEN
-// Une seule proposition ne se compare a rien : la cliente arbitre entre
-// "oui" et "non". Quand elle voit la marche suivante a cote, elle arbitre
-// entre "celle-ci" et "celle-la", et le non sort de l'ecran. C'est le
-// raisonnement de Matt : a 100 euros elle passe en Confort, mais pour 100
-// de plus elle a la Prestige, ou tout est trie et retouche.
-// Trois marches au maximum. Au-dela ce n'est plus une montee en gamme,
-// c'est un catalogue, et un catalogue ne se choisit pas.
+// DEUX CHOSES SUR UNE MEME PAGE
+// 1. Les montees en gamme : passer en Confort, en Prestige... On n'en prend
+//    qu'UNE, forcement : on ne passe pas a la fois en Confort et en
+//    Prestige. Elles se presentent cote a cote, parce qu'une proposition
+//    seule s'arbitre contre "non" tandis que deux s'arbitrent l'une contre
+//    l'autre.
+// 2. Les complements, qui s'ajoutent librement et se cumulent : photos
+//    retouchees en plus, album, tirages papier. Chacun avec sa quantite.
+//    Leurs prix vivent dans mbs-panier.mjs, et nulle part ailleurs.
 //
 // POURQUOI UN CODE ET PAS UNE SESSION STRIPE
 // Une session Stripe expire au bout de 24 heures, c'est une limite de
@@ -23,11 +19,12 @@
 // ou la cliente clique. Le lien ne perime jamais.
 //
 // LES MONTANTS NE VIENNENT JAMAIS DU NAVIGATEUR
-// Ils sont lus ici, dans le stockage, a chaque fois. La page n'envoie que
-// l'IDENTIFIANT de la marche choisie. Une adresse trafiquee, ou une
-// requete forgee, ne peuvent donc pas changer le prix.
+// La page n'envoie que des IDENTIFIANTS et des QUANTITES. Le total est
+// refait ici a chaque fois. Une adresse trafiquee, ou une requete forgee,
+// ne peuvent donc pas changer un prix.
 import { getStore } from "@netlify/blobs";
 import { makeCode } from "./mbs-coupons.mjs";
+import { calculerPanier, grillePublique } from "./mbs-panier.mjs";
 
 export const LIEN_STORE = "mbs-liens";
 
@@ -38,12 +35,13 @@ export const LIEN_MAX = 3000;
 
 /* Au-dessus de ce montant, le paiement en 3 fois est propose. En dessous,
    il n'a pas de sens : etaler 60 euros sur trois mois est plus penible
-   qu'utile. Il se decide marche par marche, pas une fois pour le lien :
-   sur une page a deux choix, l'un peut y avoir droit et l'autre non. */
+   qu'utile. Il se decide sur le TOTAL du panier. */
 export const LIEN_SEUIL_3X = 150;
 
-/* Trois marches au maximum sur une meme page. Voir l'en-tete. */
-export const LIEN_OPTIONS_MAX = 3;
+/* Nombre de montees en gamme proposables. C'etait 3 : Matt en voulait
+   davantage, pour pouvoir tout mettre sur la table. Au-dela de huit, ce
+   n'est plus une page, c'est un catalogue. */
+export const LIEN_OPTIONS_MAX = 8;
 
 export function lienStore() {
   return getStore({ name: LIEN_STORE, consistency: "strong" });
@@ -66,7 +64,16 @@ function nettoyerGains(gains) {
     .map(g => String(g || "").trim().slice(0, 120)).filter(Boolean).slice(0, 6);
 }
 
-/* Met en forme les marches proposees. Tout ce qui est douteux est ecarte
+/* Ce que Matt accepte de proposer en plus sur ce lien. Ce qui n'est pas
+   ici n'existe pas : demander un album sur un lien qui n'en propose pas
+   ne cree aucune ligne, meme en forgeant la requete. */
+export function normaliserExtras(brut) {
+  const e = (brut && typeof brut === "object") ? brut : {};
+  return { photos: !!e.photos, album: !!e.album, tirages: !!e.tirages };
+}
+export const aDesExtras = (e) => !!(e && (e.photos || e.album || e.tirages));
+
+/* Met en forme les montees en gamme. Tout ce qui est douteux est ecarte
    plutot que corrige : mieux vaut une marche en moins qu'une marche a un
    prix invente. */
 export function normaliserOptions(brut, secours = {}) {
@@ -113,14 +120,30 @@ export function optionsDe(lien) {
   return normaliserOptions([], { montant: lien.montant, libelle: lien.libelle, gains: lien.gains });
 }
 
-/* La marche designee par le navigateur. Si le lien n'en porte qu'une, on
-   l'accepte sans identifiant : la page d'un montant unique n'en envoie pas. */
+export function extrasDe(lien) {
+  return normaliserExtras(lien && lien.extras);
+}
+
+/* Le panier d'une cliente, recalcule a partir de ce que porte le lien et
+   des seules quantites recues. Point de passage unique : la page, la
+   creation de la session Stripe et la facture s'appuient tous dessus. */
+export function panierDuLien(lien, choix) {
+  return calculerPanier({
+    formules: optionsDe(lien),
+    extras: extrasDe(lien),
+    choix: choix || {},
+  });
+}
+
+/* La marche designee par le navigateur. Si le lien n'en porte qu'une et
+   n'offre rien d'autre, on l'accepte sans identifiant : la page d'un
+   montant unique n'en envoie pas. */
 export function optionChoisie(lien, id) {
   const opts = optionsDe(lien);
   const cle = String(id || "").trim();
   const trouvee = opts.find(o => o.id === cle);
   if (trouvee) return trouvee;
-  return opts.length === 1 ? opts[0] : null;
+  return (opts.length === 1 && !aDesExtras(extrasDe(lien))) ? opts[0] : null;
 }
 
 /* Ce qui doit apparaitre sur la facture et dans le CRM. On repart des
@@ -135,6 +158,7 @@ export function titreChoisi(lien, md) {
    nom de famille : le lien peut etre transfere, ou lu par-dessus l'epaule. */
 export function vuePublique(l) {
   const options = optionsDe(l);
+  const extras = extrasDe(l);
   const premiere = options[0] || null;
   return {
     code: l.code,
@@ -150,6 +174,11 @@ export function vuePublique(l) {
       conseil: !!o.conseil,
       troisFois: o.montant >= LIEN_SEUIL_3X,
     })),
+    extras,
+    /* La grille sert a AFFICHER un total pendant qu'elle coche. Le prix
+       reellement facture est refait par le serveur au moment du clic. */
+    grille: aDesExtras(extras) ? grillePublique() : null,
+    seuil3x: LIEN_SEUIL_3X,
     /* Champs de l'ancienne page, gardes tant qu'une page en cache peut
        encore les lire : elle affichera la premiere marche seule plutot que
        de tomber sur du vide. */
@@ -161,10 +190,13 @@ export function vuePublique(l) {
 }
 
 export async function creerLien(store, { clientId, prenom, nom, email, montant, libelle,
-                                         argument = "", gains = [], options = [],
+                                         argument = "", gains = [], options = [], extras = {},
                                          now = Date.now() }) {
   const marches = normaliserOptions(options, { montant, libelle, gains });
-  if (!marches.length) return null;
+  const sup = normaliserExtras(extras);
+  /* Un lien doit proposer quelque chose : une marche, ou de quoi remplir
+     un panier. */
+  if (!marches.length && !aDesExtras(sup)) return null;
 
   let code = "";
   for (let i = 0; i < 8; i++) {
@@ -179,16 +211,18 @@ export async function creerLien(store, { clientId, prenom, nom, email, montant, 
     prenom: String(prenom || "").slice(0, 40),
     nom: String(nom || "").slice(0, 80),
     email: String(email || "").slice(0, 120),
-    options: marches,
+    options: marches, extras: sup,
     /* Le montant du lien est celui de sa marche la moins chere : c'est ce
        qu'il faut afficher dans la liste du CRM tant que rien n'est paye.
-       Une fois regle, ils sont remplaces par ce qu'elle a vraiment choisi. */
-    montant: marches[0].montant,
-    libelle: marches[0].titre,
+       Zero quand le lien n'offre que des complements, dont le total depend
+       de ce qu'elle choisira. Une fois paye, les deux sont remplaces par
+       ce qu'elle a vraiment pris. */
+    montant: marches.length ? marches[0].montant : 0,
+    libelle: marches.length ? marches[0].titre : "À la carte",
     argument: String(argument || "").trim().slice(0, 1400),
-    gains: marches[0].gains,
+    gains: marches.length ? marches[0].gains : [],
     statut: "attente",
-    choix: null,
+    choix: null, paniers: {},
     createdAt: now, paidAt: 0, sessionId: "", invoiceNumber: "",
   };
   await store.setJSON("l-" + code, lien);
@@ -196,12 +230,32 @@ export async function creerLien(store, { clientId, prenom, nom, email, montant, 
   try {
     const idx = (await store.get("liens", { type: "json" })) || [];
     idx.unshift({ code, clientId: lien.clientId, nom: lien.nom, montant: lien.montant,
-                  libelle: lien.libelle, options: marches.length,
+                  libelle: lien.libelle, options: marches.length, extras: aDesExtras(sup),
                   statut: "attente", createdAt: now });
     await store.setJSON("liens", idx.slice(0, 300));
   } catch (e) {}
 
   return lien;
+}
+
+/* Ce qu'elle a coche, garde le temps d'aller chez Stripe et d'en revenir.
+   On l'attache a la session : si elle ouvre le paiement deux fois avec
+   deux paniers differents, c'est bien celui qu'elle a regle qui sera
+   facture. On n'en garde que quelques-uns, le temps de la manoeuvre. */
+export async function memoriserPanier(store, lien, sessionId, panier) {
+  try {
+    const p = (lien.paniers && typeof lien.paniers === "object") ? lien.paniers : {};
+    p[sessionId] = { lignes: panier.lignes, total: panier.total, adresse: panier.adresse || null, t: Date.now() };
+    const cles = Object.keys(p).sort((a, b) => (p[b].t || 0) - (p[a].t || 0)).slice(0, 6);
+    lien.paniers = {};
+    cles.forEach(k => { lien.paniers[k] = p[k]; });
+    await store.setJSON("l-" + lien.code, lien);
+  } catch (e) {}
+}
+
+export function panierDeSession(lien, sessionId) {
+  const p = (lien && lien.paniers && typeof lien.paniers === "object") ? lien.paniers : {};
+  return p[sessionId] || null;
 }
 
 /* L'index sert la liste du CRM. Sans cette mise a jour, un lien paye

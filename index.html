@@ -7021,9 +7021,19 @@ const LIEN_FORMULES = [
   { cle:"duo-prestige", nom:"Duo Prestige",  prix:890, duo:true,  toutes:true,   brutes:true },
 ];
 const formuleParCle = k => LIEN_FORMULES.find(f=>f.cle===k) || null;
-const LIEN_PHOTO_UNITE = 20;    /* une retouche supplementaire */
-const LIEN_ALBUM = 140;
-const LIEN_MAX_CHOIX = 3;
+/* Huit, et non plus trois : Matt voulait pouvoir tout mettre sur la table.
+   Au-dela ce n'est plus une page, c'est un catalogue. */
+const LIEN_MAX_CHOIX = 8;
+
+/* Ce que la cliente peut ajouter elle-meme, avec ses quantites. Les PRIX
+   n'apparaissent pas ici : ils sont au serveur (netlify/mbs-panier.mjs),
+   qui seul decide de ce qui sera facture. Les rappeler ici en dur, c'est
+   la promesse de deux grilles qui divergent un jour. */
+const LIEN_COMPTOIR = [
+  ["photos",  "Photos retouchées en plus", "Elle choisit le nombre. 15 € l'unité, une offerte à partir de 5, 10 € l'unité à partir de 10."],
+  ["album",   "Album photo imprimé",       "150 €. Elle peut en prendre plusieurs."],
+  ["tirages", "Tirages papier",            "20×30 à 10 €, 30×40 à 15 €, 40×60 à 20 €. Elle indique les numéros des photos, et son adresse."],
+];
 
 /* Ce que comprend une formule, en une ligne, pour la rappeler a la cliente
    avant de lui proposer autre chose. */
@@ -7172,25 +7182,9 @@ function propositionsPour(cleActuelle,typeSeance){
       });
     });
   }
-  /* Compléments, qui ne dependent pas de la formule. */
-  [3,5,10].forEach(n=>out.push({
-    cle:"photos-"+n, groupe:"plus",
-    titre:n+" photos retouchées en plus",
-    montant:n*LIEN_PHOTO_UNITE,
-    gains:[n+" photos retouchées supplémentaires ("+LIEN_PHOTO_UNITE+" € l'unité)"],
-    phrase:"Vous pouvez aussi ajouter "+n+" photos retouchées à votre galerie.",
-    argumentSeul:"Vous m'avez demandé "+n+" photos retouchées de plus que ce que comprend votre formule.\n\n"
-      +"Voici le lien pour les régler. Je les prépare dès réception et je les ajoute à votre galerie."
-  }));
-  out.push({
-    cle:"album", groupe:"plus",
-    titre:"Album photo imprimé", montant:LIEN_ALBUM,
-    gains:["Album photo imprimé et relié"],
-    phrase:"Et si vous voulez sortir les photos de l'écran, il y a l'album imprimé.",
-    argumentSeul:"Voici le lien pour votre album.\n\n"
-      +"C'est le seul format qui sort les photos de l'écran : imprimé, relié, "
-      +"posé sur une table. Dans dix ans, c'est celui-là qu'on ouvrira, pas un téléphone."
-  });
+  /* Les lots figes de photos et l'album ont disparu d'ici : ils sont
+     devenus le comptoir, ou la cliente choisit ses quantites elle-meme.
+     Les garder aurait fait cohabiter deux prix pour la meme chose. */
   out.push({ cle:"libre", groupe:"plus", libre:true,
     titre:"Autre montant", montant:0, gains:[], phrase:"", argumentSeul:"" });
   return out;
@@ -7236,8 +7230,9 @@ function avecOuverture(texte,variante){
 }
 
 function texteLien(de,choisies,variante){
-  if(!choisies.length) return "";
-  if(choisies.length===1) return avecOuverture(choisies[0].argumentSeul,variante);
+  const ouvert=lienExtras.photos||lienExtras.album||lienExtras.tirages;
+  if(!choisies.length && !ouvert) return "";
+  if(choisies.length===1 && !ouvert) return avecOuverture(choisies[0].argumentSeul,variante);
 
   const p=[LIEN_OUVERTURES[variante%LIEN_OUVERTURES.length]];
   const monte=choisies.some(x=>x.groupe==="gamme"||x.groupe==="duo");
@@ -7250,10 +7245,18 @@ function texteLien(de,choisies,variante){
      Prestige à 200, et cassait la montée en plein milieu. Les cartes de la
      page, elles, restent par prix : c'est là que la comparaison se fait. */
   const rang={gamme:0,duo:1,plus:2};
+  const auComptoir=[];
+  if(lienExtras.photos)  auComptoir.push("des photos retouchées en plus");
+  if(lienExtras.album)   auComptoir.push("un album imprimé");
+  if(lienExtras.tirages) auComptoir.push("des tirages papier à encadrer");
   const phrases=choisies.slice()
     .sort((a,b)=>(rang[a.groupe]-rang[b.groupe])||(a.montant-b.montant))
     .map(x=>x.phrase).filter(Boolean);
   if(phrases.length) p.push(phrases.join(" "));
+  if(auComptoir.length){
+    p.push("Vous pouvez aussi ajouter "+auComptoir.join(", ").replace(/, ([^,]*)$/, " ou $1")
+      +". Vous choisissez les quantités sur la page, et vous voyez le total avant de régler.");
+  }
   p.push("Rien d'obligatoire bien sûr : si vous préférez en rester là, votre galerie ne bouge pas.");
   return p.join("\n\n");
 }
@@ -7278,6 +7281,7 @@ let lienConseil=-1;      /* celle qui porte l'etoile */
 let lienVariante=0;      /* quelle entree en matiere */
 let lienTexteTouche=false;
 let lienLibre=null;      /* {titre,montant} du "autre montant" */
+let lienExtras={photos:false,album:false,tirages:false};   /* le comptoir */
 
 const LIEN_GROUPES=[
   ["gamme","Monter en gamme sur cette séance"],
@@ -7291,6 +7295,9 @@ function creerLienPaiement(clientId){
   const devinee=formuleDevinee(c);
   const type=typeSeanceDe(c);
   lienVariante=0; lienTexteTouche=false; lienLibre=null;
+  /* Le comptoir est ouvert par defaut : c'est ce que Matt veut proposer
+     neuf fois sur dix, et le refermer est un clic. */
+  lienExtras={photos:true,album:true,tirages:true};
 
   const h=`<h2>Lui proposer un complément</h2>
     <div class="hint" style="margin-bottom:14px">Pour <b>${esc(c.name||"")}</b>${c.email?" · "+esc(c.email):""}</div>
@@ -7313,10 +7320,14 @@ function creerLienPaiement(clientId){
       <div class="hint">Le pack grossesse + naissance n'apparaît que sur une séance grossesse : après l'accouchement, il n'y a plus de séance grossesse à rattraper.</div>
     </div>
 
-    <div class="grouplab" style="margin:16px 2px 4px">Ce qu'elle verra
+    <div class="grouplab" style="margin:16px 2px 4px">Changer de formule
       <span id="lpCompte" style="font-weight:400;color:var(--ink-3)"></span></div>
-    <div class="hint" style="margin:0 2px 8px">Coche jusqu'à ${LIEN_MAX_CHOIX} propositions. L'étoile marque celle que tu conseilles.</div>
+    <div class="hint" style="margin:0 2px 8px">Elle n'en prendra qu'une : on ne passe pas à la fois en Confort et en Prestige. Jusqu'à ${LIEN_MAX_CHOIX}. L'étoile marque celle que tu conseilles.</div>
     <div id="lpChoix"></div>
+
+    <div class="grouplab" style="margin:18px 2px 4px">Ce qu'elle peut ajouter elle-même</div>
+    <div class="hint" style="margin:0 2px 8px">Elle choisit les quantités, la page calcule le total. Tout se cumule.</div>
+    <div id="lpComptoir"></div>
 
     <div class="field" style="margin-top:16px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:5px">
@@ -7343,6 +7354,8 @@ function lienRefaireChoix(clientId){
   lienConseil=conseilParDefaut(lienProps,lienSel);
   lienLibre=null; lienTexteTouche=false; lienVariante=0;
   dessinerChoixLien();
+  dessinerComptoir();
+  dessinerComptoir();
   majTexteLien();
 }
 
@@ -7377,6 +7390,23 @@ function dessinerChoixLien(){
   box.innerHTML=h;
   const cpt=document.getElementById("lpCompte");
   if(cpt) cpt.textContent=lienSel.length?"· "+lienSel.length+" sur "+LIEN_MAX_CHOIX:"· rien de coché";
+}
+
+function dessinerComptoir(){
+  const box=document.getElementById("lpComptoir"); if(!box) return;
+  box.innerHTML=LIEN_COMPTOIR.map(function(c){
+    const on=!!lienExtras[c[0]];
+    return `<button type="button" class="lp-row${on?" on":""}" onclick="lienBasculerExtra('${c[0]}')">
+      <span class="box"></span>
+      <span class="tx"><b>${esc(c[1])}</b><span>${esc(c[2])}</span></span>
+    </button>`;
+  }).join("");
+}
+
+function lienBasculerExtra(cle){
+  lienExtras[cle]=!lienExtras[cle];
+  dessinerComptoir();
+  majTexteLien();
 }
 
 const lienMontantDe = i => {
@@ -7459,21 +7489,37 @@ function majTexteLien(){
 
 function majResumeLien(ch){
   const r=document.getElementById("lpResume"); if(!r) return;
-  if(!ch.length){ r.textContent="Coche au moins une proposition."; return; }
+  const ouvert=[];
+  if(lienExtras.photos)  ouvert.push("photos");
+  if(lienExtras.album)   ouvert.push("album");
+  if(lienExtras.tirages) ouvert.push("tirages");
+  if(!ch.length && !ouvert.length){ r.textContent="Coche au moins une proposition."; return; }
+  if(!ch.length){
+    r.innerHTML="Aucun changement de formule proposé."
+      +"<br>Elle pourra ajouter : <b>"+esc(ouvert.join(", "))+"</b>."
+      +"<br>Le total dépendra de ce qu'elle choisit ; le 3 fois apparaîtra au-delà de 150 €.";
+    return;
+  }
   const avec3x=ch.filter(x=>x.montant>=150).length;
   const etoile=(lienConseil>=0&&lienSel.indexOf(lienConseil)>=0)
     ? ((lienProps[lienConseil].libre&&lienLibre)?lienLibre.titre:lienProps[lienConseil].titre) : "";
   r.innerHTML=ch.map(x=>`<b>${esc(x.titre)}</b> · ${x.montant} €`).join("<br>")
     +(etoile?`<br>Étoile sur : ${esc(etoile)}`:"")
+    +(ouvert.length?`<br>Elle pourra ajouter : <b>${esc(ouvert.join(", "))}</b>.`:"")
     +(avec3x
-      ? `<br>Paiement en 3 fois proposé sur ${avec3x} proposition${avec3x>1?"s":""} sur ${ch.length}.`
-      : "<br>Aucune n'atteint 150 € : le 3 fois ne sera pas proposé.");
+      ? `<br>Paiement en 3 fois proposé dès 150 € de total.`
+      : ouvert.length
+        ? "<br>Le 3 fois apparaîtra si son total atteint 150 €."
+        : "<br>Aucune n'atteint 150 € : le 3 fois ne sera pas proposé.");
 }
 
 async function validerLienPaiement(clientId){
   const c=clientById(clientId); if(!c) return;
   const ch=choisiesLien();
-  if(!ch.length){ toast("Coche au moins une proposition"); return; }
+  /* Un lien peut ne proposer QUE le comptoir : "sers-toi", sans changement
+     de formule. Il faut au moins l un ou l autre. */
+  const ouvert=lienExtras.photos||lienExtras.album||lienExtras.tirages;
+  if(!ch.length && !ouvert){ toast("Coche au moins une proposition"); return; }
   const texte=(document.getElementById("lpTexte").value||"").trim();
   if(!texte){ toast("Le texte est vide : c'est lui qui la convainc"); return; }
   const cleConseil=(lienConseil>=0&&lienSel.indexOf(lienConseil)>=0)?lienProps[lienConseil].cle:"";
@@ -7482,7 +7528,7 @@ async function validerLienPaiement(clientId){
   b.disabled=true; b.textContent="Création…";
   try{
     const r=await fetch(LIEN_API,{method:"POST",headers:apiHeaders(true),
-      body:JSON.stringify({action:"creer",clientId,options,argument:texte,
+      body:JSON.stringify({action:"creer",clientId,options,extras:lienExtras,argument:texte,
         prenom:(c.name||"").split(" ")[0],nom:c.name||"",email:c.email||""})});
     if(r.status===401){ handleUnauthorized(); return; }
     const j=await r.json();

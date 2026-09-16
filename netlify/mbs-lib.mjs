@@ -41,8 +41,8 @@ export function acompteFor(total){
    demandant de recharger la page, plutot que de facturer autre chose
    que ce que la cliente a vu.
    --------------------------------------------------------------- */
-export const PRIX_PHOTO_SUPP = 20;
-export const PRIX_ALBUM = 140;
+export const PRIX_PHOTO_SUPP = 15;
+export const PRIX_ALBUM = 150;
 export const TARIFS = {
   simple: { essentielle: 290, confort: 390, prestige: 490 },
   duo:    { essentiel: 590, confort: 690, prestige: 890 }

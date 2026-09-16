@@ -232,6 +232,7 @@ export async function makeComplementInvoicePdf(inv){
   const H = 842, M = 50;
   const ink = rgb(0.16, 0.12, 0.07), soft = rgb(0.45, 0.40, 0.33), line = rgb(0.85, 0.80, 0.72);
   const T = (x, yTop, str, size, f, c) => page.drawText(String(str), { x, y: H - yTop, size, font: f || font, color: c || ink });
+  const trait = (yTop) => page.drawLine({ start: { x: M, y: H - yTop }, end: { x: 545, y: H - yTop }, thickness: 0.8, color: line });
 
   T(M, 62, ISSUER.enseigne, 22, bold);
   T(M, 84, ISSUER.nom, 10, font, soft);
@@ -249,22 +250,47 @@ export async function makeComplementInvoicePdf(inv){
   T(M, 198, inv.client.name || "Client", 12, bold);
   if (inv.client.email) T(M, 214, inv.client.email, 10, font, soft);
 
+  /* Une facture d'avant le panier n'a qu'un libelle et un montant : on lui
+     fabrique une ligne unique, et la mise en page ne change pas pour elle. */
+  const lignes = (Array.isArray(inv.lignes) && inv.lignes.length)
+    ? inv.lignes
+    : [{ libelle: inv.libelle || "Complément", detail: "", montant: inv.montant }];
+  const total = Number.isFinite(Number(inv.montant)) && Number(inv.montant) > 0
+    ? Number(inv.montant)
+    : lignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+
   const yTable = 262;
   T(M, yTable, "Description", 10, bold, soft);
   T(430, yTable, "Montant", 10, bold, soft);
-  page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
+  trait(yTable + 8);
 
-  T(M, yTable + 30, String(inv.libelle || "Complément").slice(0, 62), 11, font);
-  T(M, yTable + 46, "Studio Mybabyshoot, La Mulatière", 9.5, font, soft);
-  T(430, yTable + 30, eur(inv.montant), 11, bold);
+  let y = yTable + 30;
+  lignes.forEach(l => {
+    T(M, y, String(l.libelle || "").slice(0, 62), 11, font);
+    T(430, y, eur(l.montant), 11, bold);
+    y += 14;
+    if (l.detail) { T(M, y, String(l.detail).slice(0, 80), 9, font, soft); y += 13; }
+    y += 7;
+  });
 
-  page.drawLine({ start: { x: M, y: H - (yTable + 82) }, end: { x: 545, y: H - (yTable + 82) }, thickness: 0.8, color: line });
+  trait(y);
+  T(300, y + 26, "Total réglé", 11, bold);
+  T(430, y + 26, eur(total), 12, bold);
+  y += 58;
 
-  T(300, yTable + 108, "Total réglé", 11, bold);
-  T(430, yTable + 108, eur(inv.montant), 12, bold);
+  /* L'adresse d'envoi fait partie de la facture quand il y a du papier :
+     c'est la preuve de ce qui a ete commande et ou ca part. */
+  const a = inv.adresse;
+  if (a && (a.ligne1 || a.ville)) {
+    T(M, y, "Envoi des tirages", 10, bold, soft); y += 16;
+    if (a.nom) { T(M, y, a.nom, 10.5, font); y += 14; }
+    if (a.ligne1) { T(M, y, a.ligne1, 10.5, font); y += 14; }
+    if (a.ligne2) { T(M, y, a.ligne2, 10.5, font); y += 14; }
+    T(M, y, [a.cp, a.ville].filter(Boolean).join(" "), 10.5, font); y += 22;
+  }
 
-  T(M, yTable + 146, ISSUER.mentionTva, 9.5, font, soft);
-  T(M, yTable + 176, "Réglé en totalité le " + inv.dateStr +
+  T(M, y, ISSUER.mentionTva, 9.5, font, soft); y += 26;
+  T(M, y, "Réglé en totalité le " + inv.dateStr +
     (inv.troisFois ? " en 3 fois sans frais." : " par carte bancaire."), 10, font);
 
   T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);

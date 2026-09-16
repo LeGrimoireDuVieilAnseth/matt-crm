@@ -7,7 +7,8 @@
 //   POST {action:"annuler", code}: eteint un lien non paye
 //   POST {action:"envoyer", code}: envoie le lien par mail a la cliente
 import { lienStore, creerLien, majIndex, normaliserCode, montantValide,
-         vuePublique, optionsDe, LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
+         vuePublique, optionsDe, extrasDe, aDesExtras, normaliserExtras,
+         LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
@@ -53,7 +54,12 @@ export default async (request) => {
        recoit avant de creer : un lien sans prix ou sans libelle produirait
        une page muette, et une facture sans intitule. */
     const marches = Array.isArray(corps.options) ? corps.options : [];
-    if (marches.length) {
+    const sup = normaliserExtras(corps.extras);
+    /* Un lien qui ne propose que des complements n'a pas de montant : son
+       total depend de ce que la cliente cochera. */
+    if (!marches.length && aDesExtras(sup)) {
+      /* rien a verifier de plus : les prix des complements sont au serveur */
+    } else if (marches.length) {
       const mauvaise = marches.find(o =>
         montantValide(o && o.montant) === null || !String((o && o.titre) || "").trim());
       if (mauvaise) {
@@ -74,7 +80,7 @@ export default async (request) => {
       clientId: corps.clientId, prenom: corps.prenom, nom: corps.nom,
       email: corps.email,
       montant: montantValide(corps.montant), libelle: String(corps.libelle || "").trim(),
-      argument: corps.argument, gains: corps.gains, options: marches,
+      argument: corps.argument, gains: corps.gains, options: marches, extras: sup,
     });
     if (!lien) return json({ ok: false, erreur: "code" }, 500);
     return json({ ok: true, lien: vuePublique(lien), url: adresseDuLien(lien.code) });
@@ -118,14 +124,27 @@ export default async (request) => {
        plusieurs marches il les nomme -- sinon le mail annoncerait un seul
        montant et la page en montrerait trois. */
     const marches = optionsDe(l);
+    const extras = extrasDe(l);
+    const aLaCarte = aDesExtras(extras);
+    const quoi = [];
+    if (extras.photos)  quoi.push("des photos retouchées en plus");
+    if (extras.album)   quoi.push("un album imprimé");
+    if (extras.tirages) quoi.push("des tirages papier");
     const plusieurs = marches.length > 1;
-    const intro = plusieurs
+    const intro = aLaCarte
+      ? "<p>Voici de quoi compléter votre séance"
+        + (quoi.length ? " : " + quoi.join(", ") : "")
+        + ". Vous choisissez ce que vous voulez sur la page, et vous voyez le total avant de régler.</p>"
+        + (marches.length ? "<ul style=\"padding-left:18px;line-height:1.7\">"
+            + marches.map(o => "<li>" + esc(o.titre) + " · <b>" + o.montant + " €</b></li>").join("")
+            + "</ul>" : "")
+      : plusieurs
       ? "<p>Voici les possibilités dont nous avons parlé. Vous choisissez celle que vous voulez sur la page, il n'y a aucune obligation.</p>"
         + "<ul style=\"padding-left:18px;line-height:1.7\">"
         + marches.map(o => "<li>" + esc(o.titre) + " · <b>" + o.montant + " €</b></li>").join("")
         + "</ul>"
       : "<p>Voici le lien pour régler " + esc(l.libelle) + ".</p>";
-    const texteBouton = plusieurs ? "Voir les possibilités" : "Régler " + l.montant + " €";
+    const texteBouton = (aLaCarte || plusieurs) ? "Voir et choisir" : "Régler " + l.montant + " €";
     const html =
       "<p>Bonjour " + esc(l.prenom) + " !</p>" +
       intro +

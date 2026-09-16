@@ -8,7 +8,9 @@ import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
-import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi } from "../mbs-liens.mjs";
+import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi,
+         panierDeSession } from "../mbs-liens.mjs";
+import { resumePanier } from "../mbs-panier.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 /* Le courrier du bon cadeau vit dans son propre module : le CRM peut lui
    aussi le renvoyer apres une correction, et deux copies d'un meme modele
@@ -38,6 +40,12 @@ function siteClient(md) {
   }
   return "https://sparkly-stroopwafel-d583f1.netlify.app";
 }
+
+/* Le detail d une commande part dans un mail : il est ecrit par la cliente
+   (numeros de photos, nom sur la boite aux lettres). On echappe, sinon un
+   chevron dans une adresse casserait la mise en page du courrier. */
+const esc = (v) => String(v == null ? "" : v)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function frDate(iso){
   const p = String(iso).split("-");
@@ -104,7 +112,18 @@ async function traiterLien(session, md) {
      sur la facture et dans le CRM, c'est celle qu'elle a prise, pas la
      premiere de la liste. */
   const choix = optionChoisie(lien, md.optionId);
-  const libelle = titreChoisi(lien, md);
+  /* Ce qu'elle a coche, mis de cote au moment d'ouvrir le paiement. C'est
+     la seule source fiable du detail : les metadonnees Stripe sont limitees
+     a 500 caracteres et ne peuvent pas porter une commande entiere. */
+  const panier = panierDeSession(lien, session.id);
+  const lignes = (panier && Array.isArray(panier.lignes) && panier.lignes.length) ? panier.lignes : null;
+  const adresse = (panier && panier.adresse) ? panier.adresse : null;
+  const libelle = lignes ? resumePanier({ lignes }) : titreChoisi(lien, md);
+  /* L'adresse, mise en forme une fois pour la facture, le rappel et la fiche. */
+  const adresseTexte = adresse
+    ? [adresse.nom, adresse.ligne1, adresse.ligne2, [adresse.cp, adresse.ville].filter(Boolean).join(" ")]
+        .filter(Boolean).join("\n")
+    : "";
   const nom = [md.prenom, md.nom].filter(Boolean).join(" ").trim() || lien.nom || "Cliente";
   const email = (md.email || session.customer_email || lien.email || "").trim();
   const troisFois = String(session.payment_method_types || "").includes("klarna");
@@ -116,12 +135,12 @@ async function traiterLien(session, md) {
     invNum = await nextInvoiceNumber();
     invPdf = await makeComplementInvoicePdf({
       number: invNum, dateStr, client: { name: nom, email },
-      libelle: libelle, montant, troisFois
+      libelle, lignes, adresse, montant, troisFois
     });
     await saveInvoice({
       number: invNum, kind: "complement", pdf: invPdf,
       client: { name: nom, email }, montant, dateStr,
-      detail: libelle + " (lien " + code + ")"
+      detail: libelle.slice(0, 300) + " (lien " + code + ")"
     });
   } catch (e) { invNum = null; invPdf = null; }
 
@@ -132,12 +151,15 @@ async function traiterLien(session, md) {
     if (!(data.paiements || []).some(p => p.stripeSession === session.id)) {
       data.paiements.push({
         id: uid(), brand: BRAND, clientId: lien.clientId || "",
-        label: libelle,
+        label: libelle.slice(0, 120),
         total: String(montant), acompte: String(montant), statut: "Solde",
         date: new Date(now).toISOString().slice(0, 10), dueDate: "",
         notes: "Complément réglé en ligne par lien de paiement." +
                (troisFois ? " En 3 fois avec Klarna." : "") +
-               (invNum ? " Facture " + invNum + "." : ""),
+               (invNum ? " Facture " + invNum + "." : "") +
+               (lignes ? "\n" + lignes.map(l => "· " + l.libelle
+                   + (l.detail ? " (" + l.detail + ")" : "") + " — " + l.montant + " €").join("\n") : "") +
+               (adresseTexte ? "\nEnvoi des tirages :\n" + adresseTexte : ""),
         stripeSession: session.id, invoiceNumber: invNum || "", lienCode: code
       });
 
@@ -160,7 +182,14 @@ async function traiterLien(session, md) {
         notes: "Réglé " + montant + " € en ligne par lien de paiement"
           + (troisFois ? " (3 fois avec Klarna)" : "") + "."
           + (invNum ? " Facture " + invNum + "." : "")
-          + "\nÀ faire : mettre sa galerie à jour selon ce qu'elle vient de prendre.",
+          + (lignes ? "\n" + lignes.map(l => "· " + l.libelle
+              + (l.detail ? " (" + l.detail + ")" : "")).join("\n") : "")
+          /* L'adresse dans le rappel : sans elle, Matt encaisserait des
+             tirages sans savoir ou les poster. */
+          + (adresseTexte ? "\n\nÀ POSTER À :\n" + adresseTexte : "")
+          + "\n\nÀ faire : " + (adresseTexte
+              ? "préparer les tirages, les poster, et mettre sa galerie à jour."
+              : "mettre sa galerie à jour selon ce qu'elle vient de prendre."),
         stripeSession: session.id, lienCode: code
       });
 
@@ -182,13 +211,25 @@ async function traiterLien(session, md) {
     /* La notification dit aussi ce qu'il y a a faire : "200 € encaissés" ne
        declenche aucun geste, "sa galerie est à mettre à jour" si. */
     await notifyAll("Complément réglé · " + montant + " €",
-      nom + " · " + libelle + " — sa galerie est à mettre à jour.", "/");
+      nom + " · " + libelle.slice(0, 120)
+      + (adresseTexte ? " — tirages à poster." : " — sa galerie est à mettre à jour."), "/");
   } catch (e) {}
 
   if (email) {
     const html =
       "<p>Bonjour " + (md.prenom || lien.prenom || "") + " !</p>" +
-      "<p>Votre règlement de <b>" + montant + " €</b> est bien enregistré : " + libelle + ".</p>" +
+      "<p>Votre règlement de <b>" + montant + " €</b> est bien enregistré.</p>" +
+      (lignes
+        ? "<ul style=\"padding-left:18px;line-height:1.7\">"
+          + lignes.map(l => "<li>" + esc(l.libelle)
+              + (l.detail ? " <span style=\"color:#888\">(" + esc(l.detail) + ")</span>" : "")
+              + " — <b>" + l.montant + " €</b></li>").join("")
+          + "</ul>"
+        : "<p>" + esc(libelle) + "</p>") +
+      (adresseTexte
+        ? "<p style=\"font-size:13px;color:#888\">Vos tirages partiront à :<br>"
+          + esc(adresseTexte).replace(/\n/g, "<br>") + "</p>"
+        : "") +
       (invPdf ? "<p>Votre facture est en pièce jointe.</p>" : "") +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
       "<p>À très vite<br>Matteo · Mybabyshoot</p>";
