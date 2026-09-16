@@ -34,7 +34,7 @@ export const ALBUMS_MAX = 5;
    sans les numeros, Matt ne peut rien imprimer. */
 export const TAILLES = [
   { cle: "20x30", nom: "20 × 30 cm", prix: 10 },
-  { cle: "30x40", nom: "30 × 40 cm", prix: 15 },
+  { cle: "30x45", nom: "30 × 45 cm", prix: 15 },
   { cle: "40x60", nom: "40 × 60 cm", prix: 20 },
 ];
 export const TIRAGES_MAX = 30;
