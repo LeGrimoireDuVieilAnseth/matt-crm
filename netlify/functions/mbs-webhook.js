@@ -10,7 +10,7 @@ import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
 import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi,
          panierDeSession } from "../mbs-liens.mjs";
-import { resumePanier } from "../mbs-panier.mjs";
+import { resumePanier, TAILLES } from "../mbs-panier.mjs";
 import { couponStore, consumeCoupon, prettyCode, prettyGift, createGiftCoupon, frDateShort } from "../mbs-coupons.mjs";
 /* Le courrier du bon cadeau vit dans son propre module : le CRM peut lui
    aussi le renvoyer apres une correction, et deux copies d'un meme modele
@@ -502,6 +502,17 @@ export default async (request) => {
   const name    = [prenom, nom].filter(Boolean).join(" ").trim() || "Client Mybabyshoot";
   const typeLbl = typeLabelFr(type);
 
+  /* Les tirages papier payes des la reservation, transmis sous forme
+     courte dans les metadonnees ("20x30:2,40x60:1"). On les relit avec la
+     grille pour retrouver les vrais libelles : les metadonnees ne portent
+     que des quantites, jamais des prix ni des noms. */
+  const tiragesLignes = String(md.tirages || "").split(",").map(p => {
+    const [cle, n] = p.split(":");
+    const t = TAILLES.find(x => x.cle === cle);
+    const q = parseInt(n, 10) || 0;
+    return (t && q > 0) ? (q + " tirage" + (q > 1 ? "s" : "") + " " + t.nom) : "";
+  }).filter(Boolean);
+
   // Client : regroupement par email OU telephone (comme crm-lead).
   let client = data.clients.find(c =>
     c.brand === BRAND &&
@@ -548,9 +559,34 @@ export default async (request) => {
     statut: toutRegle ? "Solde" : "Acompte recu",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
     notes: (toutRegle ? "Totalité réglée en ligne via Stripe, rien à encaisser le jour J." : "Réglé en ligne via Stripe.")
-      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : ""),
+      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : "")
+      + (tiragesLignes.length
+          ? "\nTirages commandés et réglés d'avance :\n"
+            + tiragesLignes.map(l => "· " + l).join("\n")
+            + "\nAdresse d'envoi et numéros de photos à demander après la séance."
+          : ""),
     stripeSession: session.id
   });
+
+  /* Les tirages payes d avance : "20x30:2,40x60:1". Au moment de reserver
+     les photos n existaient pas, donc ni numeros ni adresse : c est le
+     rappel ci-dessous qui evite que Matt encaisse sans jamais les reclamer. */
+  if (tiragesLignes.length) {
+    data.taches = data.taches || [];
+    data.taches.push({
+      id: uid(), done: false,
+      title: "Tirages à préparer — " + name,
+      /* Echeance le jour de la seance : c'est la que Matt la voit, et
+         c'est le bon moment pour lui demander ses numeros de photos. */
+      dueDate: date,
+      priority: "Haute", clientId: client.id,
+      notes: "Réglés d'avance à la réservation :\n"
+        + tiragesLignes.map(l => "· " + l).join("\n")
+        + "\n\nÀ faire : lui demander les numéros des photos à tirer et son"
+        + " adresse postale (nom sur la boîte aux lettres).",
+      stripeSession: session.id
+    });
+  }
 
   // Liberation du verrou pose au checkout.
   if (md.lockId) data.mbsLocks = data.mbsLocks.filter(l => l.id !== md.lockId);

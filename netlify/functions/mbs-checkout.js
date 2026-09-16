@@ -8,6 +8,7 @@ import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
   acompteFor, typeLabelFr, prixSeance, LOCK_TTL_MS, uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
+import { prixTirages } from "../mbs-panier.mjs";
 import {
   couponStore, checkCoupon, reasonLabel, discountFor,
   reserveCoupon, releaseCoupon, consumeCoupon, prettyGift
@@ -151,7 +152,7 @@ export default async (request) => {
   if (!body.giftOnly) {
     const calcule = prixSeance({
       section: body.section, gamme: body.gamme,
-      photos: body.photos, album: body.album
+      photos: body.photos, album: body.album, tirages: body.tirages
     });
     if (calcule === null) {
       return json({ ok: false, error: "formule",
@@ -297,6 +298,16 @@ export default async (request) => {
     const stripe = new Stripe(secret);
     const label = (integral ? "Séance " : "Acompte réservation ") + typeLabelFr(type);
 
+    /* Les tirages papier commandes des la reservation, sous une forme
+       courte : "20x30:2,40x60:1". Les metadonnees Stripe plafonnent a 500
+       caracteres par champ, et le webhook n en a pas besoin de plus pour
+       reconstituer la commande a partir de la grille.
+       Au moment de reserver, les photos n existent pas encore : ni numeros
+       ni adresse. Matt les reclamera apres la seance, et le webhook lui
+       pose un rappel pour ca. */
+    const tiragesTexte = prixTirages(body.tirages).lignes
+      .map(l => l.cle + ":" + l.quantite).join(",");
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       /* Klarna n'est propose que sur le paiement integral. Sur un acompte de
@@ -345,6 +356,9 @@ export default async (request) => {
         acompte: String(acompte), total: String(total), origine,
         integral: integral ? "1" : "",
         coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
+        /* Ce qu'elle a commande en papier, sous une forme courte : les
+           metadonnees Stripe sont limitees a 500 caracteres par champ. */
+        tirages: tiragesTexte,
         prenom, nom, email, tel
       }
     });

@@ -41,6 +41,8 @@ export function acompteFor(total){
    demandant de recharger la page, plutot que de facturer autre chose
    que ce que la cliente a vu.
    --------------------------------------------------------------- */
+import { prixTirages } from "./mbs-panier.mjs";
+
 export const PRIX_PHOTO_SUPP = 15;
 export const PRIX_ALBUM = 150;
 export const TARIFS = {
@@ -50,12 +52,14 @@ export const TARIFS = {
 
 /* Renvoie le prix de la formule, hors frais de deplacement et hors
    remise, ou null si la formule est inconnue. */
-export function prixSeance({ section, gamme, photos, album } = {}){
+export function prixSeance({ section, gamme, photos, album, tirages } = {}){
   const table = TARIFS[section === "duo" ? "duo" : "simple"];
   const base = table[String(gamme || "")];
   if (!base) return null;
   const n = Math.min(Math.max(parseInt(photos, 10) || 0, 0), 50);
-  return base + n * PRIX_PHOTO_SUPP + (album ? PRIX_ALBUM : 0);
+  /* Les tirages commandes des la reservation : leur prix et l'envoi
+     viennent de mbs-panier.mjs, comme au comptoir. */
+  return base + n * PRIX_PHOTO_SUPP + (album ? PRIX_ALBUM : 0) + prixTirages(tirages).total;
 }
 
 // Libelle francais du type de seance (pour l'agenda et les emails).

@@ -185,6 +185,26 @@ export function calculerPanier({ formules = [], extras = {}, choix = {} }) {
   };
 }
 
+/* Le cout des tirages seuls, envoi compris. Sert au comptoir du lien de
+   paiement ET a la reservation sur le site : une seule grille, un seul
+   calcul. calculerPanier garde sa propre boucle parce qu'il doit aussi
+   coller les numeros de photos a chaque ligne, mais les PRIX viennent des
+   memes constantes. */
+export function prixTirages(tirages) {
+  const q = (tirages && typeof tirages === "object") ? tirages : {};
+  const lignes = [];
+  let papier = 0, nb = 0;
+  TAILLES.forEach(t => {
+    const n = entier(q[t.cle], TIRAGES_MAX);
+    if (!n) return;
+    const montant = n * t.prix;
+    papier += montant; nb += n;
+    lignes.push({ cle: t.cle, nom: t.nom, quantite: n, montant });
+  });
+  const envoi = (nb > 0 && papier < ENVOI_OFFERT_DES) ? FRAIS_ENVOI : 0;
+  return { lignes, nb, papier, envoi, total: papier + envoi };
+}
+
 /* Une ligne de resume, pour le CRM et les notifications. */
 export function resumePanier(panier) {
   return (panier.lignes || []).map(l => l.libelle).join(" · ") || "Complément";
