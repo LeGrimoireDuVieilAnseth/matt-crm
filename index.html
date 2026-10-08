@@ -938,7 +938,7 @@ const PAY_STATUS = ["En attente","Acompte recu","Solde"];
 const PAY_STYLE = {"En attente":"warn","Acompte recu":"info","Solde":"ok"};
 
 const TYPES = {
-  "mybabyshoot":["Seance grossesse","Naissance / nouveau-ne","Famille","Smash cake","Suivi bebe"],
+  "mybabyshoot":["Seance grossesse","Naissance / nouveau-ne","Bebe","Famille","Smash cake","Suivi bebe"],
   "maison-lumiere":["Mariage complet","Ceremonie seule","Engagement","Elopement","Video mariage"],
   "matt-la-photo":["Collab marque","Contenu reseaux","Portrait street","Shooting perso","Prestation video"]
 };
@@ -3830,7 +3830,7 @@ function clientDuBon(b){
   return nom?DB.clients.find(x=>x.brand==="mybabyshoot"&&String(x.name||"").toLowerCase()===nom):null;
 }
 
-const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",duo:"Grossesse + naissance"};
+const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",bebe:"Séance bébé",famille:"Séance famille",duo:"Grossesse + naissance"};
 
 function dessinerCadeaux(list){
   const box=document.getElementById("clientsList");
@@ -3938,7 +3938,7 @@ function openBonCadeau(brut){
    ============================================================ */
 function corrigerBonCadeau(brut){
   const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
-  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["duo","Grossesse + naissance"]];
+  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["bebe","Séance bébé"],["famille","Séance famille"],["duo","Grossesse + naissance"]];
   let h=`<h2>Corriger le bon ${esc(b.code)}</h2>
     <div class="hint" style="margin-bottom:14px">Le code reste <b>${esc(b.code)}</b> et le lien déjà envoyé continue de fonctionner :
     il affichera la version corrigée dès l'enregistrement.</div>
@@ -7012,11 +7012,13 @@ async function chargerLiens(clientId){
 
    REGLE ABSOLUE : une proposition ne doit RIEN retirer. Voir les filtres
    de propositionsPour. */
+/* La galerie complete (brutes) est desormais dans les TROIS formules
+   simples : ce qui monte d'une marche a l'autre, ce sont les retouches. */
 const LIEN_FORMULES = [
-  { cle:"essentielle",  nom:"Essentielle",   prix:290, duo:false, retouchees:5  },
-  { cle:"confort",      nom:"Confort",       prix:390, duo:false, retouchees:10, brutes:true },
+  { cle:"essentielle",  nom:"Essentielle",   prix:290, duo:false, retouchees:5,  brutes:true },
+  { cle:"confort",      nom:"Confort",       prix:390, duo:false, retouchees:15, brutes:true },
   { cle:"prestige",     nom:"Prestige",      prix:490, duo:false, toutes:true,   brutes:true },
-  { cle:"duo-essentiel",nom:"Duo Essentiel", prix:590, duo:true,  retouchees:15 },
+  { cle:"duo-essentiel",nom:"Duo Essentiel", prix:590, duo:true,  retouchees:15, brutes:true },
   { cle:"duo-confort",  nom:"Duo Confort",   prix:690, duo:true,  retouchees:30, brutes:true },
   { cle:"duo-prestige", nom:"Duo Prestige",  prix:890, duo:true,  toutes:true,   brutes:true },
 ];
@@ -7075,7 +7077,8 @@ function phraseCourte(de,vers){
   if(vers.brutes && !de.brutes)
     return tete+"toute votre galerie s'ouvre, vous récupérez l'intégralité des photos au naturel, et je passe à "+vers.retouchees+" retouches.";
   if(vers.retouchees && de.retouchees && vers.retouchees>de.retouchees)
-    return tete+"vous passez à "+vers.retouchees+" photos retouchées au lieu de "+de.retouchees+".";
+    return tete+"je retouche "+vers.retouchees+" photos au lieu de "+de.retouchees+", soit "
+      +(vers.retouchees-de.retouchees)+" de plus à encadrer, à offrir ou à imprimer.";
   return tete+"vous montez d'un cran sur la finition.";
 }
 
@@ -7109,6 +7112,13 @@ function argumentEntre(de,vers){
       +"Vous avez déjà toute votre galerie au naturel. Avec la formule "+vers.nom+", "
       +"je retouche l'ensemble des photos réussies de la séance, et plus seulement "
       +de.retouchees+". Vous n'avez plus à choisir lesquelles garder.\n\n"
+      +"Vous ne réglez que la différence entre les deux formules.";
+  }
+  if(vers.retouchees && de.retouchees && vers.retouchees>de.retouchees){
+    return "J'ai pensé à vous en préparant votre galerie.\n\n"
+      +"Vous avez déjà toutes les photos de la séance. Ce qui change avec la formule "+vers.nom
+      +", c'est le nombre que je retouche vraiment : "+vers.retouchees+" au lieu de "+de.retouchees
+      +", soit "+(vers.retouchees-de.retouchees)+" images de plus prêtes à être imprimées ou offertes.\n\n"
       +"Vous ne réglez que la différence entre les deux formules.";
   }
   return "Avec la formule "+vers.nom+", vous passez à "

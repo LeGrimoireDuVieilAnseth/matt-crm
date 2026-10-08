@@ -63,9 +63,17 @@ export function prixSeance({ section, gamme, photos, album, tirages } = {}){
 }
 
 // Libelle francais du type de seance (pour l'agenda et les emails).
+/* Les types de seance vendus. Liste fermee : ce qui n'y est pas est
+   refuse a la reservation plutot que d'arriver mal etiquete dans le CRM,
+   sur la facture et dans le mail de la cliente. */
+export const TYPES_SEANCE = ["grossesse", "naissance", "bebe", "famille", "duo"];
+export const typeConnu = (t) => TYPES_SEANCE.includes(String(t || ""));
+
 export function typeLabelFr(type){
   if (type === "duo") return "Grossesse + naissance";
   if (type === "naissance") return "Naissance";
+  if (type === "bebe") return "Bébé";
+  if (type === "famille") return "Famille";
   return "Grossesse";
 }
 

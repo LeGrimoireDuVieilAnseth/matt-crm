@@ -14,6 +14,8 @@ import { prettyGift, frDateShort } from "./mbs-coupons.mjs";
 export const SEANCE_TXT = {
   grossesse: "Séance grossesse",
   naissance: "Séance naissance",
+  bebe:      "Séance bébé",
+  famille:   "Séance famille",
   duo:       "Grossesse et naissance"
 };
 

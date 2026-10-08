@@ -6,7 +6,7 @@
 import Stripe from "stripe";
 import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
-  acompteFor, typeLabelFr, prixSeance, LOCK_TTL_MS, uid, BRAND, PLACE
+  acompteFor, typeLabelFr, typeConnu, prixSeance, LOCK_TTL_MS, uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import { prixTirages } from "../mbs-panier.mjs";
 import {
@@ -124,6 +124,12 @@ export default async (request) => {
   catch (e) { return json({ ok: false, error: "json" }, 400); }
 
   let   type   = String(body.type || "grossesse");
+  /* Liste fermee : un type inconnu arriverait etiquete "Grossesse" dans le
+     CRM et sur la facture, sans que personne s'en apercoive. */
+  if (!typeConnu(type)) {
+    return json({ ok: false, error: "type",
+      message: "Type de séance non reconnu. Rechargez la page et recommencez." }, 400);
+  }
   // Provenance de la visite, telle que le site l'a retenue. Liste fermee :
   // on n'ecrit dans la fiche que des categories connues.
   const ORIGINES = ["Google Ads", "Google", "Instagram", "TikTok", "Facebook", "Autre moteur", "Autre site", "Direct"];

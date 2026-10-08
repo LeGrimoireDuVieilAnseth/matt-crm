@@ -44,6 +44,8 @@ const LIBELLES_SEANCE = {
   "grossesse":               "Séance photo grossesse",
   "naissance / nouveau-ne":  "Séance photo naissance",
   "naissance":               "Séance photo naissance",
+  "bebe":                    "Séance photo bébé",
+  "bébé":                    "Séance photo bébé",
   "grossesse + naissance":   "Séance photo grossesse + naissance",
   "suivi bebe":              "Séance photo suivi bébé",
   "famille":                 "Séance photo famille",
