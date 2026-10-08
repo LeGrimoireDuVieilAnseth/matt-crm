@@ -15,11 +15,13 @@
 import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT,
          createGiftCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
 import { htmlBonCadeau, htmlBonCorrige, SEANCE_TXT } from "../mbs-bon-mail.mjs";
+import { typeConnu } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 
-/* Les trois natures de seance qu'un bon peut porter. C'est la seule liste
-   qui fait foi : une valeur inconnue afficherait un bon muet. */
-const SEANCES_BON = ["grossesse", "naissance", "duo"];
+/* Les natures de seance qu'un bon peut porter viennent de TYPES_SEANCE
+   (mbs-lib.mjs), la liste qui fait deja foi pour les reservations. Il y en
+   avait une copie ici, restee a trois valeurs : elle refusait de corriger
+   un bon vers bebe ou famille, pourtant proposes par le menu du CRM. */
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -151,7 +153,7 @@ export default async (request) => {
     const change = [];
     if (body.seance != null && body.seance !== c.seance) {
       const s = String(body.seance);
-      if (!SEANCES_BON.includes(s)) return json({ ok: false, error: "seance" }, 400);
+      if (!typeConnu(s)) return json({ ok: false, error: "seance" }, 400);
       change.push("séance : " + (SEANCE_TXT[c.seance] || c.seance) + " → " + SEANCE_TXT[s]);
       c.seance = s;
     }
@@ -235,7 +237,7 @@ export default async (request) => {
     const coupon = await createGiftCoupon(store, {
       amount: offre.prix,
       formule: offre.nom,
-      seance: offre.duo ? "duo" : "grossesse",
+      seance: offre.duo ? "duo" : (typeConnu(body.seance) ? body.seance : "grossesse"),
       style: "creme",
       acheteur: { nom: String(body.acheteur || "Bon honoré par le studio").trim().slice(0, 80), email: "" },
       beneficiaire,

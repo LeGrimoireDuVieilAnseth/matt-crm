@@ -77,6 +77,26 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
     giftCode: md.coupon
   });
 
+  /* Le pack ne bloque qu'un creneau, celui de la grossesse. Quand il est
+     offert, rien ne passe par Stripe : le webhook, qui pose d'habitude ce
+     rappel, n'est jamais appele. Sans ces lignes, la seconde seance ne
+     tiendrait qu'a la memoire de Matt, dans le cas le plus frequent. */
+  if (md.type === "duo") {
+    data.taches = data.taches || [];
+    data.taches.push({
+      id: uid(), done: false,
+      title: "Caler la séance naissance — " + name,
+      dueDate: md.date,
+      priority: "Haute", clientId: client.id,
+      notes: "Pack grossesse + naissance réglé par bon cadeau."
+        + (md.formule ? "\n" + md.formule + "." : "")
+        + "\n\nÀ faire le jour de la séance grossesse : convenir avec elle"
+        + " qu'elle prévienne dès la naissance, pour caler la séance"
+        + " dans les 10 jours qui suivent.",
+      giftCode: md.coupon
+    });
+  }
+
   data.mbsLocks = data.mbsLocks.filter(l => l.id !== lockId);
   data.t = now;
   await store.setJSON("data", data);
@@ -221,7 +241,7 @@ export default async (request) => {
   // 1bis) Code de reduction ou bon cadeau : verifie ET applique cote serveur
   //       (jamais depuis le navigateur). Le code est seulement reserve ici ;
   //       il n'est consomme qu'au paiement confirme.
-  let remise = 0, couponCode = "", couponKind = "promo";
+  let remise = 0, couponCode = "", couponKind = "promo", giftFormule = "";
   if (body.coupon) {
     const cstore = couponStore();
     const chk = await checkCoupon(cstore, body.coupon, now);
@@ -236,8 +256,14 @@ export default async (request) => {
     if (couponKind === "cadeau" && body.giftOnly) {
       const val = Number(chk.coupon.amount);
       if (Number.isFinite(val) && val > 0) { total = val; totalPlein = val; }
+      /* Le type vient du bon, et la liste fermee fait foi : sans bebe ni
+         famille ici, un bon bebe entrait dans le CRM, dans l'email de
+         confirmation et sur la facture en "Grossesse". */
       const s = chk.coupon.seance;
-      type = (s === "duo" || s === "naissance") ? s : "grossesse";
+      type = typeConnu(s) ? s : "grossesse";
+      /* La formule inscrite sur le bon, pour la fiche et pour le rappel de
+         la seconde seance quand le bon couvre un pack. */
+      giftFormule = String(chk.coupon.formule || "");
     }
 
     remise = discountFor(total, chk.coupon.amount, couponKind);
@@ -300,7 +326,8 @@ export default async (request) => {
         store, lockId, now,
         md: {
           type, date, time, prenom, nom, email, tel, site,
-          coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein)
+          coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
+          formule: giftFormule
         }
       });
       return json({ ok: true, gratuit: true });

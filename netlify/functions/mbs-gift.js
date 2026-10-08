@@ -3,10 +3,13 @@
 // le code n'est cree qu'au paiement confirme (dans mbs-webhook).
 import Stripe from "stripe";
 import { offreCadeau, styleValide } from "../mbs-coupons.mjs";
+import { typeConnu } from "../mbs-lib.mjs";
 
 const SEANCE_LABEL = {
   grossesse: "Séance photo grossesse",
   naissance: "Séance photo naissance",
+  bebe:      "Séance photo bébé",
+  famille:   "Séance photo famille",
   duo:       "Séances photo grossesse et naissance"
 };
 
@@ -35,9 +38,12 @@ export default async (request) => {
   if (!offre) return json({ ok: false, error: "offre" }, 400);
   const montant = offre.prix;
 
-  // Un duo couvre les deux seances ; sinon le client choisit grossesse ou naissance.
+  /* Un pack couvre les deux seances ; sinon le client choisit laquelle.
+     La liste des types vendus fait foi : avant, tout ce qui n'etait pas
+     "naissance" devenait "grossesse", et un bon achete depuis l'onglet
+     Bebe annoncait une seance grossesse a celle qui le recevait. */
   const demande = String(body.seance || "");
-  const seance = offre.duo ? "duo" : (demande === "naissance" ? "naissance" : "grossesse");
+  const seance = offre.duo ? "duo" : (typeConnu(demande) ? demande : "grossesse");
 
   const prenom = String(body.prenom || "").trim().slice(0, 60);
   const nom    = String(body.nom || "").trim().slice(0, 60);
