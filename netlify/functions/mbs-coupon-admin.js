@@ -64,7 +64,10 @@ export default async (request) => {
     }
     // De quoi remplir le menu du CRM sans y recopier les prix.
     if (url.searchParams.get("offres")) {
-      return json({ ok: true, offres: GIFT_OFFRES });
+      /* Les anciens packs restent valides pour les bons deja vendus, mais
+         n'ont plus a etre proposes : le menu serait deux fois plus long
+         pour trois formules qui ne se vendent plus. */
+      return json({ ok: true, offres: GIFT_OFFRES.filter(o => !o.ancien) });
     }
     if (url.searchParams.get("lots")) {
       let lots = [];

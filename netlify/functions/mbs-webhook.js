@@ -538,10 +538,19 @@ export default async (request) => {
   // Seance (apparait dans l'agenda du CRM).
   // En exterieur, le lieu est l'adresse du client, pas le studio.
   const fraisDepl = Number(md.fraisDepl) || 0;
+
+  /* Le pack deux seances : "confort+prestige" devient une phrase lisible.
+     Sans elle, la fiche n'afficherait qu'un total et Matt ne saurait pas
+     combien de photos retoucher, ni pour laquelle des deux seances. */
+  const NOM_GAMME = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige" };
+  const paire = String(md.duo || "").split("+");
+  const duoTexte = (NOM_GAMME[paire[0]] && NOM_GAMME[paire[1]])
+    ? "Grossesse en " + NOM_GAMME[paire[0]] + ", naissance en " + NOM_GAMME[paire[1]] + "."
+    : "";
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: md.lieuExt || PLACE, status: "A venir",
-    notes: "Réservation en ligne. Total séance " + total + " €, "
+    notes: "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + "Total séance " + total + " €, "
       + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
@@ -567,6 +576,26 @@ export default async (request) => {
           : ""),
     stripeSession: session.id
   });
+
+  /* Le pack ne bloque qu'un creneau : celui de la grossesse. La seance
+     naissance se cale a la naissance de bebe, et rien ne le rappelait. */
+  if (md.type === "duo") {
+    data.taches = data.taches || [];
+    data.taches.push({
+      id: uid(), done: false,
+      title: "Caler la séance naissance — " + name,
+      /* Echeance le jour de la seance grossesse : c'est la que Matt voit
+         la cliente, et le meilleur moment pour fixer la seconde date. */
+      dueDate: date,
+      priority: "Haute", clientId: client.id,
+      notes: "Pack grossesse + naissance déjà réglé."
+        + (duoTexte ? "\n" + duoTexte : "")
+        + "\n\nÀ faire le jour de la séance grossesse : convenir avec elle"
+        + " qu'elle prévienne dès la naissance, pour caler la séance"
+        + " dans les 10 jours qui suivent.",
+      stripeSession: session.id
+    });
+  }
 
   /* Les tirages payes d avance : "20x30:2,40x60:1". Au moment de reserver
      les photos n existaient pas, donc ni numeros ni adresse : c est le

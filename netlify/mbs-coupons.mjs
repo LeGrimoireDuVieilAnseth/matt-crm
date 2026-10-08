@@ -87,10 +87,30 @@ export const GIFT_OFFRES = [
   { id: "essentielle",   nom: "Essentielle",   prix: 290, duo: false },
   { id: "confort",       nom: "Confort",       prix: 390, duo: false },
   { id: "prestige",      nom: "Prestige",      prix: 490, duo: false },
-  { id: "duo-essentiel", nom: "Duo Essentiel", prix: 590, duo: true  },
-  { id: "duo-confort",   nom: "Duo Confort",   prix: 690, duo: true  },
-  { id: "duo-prestige",  nom: "Duo Prestige",  prix: 890, duo: true  }
+  /* Les trois anciens packs a formule unique. Plus vendus, mais des bons
+     les portent encore : "ancien" les garde valides et hors affichage. */
+  { id: "duo-essentiel", nom: "Duo Essentiel", prix: 590, duo: true, ancien: true },
+  { id: "duo-confort",   nom: "Duo Confort",   prix: 690, duo: true, ancien: true },
+  { id: "duo-prestige",  nom: "Duo Prestige",  prix: 890, duo: true, ancien: true }
 ];
+
+/* Les neuf paires du pack 2 seances : une formule par seance, la grossesse
+   d'abord. Engendrees plutot qu'ecrites a la main, pour que la regle de
+   prix (-15 %, arrondi a la dizaine inferieure) ne figure qu'une fois.
+   La liste reste FERMEE : seuls ces identifiants sont acceptes. */
+["essentielle", "confort", "prestige"].forEach(function (a) {
+  ["essentielle", "confort", "prestige"].forEach(function (b) {
+    const px = (id) => GIFT_OFFRES.find((o) => o.id === id).prix;
+    const nm = (id) => GIFT_OFFRES.find((o) => o.id === id).nom;
+    const plein = px(a) + px(b);
+    GIFT_OFFRES.push({
+      id: "duo-" + a + "-" + b, duo: true,
+      nom: "Pack 2 séances . " + (a === b ? nm(a) : nm(a) + " puis " + nm(b)),
+      prix: Math.floor(plein * 0.85 / 10) * 10
+    });
+  });
+});
+
 
 export function offreCadeau(id) {
   return GIFT_OFFRES.find(o => o.id === String(id || "")) || null;

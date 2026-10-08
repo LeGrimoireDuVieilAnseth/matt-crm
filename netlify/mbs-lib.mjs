@@ -47,14 +47,38 @@ export const PRIX_PHOTO_SUPP = 15;
 export const PRIX_ALBUM = 150;
 export const TARIFS = {
   simple: { essentielle: 290, confort: 390, prestige: 490 },
+  /* Les trois anciens packs a formule unique. Ils ne sont plus vendus, mais
+     des bons cadeaux les portent encore : une reservation qui en presente un
+     doit continuer de passer. */
   duo:    { essentiel: 590, confort: 690, prestige: 890 }
 };
 
+/* Le pack deux seances : une formule par seance, et la remise sur le total.
+   L'arrondi descend a la dizaine inferieure, pour ne pas afficher 663 euros
+   et pour que la cliente paie toujours un peu moins que les 15 % promis. */
+export const REMISE_DUO = 0.15;
+export const GAMMES_DUO = ["essentielle", "confort", "prestige"];
+export function prixPaireDuo(grossesse, naissance){
+  const a = TARIFS.simple[String(grossesse || "")];
+  const b = TARIFS.simple[String(naissance  || "")];
+  if (!a || !b) return null;
+  const plein = a + b;
+  const prix  = Math.floor(plein * (1 - REMISE_DUO) / 10) * 10;
+  return { plein, prix, remise: plein - prix };
+}
+
 /* Renvoie le prix de la formule, hors frais de deplacement et hors
    remise, ou null si la formule est inconnue. */
-export function prixSeance({ section, gamme, photos, album, tirages } = {}){
-  const table = TARIFS[section === "duo" ? "duo" : "simple"];
-  const base = table[String(gamme || "")];
+export function prixSeance({ section, gamme, gammes, photos, album, tirages } = {}){
+  let base;
+  if (section === "duo") {
+    /* Le pack actuel envoie une formule par seance. L'ancien, a formule
+       unique, reste accepte pour les bons cadeaux deja vendus. */
+    const paire = gammes ? prixPaireDuo(gammes.grossesse, gammes.naissance) : null;
+    base = paire ? paire.prix : TARIFS.duo[String(gamme || "")];
+  } else {
+    base = TARIFS.simple[String(gamme || "")];
+  }
   if (!base) return null;
   const n = Math.min(Math.max(parseInt(photos, 10) || 0, 0), 50);
   /* Les tirages commandes des la reservation : leur prix et l'envoi

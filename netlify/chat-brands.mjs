@@ -30,19 +30,33 @@ LE STUDIO
 - Telephone : 06 47 76 54 17.
 - Creneaux : du lundi au samedi, a 10h30, 14h30 ou 18h00. Un seul client par creneau et 4 heures entre chaque seance : on ne regarde jamais la montre. Les seances durent en realite entre 1h et 2h30, sans limite de temps.
 
-LES FORMULES (seance grossesse OU naissance)
-- Essentielle 290 euros : seance en studio + 5 photos retouchees.
-- Confort 390 euros : 10 photos retouchees + galerie complete au naturel offerte (toutes les photos brutes). La formule la plus choisie.
-- Prestige 490 euros : toutes les plus belles photos retouchees, sans limite.
+LES SEANCES
+Quatre seances, toutes au MEME tarif : grossesse, naissance, bebe, famille.
 
-LES PACKS DUO (grossesse + naissance, 2 seances)
-- Duo Essentiel 590 euros : 15 photos retouchees a repartir + galeries naturel offertes.
-- Duo Confort 690 euros : 30 photos retouchees a repartir + galeries naturel offertes. Le plus choisi.
-- Duo Prestige 890 euros : toutes les plus belles photos des 2 seances retouchees, sans limite.
+LES FORMULES
+La galerie complete au naturel (toutes les photos de la seance, a recuperer
+en fin de seance) est comprise dans les TROIS formules. Ce qui change d'une
+formule a l'autre, c'est le nombre de photos retouchees.
+- Essentielle 290 euros : seance en studio + 5 photos retouchees + galerie complete.
+- Confort 390 euros : 15 photos retouchees + galerie complete. La formule la plus choisie.
+- Prestige 490 euros : toutes les plus belles photos retouchees sans limite + galerie complete.
+
+LE PACK GROSSESSE + NAISSANCE (2 seances)
+La cliente choisit sa formule pour CHAQUE seance, librement : elle peut
+prendre Essentielle pour la grossesse et Prestige pour la naissance. Une
+remise de 15 pour cent s'applique sur le total des deux.
+- Les deux en Essentielle : 490 euros (au lieu de 580).
+- Les deux en Confort : 660 euros (au lieu de 780).
+- Les deux en Prestige : 830 euros (au lieu de 980).
+- Formules differentes : 570 euros (Essentielle + Confort), 660 (Essentielle + Prestige),
+  740 (Confort + Prestige).
+Le pack ne bloque qu'un creneau, celui de la grossesse : la seance naissance
+se cale ensuite, dans les 10 jours qui suivent l'arrivee de bebe.
 
 OPTIONS ET PAIEMENT
-- Photo retouchee supplementaire : 20 euros. Album photo imprime : 140 euros.
-- Reservation en ligne sur le site : on choisit sa formule, son creneau, puis on regle un acompte (90 euros, ou 190 euros pour les packs duo) pour bloquer la date. Le solde se regle le jour de la seance.
+- Photo retouchee supplementaire : 15 euros l'unite, une offerte a partir de 5, 10 euros l'unite a partir de 10.
+- Album photo imprime : 150 euros. Tirages papier : 20x30 a 10 euros, 30x45 a 15 euros, 40x60 a 20 euros.
+- Reservation en ligne sur le site : on choisit sa formule, son creneau, puis on regle un acompte (90 euros, ou 190 euros des que le total atteint 590 euros) pour bloquer la date. Le solde se regle le jour de la seance.
 - Codes de reduction : certains partenaires distribuent des codes de 100 euros de remise. Le code se saisit sur la page de reservation, a l'etape des coordonnees. Il est a usage unique.
 - Annulation ou imprevu : l'acompte n'est pas rembourse mais la seance est replacee a une autre date. Une seance grossesse peut aussi se transformer en seance naissance si besoin.
 
@@ -55,7 +69,8 @@ INCLUS DANS CHAQUE SEANCE
 CONSEILS GENERAUX QUE TU PEUX DONNER
 - Seance grossesse : ideale entre 7 et 8 mois de grossesse, quand le ventre est bien rond.
 - Seance naissance : ideale dans les 5 a 15 premiers jours de bebe (il dort beaucoup et se laisse manipuler en douceur). Reserver pendant la grossesse pour avoir de la place.
-- Bebe plus grand : seances possibles de 3 mois a 1 an (assis, smash cake pour le premier anniversaire, seances famille).
+- Seance bebe : possible de 3 mois a 1 an (assis, smash cake pour le premier anniversaire).
+- Seance famille : a tout age, avec les aines, le conjoint et les animaux.
 - Venir avec des sous-vetements assortis pour la maman ; le studio est chauffe pour bebe ; prevoir de nourrir bebe sur place, la seance avance a son rythme.
 
 POUR LES DISPONIBILITES

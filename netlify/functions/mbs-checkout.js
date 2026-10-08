@@ -6,7 +6,7 @@
 import Stripe from "stripe";
 import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
-  acompteFor, typeLabelFr, typeConnu, prixSeance, LOCK_TTL_MS, uid, BRAND, PLACE
+  acompteFor, typeLabelFr, typeConnu, prixSeance, GAMMES_DUO, LOCK_TTL_MS, uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import { prixTirages } from "../mbs-panier.mjs";
 import {
@@ -130,6 +130,18 @@ export default async (request) => {
     return json({ ok: false, error: "type",
       message: "Type de séance non reconnu. Rechargez la page et recommencez." }, 400);
   }
+  /* Le pack deux seances : une formule par seance. Liste fermee, comme pour
+     le type : une valeur inconnue ferait echouer le calcul du prix plus bas,
+     autant la refuser ici avec un message lisible. */
+  let paireDuo = "";
+  if (body.section === "duo" && body.gammes) {
+    const g = String(body.gammes.grossesse || ""), n = String(body.gammes.naissance || "");
+    if (!GAMMES_DUO.includes(g) || !GAMMES_DUO.includes(n)) {
+      return json({ ok: false, error: "formule",
+        message: "Formule du pack non reconnue. Rechargez la page et recommencez." }, 400);
+    }
+    paireDuo = g + "+" + n;
+  }
   // Provenance de la visite, telle que le site l'a retenue. Liste fermee :
   // on n'ecrit dans la fiche que des categories connues.
   const ORIGINES = ["Google Ads", "Google", "Instagram", "TikTok", "Facebook", "Autre moteur", "Autre site", "Direct"];
@@ -157,7 +169,7 @@ export default async (request) => {
   let total = 0, affiche = null;
   if (!body.giftOnly) {
     const calcule = prixSeance({
-      section: body.section, gamme: body.gamme,
+      section: body.section, gamme: body.gamme, gammes: body.gammes,
       photos: body.photos, album: body.album, tirages: body.tirages
     });
     if (calcule === null) {
@@ -365,6 +377,10 @@ export default async (request) => {
         /* Ce qu'elle a commande en papier, sous une forme courte : les
            metadonnees Stripe sont limitees a 500 caracteres par champ. */
         tirages: tiragesTexte,
+        /* La formule de chaque seance du pack, "confort+prestige". Sans
+           elle, le CRM afficherait un total et Matt ne saurait pas combien
+           de photos retoucher, ni pour laquelle des deux seances. */
+        duo: paireDuo,
         prenom, nom, email, tel
       }
     });

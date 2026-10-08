@@ -7018,11 +7018,33 @@ const LIEN_FORMULES = [
   { cle:"essentielle",  nom:"Essentielle",   prix:290, duo:false, retouchees:5,  brutes:true },
   { cle:"confort",      nom:"Confort",       prix:390, duo:false, retouchees:15, brutes:true },
   { cle:"prestige",     nom:"Prestige",      prix:490, duo:false, toutes:true,   brutes:true },
-  { cle:"duo-essentiel",nom:"Duo Essentiel", prix:590, duo:true,  retouchees:15, brutes:true },
-  { cle:"duo-confort",  nom:"Duo Confort",   prix:690, duo:true,  retouchees:30, brutes:true },
-  { cle:"duo-prestige", nom:"Duo Prestige",  prix:890, duo:true,  toutes:true,   brutes:true },
 ];
+/* Le pack deux seances : une formule par seance, la grossesse d'abord.
+   Engendre, comme cote site et cote serveur, pour que la regle de prix
+   (-15 %, arrondi a la dizaine inferieure) ne s'ecrive qu'une fois.
+   Les anciens packs a formule unique ne figurent plus ici : un lien de
+   paiement se cree aujourd'hui, pour la grille d'aujourd'hui. */
+["essentielle","confort","prestige"].forEach(function(a){
+  ["essentielle","confort","prestige"].forEach(function(b){
+    const fa=LIEN_FORMULES.find(f=>f.cle===a), fb=LIEN_FORMULES.find(f=>f.cle===b);
+    const plein=fa.prix+fb.prix;
+    LIEN_FORMULES.push({
+      cle:"duo-"+a+"-"+b, duo:true, paire:{grossesse:a,naissance:b},
+      nom:"Pack 2 séances . "+(a===b?fa.nom:fa.nom+" puis "+fb.nom),
+      prix:Math.floor(plein*.85/10)*10,
+      /* Pas de "retouchees" ni de "toutes" au niveau du pack : additionner
+         les deux seances cacherait a laquelle les retouches se rapportent,
+         et prestige+essentielle en sortait avec "0 photos retouchees".
+         C'est "paire" qui decrit le pack, et chaque cote se lit a part. */
+      brutes:true,
+    });
+  });
+});
 const formuleParCle = k => LIEN_FORMULES.find(f=>f.cle===k) || null;
+/* Le rang d'une formule simple, pour savoir si une seance monte ou
+   descend. Le prix suffirait aujourd'hui, mais il ne dit pas la gamme :
+   un rang ne bouge pas quand Matt change un tarif. */
+const RANG_GAMME = { essentielle:1, confort:2, prestige:3 };
 /* Huit, et non plus trois : Matt voulait pouvoir tout mettre sur la table.
    Au-dela ce n'est plus une page, c'est un catalogue. */
 const LIEN_MAX_CHOIX = 8;
@@ -7040,10 +7062,16 @@ const LIEN_COMPTOIR = [
 /* Ce que comprend une formule, en une ligne, pour la rappeler a la cliente
    avant de lui proposer autre chose. */
 function contenuDe(f){
+  /* Un pack a une formule par seance : les resumer en un seul nombre de
+     retouches cacherait a laquelle des deux elles se rapportent. */
+  if(f.paire){
+    const g=formuleParCle(f.paire.grossesse), n=formuleParCle(f.paire.naissance);
+    return "la séance grossesse en "+g.nom+" et la séance naissance en "+n.nom
+      +", avec les deux galeries complètes au naturel";
+  }
   const bouts=[];
   bouts.push(f.toutes ? "toutes les photos réussies retouchées" : f.retouchees+" photos retouchées");
   if(f.brutes) bouts.push("toute la galerie au naturel");
-  if(f.duo) bouts.push("les deux séances");
   return bouts.join(" et ");
 }
 
@@ -7052,6 +7080,35 @@ function contenuDe(f){
    l'impression qu'on lui revend ce qu'elle a paye. */
 function gainsEntre(de,vers){
   const g=[];
+  /* D'un pack a l'autre, une seule seance change : on ne parle que
+     d'elle, l'autre reste telle qu'elle a ete payee. */
+  if(de.paire && vers.paire){
+    const quelle = vers.paire.grossesse!==de.paire.grossesse ? "grossesse" : "naissance";
+    const av=formuleParCle(de.paire[quelle]), ap=formuleParCle(vers.paire[quelle]);
+    g.push(ap.toutes
+      ? "Toutes les photos réussies de la séance "+quelle+", retouchées"
+      : ap.retouchees+" photos retouchées sur la séance "+quelle+", au lieu de "+av.retouchees);
+    g.push("L'autre séance ne change pas");
+    return g;
+  }
+  /* Un pack ajoute une seance ENTIERE : c'est cela qu'il faut dire, pas un
+     ecart de retouches sur la seance deja payee, qui ne change pas. */
+  if(de.paire && vers.paire){
+    const quelle = vers.paire.grossesse!==de.paire.grossesse ? "grossesse" : "naissance";
+    const ap=formuleParCle(vers.paire[quelle]);
+    return "Je passe votre séance "+quelle+" en "+ap.nom+" : "
+      +(ap.toutes ? "je trie et je retouche toutes les photos réussies de cette séance"
+                  : "je retouche "+ap.retouchees+" photos de cette séance")
+      +". L'autre séance ne change pas.";
+  }
+  if(vers.paire && !de.duo){
+    const n=formuleParCle(vers.paire.naissance);
+    g.push("La séance naissance en plus, dans les 10 jours de bébé");
+    g.push(n.toutes ? "Toutes les photos réussies de cette séance, retouchées"
+                    : n.retouchees+" photos retouchées de cette séance");
+    g.push("Sa galerie complète au naturel, en plus de celle de la grossesse");
+    return g;
+  }
   if(vers.toutes && !de.toutes){
     g.push("Toutes les photos réussies de la séance, retouchées");
   }else if(vers.retouchees && de.retouchees && vers.retouchees>de.retouchees){
@@ -7069,9 +7126,22 @@ function gainsEntre(de,vers){
 /* Une phrase, quand la page porte plusieurs marches : les cartes disent
    deja les prix et les gains, le texte n'a plus qu'a dire ce qui change. */
 function phraseCourte(de,vers){
+  if(de.paire && vers.paire){
+    const quelle = vers.paire.grossesse!==de.paire.grossesse ? "grossesse" : "naissance";
+    const ap=formuleParCle(vers.paire[quelle]);
+    return "Je passe votre séance "+quelle+" en "+ap.nom+" : "
+      +(ap.toutes ? "je trie et je retouche toutes les photos réussies de cette séance"
+                  : "je retouche "+ap.retouchees+" photos de cette séance")
+      +". L'autre séance ne change pas.";
+  }
+  if(vers.paire && !de.duo){
+    const n=formuleParCle(vers.paire.naissance);
+    return "J'ajoute la séance naissance, dans les dix jours qui suivent l'arrivée de votre bébé, "
+      +"en "+n.nom+" : "+(n.toutes ? "toutes les photos réussies retouchées"
+                                   : n.retouchees+" photos retouchées")
+      +" et sa galerie complète.";
+  }
   const tete="En "+vers.nom+", ";
-  if(vers.duo && !de.duo)
-    return tete+"j'ajoute la séance naissance, dans les dix jours qui suivent l'arrivée de votre bébé.";
   if(vers.toutes && !de.toutes)
     return tete+"je trie et je retouche toutes les photos réussies de la séance : vous n'avez plus à choisir lesquelles garder.";
   if(vers.brutes && !de.brutes)
@@ -7169,18 +7239,50 @@ function propositionsPour(cleActuelle,typeSeance){
       /* Le pack deux seances ne se propose que pendant la grossesse : apres,
          il n'y a plus de seance grossesse a ajouter. */
       if(vers.duo && !de.duo && typeSeance!=="grossesse") return;
+      /* Le pack garde la formule DEJA PAYEE sur la seance grossesse. Lui
+         proposer en meme temps de changer celle-la, c'est deux decisions
+         dans un seul clic : les propositions "gamme" s'en chargent. */
+      if(vers.paire && !de.duo && vers.paire.grossesse!==de.cle) return;
+      /* D'un pack a l'autre, on ne touche qu'a UNE seance, et vers le haut.
+         Sans cette regle, depuis prestige+essentielle le CRM proposait
+         confort+prestige : plus cher, et la grossesse deja payee perdait
+         son tout-retouche. */
+      if(de.paire && vers.paire){
+        const bougeG = vers.paire.grossesse!==de.paire.grossesse;
+        const bougeN = vers.paire.naissance!==de.paire.naissance;
+        if(bougeG && bougeN) return;
+        if(bougeG && RANG_GAMME[vers.paire.grossesse]<RANG_GAMME[de.paire.grossesse]) return;
+        if(bougeN && RANG_GAMME[vers.paire.naissance]<RANG_GAMME[de.paire.naissance]) return;
+      }
       /* Une proposition ne doit RIEN retirer. Sans cette regle, on proposait
          le Duo Essentiel a une cliente en Confort : elle payait 200 euros de
          plus et perdait ses photos brutes. Une cliente a qui on propose de
-         payer pour perdre quelque chose ne redemande jamais rien. */
-      if(de.brutes && !vers.brutes) return;
-      if(de.toutes && !vers.toutes) return;
-      if(!de.toutes && !vers.toutes && de.retouchees && vers.retouchees
-         && vers.retouchees < de.retouchees) return;
+         payer pour perdre quelque chose ne redemande jamais rien.
+
+         Pour un pack, la comparaison porte sur son cote grossesse : c'est
+         la seule seance deja payee. Comparer le pack entier dirait que
+         prestige+essentielle retire quelque chose a une Prestige, alors
+         qu'il garde la grossesse a l'identique et ajoute une seance. */
+      const cote = (vers.paire && !de.duo) ? formuleParCle(vers.paire.grossesse) : vers;
+      if(de.brutes && !cote.brutes) return;
+      if(de.toutes && !cote.toutes) return;
+      if(!de.toutes && !cote.toutes && de.retouchees && cote.retouchees
+         && cote.retouchees < de.retouchees) return;
       const estDuo = vers.duo && !de.duo;
+      /* "Passage en formule Pack 2 seances . Confort puis Prestige" ne dit
+         pas ce qu'on achete. Un pack s'annonce par ce qui change. */
+      let titre;
+      if(estDuo){
+        titre = "La séance naissance en "+formuleParCle(vers.paire.naissance).nom;
+      }else if(de.paire && vers.paire){
+        const quelle = vers.paire.grossesse!==de.paire.grossesse ? "grossesse" : "naissance";
+        titre = "Votre séance "+quelle+" en "+formuleParCle(vers.paire[quelle]).nom;
+      }else{
+        titre = "Passage en formule "+vers.nom;
+      }
       out.push({
         cle:vers.cle, groupe: estDuo?"duo":"gamme",
-        titre:"Passage en formule "+vers.nom,
+        titre:titre,
         montant:vers.prix-de.prix,
         gains:gainsEntre(de,vers),
         phrase:phraseCourte(de,vers),
@@ -7188,7 +7290,7 @@ function propositionsPour(cleActuelle,typeSeance){
         /* Le duo miroir : celui qui garde sa finition et ajoute seulement la
            seance naissance. C'est celui qu'on coche d'avance, les autres
            feraient un saut de prix que personne ne franchit d'un clic. */
-        miroir: estDuo && vers.cle==="duo-"+(de.cle==="essentielle"?"essentiel":de.cle)
+        miroir: estDuo && vers.paire && vers.paire.naissance===de.cle
       });
     });
   }
