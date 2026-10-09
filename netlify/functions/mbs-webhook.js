@@ -547,10 +547,21 @@ export default async (request) => {
   const duoTexte = (NOM_GAMME[paire[0]] && NOM_GAMME[paire[1]])
     ? "Grossesse en " + NOM_GAMME[paire[0]] + ", naissance en " + NOM_GAMME[paire[1]] + "."
     : "";
+  /* Le creneau a-t-il ete pris entre-temps ? Le verrou ne tient que 20
+     minutes, la page Stripe reste payable 24 heures : une cliente qui paie
+     tard peut tomber sur un creneau deja vendu. On ne refuse pas son
+     argent, Stripe l'a pris ; on enregistre et on previent. */
+  const dejaPrise = data.seances.find(x =>
+    x.brand === BRAND && x.date === date && x.time === time && x.status !== "Annulee");
+  const autreNom = dejaPrise
+    ? ((data.clients.find(c => c.id === dejaPrise.clientId) || {}).name || "une autre cliente")
+    : "";
+
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: md.lieuExt || PLACE, status: "A venir",
-    notes: "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + "Total séance " + total + " €, "
+    notes: (dejaPrise ? "CRÉNEAU EN DOUBLE : " + autreNom + " a déjà ce créneau. À déplacer, l'une ou l'autre. " : "")
+      + "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + "Total séance " + total + " €, "
       + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
@@ -576,6 +587,23 @@ export default async (request) => {
           : ""),
     stripeSession: session.id
   });
+
+  /* Deux clientes sur le meme creneau : il faut appeler aujourd'hui, pas
+     le jour de la seance. */
+  if (dejaPrise) {
+    data.taches = data.taches || [];
+    data.taches.push({
+      id: uid(), done: false,
+      title: "Créneau en double — " + name + " et " + autreNom,
+      dueDate: new Date(now).toISOString().slice(0, 10),
+      priority: "Haute", clientId: client.id,
+      notes: "Les deux ont payé pour le " + frDate(date) + " à " + time + "."
+        + "\n" + autreNom + " a réservé en premier."
+        + "\n\nSa page de paiement était restée ouverte : le créneau s'était libéré"
+        + " entre-temps. Appelez " + name + " pour lui proposer une autre date.",
+      stripeSession: session.id
+    });
+  }
 
   /* Le pack ne bloque qu'un creneau : celui de la grossesse. La seance
      naissance se cale a la naissance de bebe, et rien ne le rappelait. */
