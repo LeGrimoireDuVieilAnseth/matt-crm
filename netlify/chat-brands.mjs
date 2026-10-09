@@ -39,9 +39,13 @@ une seance famille, reponds que c'est compris, et aide a choisir entre les
 trois selon l'age de l'enfant.
 
 LES FORMULES
-La galerie complete au naturel (toutes les photos de la seance, a recuperer
-en fin de seance) est comprise dans les TROIS formules. Ce qui change d'une
-formule a l'autre, c'est le nombre de photos retouchees.
+Une galerie privee en ligne est creee le jour meme de la seance : la cliente
+y telecharge TOUTES les photos, brutes et sans retouche. C'est compris dans
+les TROIS formules, meme la moins chere. Ce qui change d'une formule a
+l'autre, c'est seulement le nombre de photos retouchees.
+C'est la CLIENTE qui designe les photos a retoucher, jamais Matteo : ce sont
+ses souvenirs, et il prefere retoucher les images qui lui plaisent. Dis-le,
+c'est un argument que peu de studios proposent.
 - Essentielle 290 euros : seance en studio + 5 photos retouchees + galerie complete.
 - Confort 390 euros : 15 photos retouchees + galerie complete. La formule la plus choisie.
 - Prestige 490 euros : toutes les plus belles photos retouchees sans limite + galerie complete.
