@@ -9,7 +9,6 @@ const SEANCE_LABEL = {
   grossesse: "Séance photo grossesse",
   naissance: "Séance photo naissance",
   bebe:      "Séance photo bébé",
-  famille:   "Séance photo famille",
   duo:       "Séances photo grossesse et naissance"
 };
 

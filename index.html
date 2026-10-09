@@ -3779,10 +3779,10 @@ async function creerBonManuel(){
   if(!offre){ alert("Numéro inconnu."); return; }
 
   /* Le type de seance : sans la question, tout bon manuel partait en
-     grossesse, y compris pour une seance bebe ou famille. */
+     grossesse, y compris pour une seance bebe. */
   let seance="grossesse";
   if(!offre.duo){
-    const types=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"],["famille","Famille"]];
+    const types=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"]];
     const rt=prompt("Pour quelle séance ?\n\n"+types.map((t,i)=>(i+1)+". "+t[1]).join("\n")+"\n\nTape le numéro :","1");
     if(rt===null) return;
     const choisi=types[parseInt(rt,10)-1];
@@ -3842,7 +3842,7 @@ function clientDuBon(b){
   return nom?DB.clients.find(x=>x.brand==="mybabyshoot"&&String(x.name||"").toLowerCase()===nom):null;
 }
 
-const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",bebe:"Séance bébé",famille:"Séance famille",duo:"Grossesse + naissance"};
+const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",bebe:"Séance bébé",duo:"Grossesse + naissance"};
 
 function dessinerCadeaux(list){
   const box=document.getElementById("clientsList");
@@ -3950,7 +3950,7 @@ function openBonCadeau(brut){
    ============================================================ */
 function corrigerBonCadeau(brut){
   const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
-  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["bebe","Séance bébé"],["famille","Séance famille"],["duo","Grossesse + naissance"]];
+  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["bebe","Séance bébé"],["duo","Grossesse + naissance"]];
   let h=`<h2>Corriger le bon ${esc(b.code)}</h2>
     <div class="hint" style="margin-bottom:14px">Le code reste <b>${esc(b.code)}</b> et le lien déjà envoyé continue de fonctionner :
     il affichera la version corrigée dès l'enregistrement.</div>
