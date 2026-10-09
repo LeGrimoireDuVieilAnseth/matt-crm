@@ -7043,7 +7043,7 @@ const LIEN_FORMULES = [
     LIEN_FORMULES.push({
       cle:"duo-"+a+"-"+b, duo:true, paire:{grossesse:a,naissance:b},
       nom:"Pack 2 séances . "+(a===b?fa.nom:fa.nom+" puis "+fb.nom),
-      prix:Math.floor(plein*.85/10)*10,
+      prix:Math.floor(Math.round(plein*.90)/10)*10,
       /* Pas de "retouchees" ni de "toutes" au niveau du pack : additionner
          les deux seances cacherait a laquelle les retouches se rapportent,
          et prestige+essentielle en sortait avec "0 photos retouchees".

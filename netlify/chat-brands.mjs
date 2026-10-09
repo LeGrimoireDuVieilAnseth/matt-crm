@@ -53,12 +53,12 @@ c'est un argument que peu de studios proposent.
 LE PACK GROSSESSE + NAISSANCE (2 seances)
 La cliente choisit sa formule pour CHAQUE seance, librement : elle peut
 prendre Essentielle pour la grossesse et Prestige pour la naissance. Une
-remise de 15 pour cent s'applique sur le total des deux.
-- Les deux en Essentielle : 490 euros (au lieu de 580).
-- Les deux en Confort : 660 euros (au lieu de 780).
-- Les deux en Prestige : 830 euros (au lieu de 980).
-- Formules differentes : 570 euros (Essentielle + Confort), 660 (Essentielle + Prestige),
-  740 (Confort + Prestige).
+remise de 10 pour cent s'applique sur le total des deux.
+- Les deux en Essentielle : 520 euros (au lieu de 580).
+- Les deux en Confort : 700 euros (au lieu de 780).
+- Les deux en Prestige : 880 euros (au lieu de 980).
+- Formules differentes : 610 euros (Essentielle + Confort), 700 (Essentielle + Prestige),
+  790 (Confort + Prestige).
 Le pack ne bloque qu'un creneau, celui de la grossesse : la seance naissance
 se cale ensuite, dans les 10 jours qui suivent l'arrivee de bebe.
 

@@ -56,14 +56,17 @@ export const TARIFS = {
 /* Le pack deux seances : une formule par seance, et la remise sur le total.
    L'arrondi descend a la dizaine inferieure, pour ne pas afficher 663 euros
    et pour que la cliente paie toujours un peu moins que les 15 % promis. */
-export const REMISE_DUO = 0.15;
+export const REMISE_DUO = 0.10;
 export const GAMMES_DUO = ["essentielle", "confort", "prestige"];
 export function prixPaireDuo(grossesse, naissance){
   const a = TARIFS.simple[String(grossesse || "")];
   const b = TARIFS.simple[String(naissance  || "")];
   if (!a || !b) return null;
   const plein = a + b;
-  const prix  = Math.floor(plein * (1 - REMISE_DUO) / 10) * 10;
+  /* Arrondi au centime avant de descendre a la dizaine : sans lui, un
+     produit tombant pile sur une dizaine peut valoir 629,9999999 en
+     binaire et faire perdre 10 euros. */
+  const prix  = Math.floor(Math.round(plein * (1 - REMISE_DUO)) / 10) * 10;
   return { plein, prix, remise: plein - prix };
 }
 
