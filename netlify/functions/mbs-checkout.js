@@ -6,7 +6,8 @@
 import Stripe from "stripe";
 import {
   crmStore, loadData, pruneLocks, isFree, isValidSlot,
-  acompteFor, typeLabelFr, typeConnu, prixSeance, GAMMES_DUO, LOCK_TTL_MS, uid, BRAND, PLACE
+  acompteFor, typeLabelFr, typeConnu, prixSeance, GAMMES_DUO, LOCK_TTL_MS, COUPON_TTL_MS,
+  uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import { prixTirages } from "../mbs-panier.mjs";
 import {
@@ -271,7 +272,9 @@ export default async (request) => {
       await releaseLock();
       return json({ ok: false, error: "coupon", message: "Ce code ne s'applique pas à cette formule." }, 400);
     }
-    const pose = await reserveCoupon(cstore, chk.code, now + LOCK_TTL_MS);
+    /* Le code, et non le creneau : il tient plus longtemps, sinon deux
+       personnes pourraient utiliser le meme bon. */
+    const pose = await reserveCoupon(cstore, chk.code, now + COUPON_TTL_MS);
     if (!pose) {
       await releaseLock();
       return json({ ok: false, error: "coupon", message: "Ce code vient d'être utilisé." }, 409);

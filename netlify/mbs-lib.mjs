@@ -20,8 +20,25 @@ export const MIN_LEAD_DAYS = 1;
 // reservable au-dela de trois mois : les clientes qui s'y prennent tot,
 // typiquement en debut de grossesse, ne trouvaient aucune date.
 export const HORIZON_DAYS = 365;
-// Duree du verrou pose pendant le paiement (au dela, le creneau se relibere).
-export const LOCK_TTL_MS = 20 * 60 * 1000;
+/* Duree du verrou pose sur le CRENEAU pendant le paiement. Au dela, il se
+   relibere et quelqu'un d'autre peut le prendre.
+
+   3 minutes, choisi par Matt : passe ce delai, celle qui n'a pas paye a
+   sans doute abandonne, et garder la case fermee plus longtemps fait
+   perdre des reservations.
+
+   Contrepartie assumee : une carte avec validation par la banque, ou un
+   dossier Klarna, depasse facilement 3 minutes. Si le creneau est repris
+   entre-temps et que la premiere paie quand meme, les deux sont
+   encaissees. mbs-webhook detecte ce cas, marque la seance "CRÉNEAU EN
+   DOUBLE" et pose une tache en priorite haute le jour meme. */
+export const LOCK_TTL_MS = 3 * 60 * 1000;
+
+/* La reservation du CODE d'un bon cadeau, elle, reste longue. Elle ne
+   bloque rien pour personne d'autre que la porteuse du code, et la
+   raccourcir laisserait deux personnes utiliser le meme bon : au webhook,
+   consumeCoupon avale l'erreur du second passage sans rien dire. */
+export const COUPON_TTL_MS = 20 * 60 * 1000;
 
 // Acompte selon le total compose : 190 euros des 590 euros, sinon 90.
 export function acompteFor(total){
