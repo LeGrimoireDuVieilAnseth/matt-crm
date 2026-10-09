@@ -407,6 +407,12 @@ export default async (request) => {
         /* Ce qu'elle a commande en papier, sous une forme courte : les
            metadonnees Stripe sont limitees a 500 caracteres par champ. */
         tirages: tiragesTexte,
+        /* La formule et les options, pour que la facture puisse detailler.
+           Des identifiants et des quantites, jamais des montants : les
+           prix se retrouvent cote serveur, dans la grille. */
+        gamme: String(body.gamme || ""),
+        photos: String(Math.min(Math.max(parseInt(body.photos, 10) || 0, 0), 50)),
+        album: body.album ? "1" : "",
         /* La formule de chaque seance du pack, "confort+prestige". Sans
            elle, le CRM afficherait un total et Matt ne saurait pas combien
            de photos retoucher, ni pour laquelle des deux seances. */

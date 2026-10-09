@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
-import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice } from "../mbs-invoice.mjs";
+import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice, lignesSeance } from "../mbs-invoice.mjs";
 import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi,
          panierDeSession } from "../mbs-liens.mjs";
 import { resumePanier, TAILLES } from "../mbs-panier.mjs";
@@ -673,16 +673,19 @@ export default async (request) => {
   try {
     const dateStr = new Date(now).toLocaleDateString("fr-FR");
     invNum = await nextInvoiceNumber();
+    /* Le detail de la prestation : formule, options, remise. Reconstruit
+       depuis les metadonnees, avec les prix de la grille. */
+    const lignes = lignesSeance(md);
     invPdf = toutRegle
       ? await makeFinalInvoicePdf({
           number: invNum, dateStr, client: { name, email },
           typeLabel: typeLbl, seanceDateFr: frDate(date),
-          total, acompte: 0
+          total, acompte: 0, lignes
         })
       : await makeInvoicePdf({
           number: invNum, dateStr, client: { name, email },
           typeLabel: typeLbl, seanceDateFr: frDate(date),
-          time, acompte, total
+          time, acompte, total, lignes
         });
     await saveInvoice({
       number: invNum, kind: toutRegle ? "solde" : "acompte", pdf: invPdf,

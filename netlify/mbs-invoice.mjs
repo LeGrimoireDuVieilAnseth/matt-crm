@@ -3,6 +3,8 @@
 // externe : parfait en serverless) et fournit un numero de facture continu.
 import { getStore } from "@netlify/blobs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { TARIFS, PRIX_PHOTO_SUPP, PRIX_ALBUM, prixPaireDuo, typeLabelFr } from "./mbs-lib.mjs";
+import { prixTirages } from "./mbs-panier.mjs";
 import nodemailer from "nodemailer";
 
 // Emetteur (auto-entrepreneur, sans TVA)
@@ -51,6 +53,67 @@ const LIBELLES_SEANCE = {
   "famille":                 "Séance photo famille",
   "smash cake":              "Séance photo smash cake"
 };
+
+/* Le detail d'une seance, reconstruit depuis les metadonnees Stripe. Les
+   montants ne viennent JAMAIS des metadonnees : on les relit dans la
+   grille, pour que la facture dise exactement ce qui a ete preleve.
+   Renvoie [] si on ne sait rien, et l'appelant retombe alors sur la ligne
+   unique d'avant. */
+const NOM_GAMME = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige" };
+
+export function lignesSeance(md = {}){
+  const L = [];
+  const paire = String(md.duo || "").split("+");
+  const aD = TARIFS.simple[paire[0]], aN = TARIFS.simple[paire[1]];
+
+  if (aD && aN) {
+    /* Le pack : une ligne par seance, puis la remise en negatif. Un seul
+       montant global cacherait la formule choisie pour chacune. */
+    L.push({ libelle: "Séance grossesse, formule " + NOM_GAMME[paire[0]], montant: aD });
+    L.push({ libelle: "Séance naissance, formule " + NOM_GAMME[paire[1]], montant: aN });
+    const p = prixPaireDuo(paire[0], paire[1]);
+    if (p && p.remise > 0) L.push({ libelle: "Remise pack 2 séances", montant: -p.remise });
+  } else {
+    const base = TARIFS.simple[String(md.gamme || "")];
+    if (base) L.push({
+      libelle: libelleSeance(typeLabelFr(md.type)) + ", formule " + NOM_GAMME[md.gamme],
+      montant: base
+    });
+  }
+
+  const n = Math.min(Math.max(parseInt(md.photos, 10) || 0, 0), 50);
+  if (n > 0) L.push({
+    libelle: n + " photo" + (n > 1 ? "s" : "") + " retouchée" + (n > 1 ? "s" : "") + " en supplément",
+    montant: n * PRIX_PHOTO_SUPP
+  });
+  if (md.album === "1") L.push({ libelle: "Album photo imprimé", montant: PRIX_ALBUM });
+
+  /* Les tirages : "20x30:2,40x60:1". Les quantites viennent de Stripe, les
+     prix et les noms de la grille. */
+  const q = {};
+  String(md.tirages || "").split(",").forEach(x => {
+    const [cle, nb] = x.split(":");
+    const v = parseInt(nb, 10) || 0;
+    if (cle && v > 0) q[cle] = v;
+  });
+  const tir = prixTirages(q);
+  tir.lignes.forEach(l => L.push({
+    libelle: l.quantite + " tirage" + (l.quantite > 1 ? "s" : "") + " " + l.nom, montant: l.montant
+  }));
+  if (tir.envoi > 0) L.push({ libelle: "Envoi postal des tirages", montant: tir.envoi });
+
+  const frais = Number(md.fraisDepl) || 0;
+  if (frais > 0) L.push({
+    libelle: "Déplacement" + (md.lieuExt ? ", " + md.lieuExt : ""), montant: frais
+  });
+
+  const remise = Number(md.remise) || 0;
+  if (remise > 0) L.push({
+    libelle: md.coupon ? "Bon ou code de réduction" : "Remise", montant: -remise
+  });
+
+  return L;
+}
 
 export function libelleSeance(v){
   const brut = String(v == null ? "" : v).trim();
@@ -131,23 +194,43 @@ export async function makeInvoicePdf(inv){
   T(430, yTable, "Montant", 10, bold, soft);
   page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
 
-  T(M, yTable + 30, "Acompte - " + libelleSeance(inv.typeLabel), 11, font);
-  T(M, yTable + 46, "du " + inv.seanceDateFr + " à " + inv.time + " (studio, La Mulatière)", 9.5, font, soft);
-  T(430, yTable + 30, eur(inv.acompte), 11, bold);
+  /* Le detail de la prestation, ligne par ligne. Sans lui la cliente
+     voyait un montant et devait nous croire sur parole, alors qu'elle a pu
+     prendre un album, des photos en plus et des tirages. */
+  const lignes = Array.isArray(inv.lignes) ? inv.lignes : [];
+  let y = yTable + 30;
+  if (lignes.length) {
+    T(M, y, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr + " à " + inv.time, 11, bold);
+    y += 16;
+    lignes.forEach(l => {
+      T(M + 10, y, l.libelle, 10, font, l.montant < 0 ? soft : ink);
+      T(430, y, (l.montant < 0 ? "- " : "") + eur(Math.abs(l.montant)), 10, font, l.montant < 0 ? soft : ink);
+      y += 16;
+    });
+    y += 2;
+    T(M, y, "Total de la prestation", 10.5, bold);
+    T(430, y, eur(inv.total), 10.5, bold);
+    y += 20;
+  } else {
+    T(M, y, "Acompte - " + libelleSeance(inv.typeLabel), 11, font);
+    T(M, y + 16, "du " + inv.seanceDateFr + " à " + inv.time + " (studio, La Mulatière)", 9.5, font, soft);
+    T(430, y, eur(inv.acompte), 11, bold);
+    y += 36;
+  }
 
-  page.drawLine({ start: { x: M, y: H - (yTable + 66) }, end: { x: 545, y: H - (yTable + 66) }, thickness: 0.8, color: line });
+  page.drawLine({ start: { x: M, y: H - (y + 6) }, end: { x: 545, y: H - (y + 6) }, thickness: 0.8, color: line });
 
   // Total
-  T(300, yTable + 92, "Acompte réglé", 11, bold);
-  T(430, yTable + 92, eur(inv.acompte), 12, bold);
+  T(300, y + 32, "Acompte réglé", 11, bold);
+  T(430, y + 32, eur(inv.acompte), 12, bold);
 
   // Mention TVA
-  T(M, yTable + 130, ISSUER.mentionTva, 9.5, font, soft);
+  T(M, y + 70, ISSUER.mentionTva, 9.5, font, soft);
 
   // Note solde
   const reste = Math.max(0, Number(inv.total) - Number(inv.acompte));
-  T(M, yTable + 160, "Acompte versé pour réserver la date de la séance.", 10, font);
-  T(M, yTable + 176, "Solde de " + eur(reste) + " à régler le jour de la séance.", 10, font);
+  T(M, y + 100, "Acompte versé pour réserver la date de la séance.", 10, font);
+  T(M, y + 116, "Solde de " + eur(reste) + " à régler le jour de la séance.", 10, font);
 
   // Pied de page
   T(M, 800, ISSUER.enseigne + " · " + ISSUER.nom + " · SIRET " + ISSUER.siret + " · " + ISSUER.mentionTva, 8, font, soft);
@@ -333,14 +416,28 @@ export async function makeFinalInvoicePdf(inv){
   T(430, yTable, "Montant", 10, bold, soft);
   page.drawLine({ start: { x: M, y: H - (yTable + 8) }, end: { x: 545, y: H - (yTable + 8) }, thickness: 0.8, color: line });
 
-  T(M, yTable + 30, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr, 11, font);
-  T(430, yTable + 30, eur(inv.total), 11, font);
+  /* Le detail de la prestation, quand on le connait. */
+  const lignes = Array.isArray(inv.lignes) ? inv.lignes : [];
+  let y = yTable + 30;
+  if (lignes.length) {
+    T(M, y, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr, 11, bold);
+    y += 16;
+    lignes.forEach(l => {
+      T(M + 10, y, l.libelle, 10, font, l.montant < 0 ? soft : ink);
+      T(430, y, (l.montant < 0 ? "- " : "") + eur(Math.abs(l.montant)), 10, font, l.montant < 0 ? soft : ink);
+      y += 16;
+    });
+    T(M, y, "Total de la prestation", 10.5, bold);
+    T(430, y, eur(inv.total), 10.5, bold);
+  } else {
+    T(M, y, libelleSeance(inv.typeLabel) + " du " + inv.seanceDateFr, 11, font);
+    T(430, y, eur(inv.total), 11, font);
+  }
 
   // Regle en une fois : pas d'acompte anterieur a rappeler, donc pas de
   // ligne de deduction et pas de "solde", qui laisserait croire qu'il
   // restait quelque chose a payer.
   const acompteVerse = Math.max(0, Number(inv.acompte) || 0);
-  let y = yTable + 30;
   if (acompteVerse > 0) {
     y += 22;
     T(M, y, "Acompte déjà versé", 11, font, soft);
