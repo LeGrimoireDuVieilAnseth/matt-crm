@@ -74,6 +74,22 @@ export default async (request) => {
       }
       return json({ ok: true, cadeaux });
     }
+    /* Les codes de reservation ENCORE utilisables : ni utilises, ni
+       expires, ni supprimes. Les autres ne peuvent plus rien ouvrir. */
+    if (url.searchParams.get("resas")) {
+      let idx = [];
+      try { idx = (await store.get("resas", { type: "json" })) || []; } catch (e) {}
+      const now = Date.now(), resas = [];
+      for (const g of idx.slice(0, 200)) {
+        let c = null;
+        try { c = await store.get("c-" + g.code, { type: "json" }); } catch (e) {}
+        if (!c || c.kind !== "reservation" || c.usedAt || c.disabled) continue;
+        if (c.expiresAt && now > c.expiresAt) continue;
+        resas.push({ code: prettyGift(g.code), brut: g.code, beneficiaire: c.beneficiaire || "",
+                     seance: c.seance || "naissance", createdAt: c.createdAt, expiresAt: c.expiresAt });
+      }
+      return json({ ok: true, resas });
+    }
     // De quoi remplir le menu du CRM sans y recopier les prix.
     if (url.searchParams.get("offres")) {
       /* Les anciens packs restent valides pour les bons deja vendus, mais
@@ -276,6 +292,24 @@ export default async (request) => {
     if (!coupon) return json({ ok: false, error: "code" }, 500);
     return json({ ok: true, code: prettyGift(coupon.code), seance: coupon.seance,
                   formule: coupon.formule, expiresAt: coupon.expiresAt });
+  }
+
+  /* Supprimer un code de reservation : definitivement, il ne porte ni
+     recette ni facture. Une seance deja reservee avec n'en depend plus. */
+  if (body.action === "resa-supprimer") {
+    const code = normalizeCode(body.code);
+    if (!code) return json({ ok: false, error: "code" }, 400);
+    let c = null;
+    try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
+    /* Seulement un code de reservation : cette porte ne doit jamais
+       pouvoir effacer un bon cadeau, qui a ete paye et facture. */
+    if (!c || c.kind !== "reservation") return json({ ok: false, error: "introuvable" }, 404);
+    try { await store.delete("c-" + code); } catch (e) {}
+    try {
+      const idx = (await store.get("resas", { type: "json" })) || [];
+      await store.setJSON("resas", idx.filter(g => g.code !== code));
+    } catch (e) {}
+    return json({ ok: true, supprime: true });
   }
 
   if (body.action === "creer") {

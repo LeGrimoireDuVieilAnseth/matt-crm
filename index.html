@@ -3828,7 +3828,8 @@ function creerCodeResa(){
     <p class="hint" style="margin:0 0 14px">Pour une cliente du pack grossesse + naissance : elle choisira elle-même la date de sa séance naissance sur le site, sans rien payer. Le code ne sert qu'une fois.</p>
     <div class="field"><label>Pour qui ? <span style="font-weight:400;opacity:.6">facultatif</span></label>
       <input id="resaPour" placeholder="Nom de la cliente" autocomplete="off"></div>
-    <div id="resaZone"><button class="btn wide" id="resaGo" onclick="genererCodeResa()">Générer le code</button></div>`);
+    <div id="resaZone"><button class="btn wide" id="resaGo" onclick="genererCodeResa()">Générer le code</button></div>
+    <button class="btn ghost wide" style="margin-top:10px" onclick="openCodesResa()">Voir les codes en cours</button>`);
   setTimeout(()=>{ const i=document.getElementById("resaPour"); if(i) i.focus(); },60);
 }
 
@@ -3860,6 +3861,51 @@ async function genererCodeResa(){
     if(btn){ btn.disabled=false; btn.textContent="Générer le code"; }
     alert("Le code n'a pas pu être créé. Réessaie dans un instant.");
   }
+}
+
+/* Les codes de reservation encore utilisables, et leur suppression.
+   On ne montre que ceux qui servent encore : un code utilise ou expire
+   ne peut plus rien ouvrir, il n'y a rien a supprimer. */
+async function openCodesResa(){
+  openModal(`<h2>Codes en cours</h2>
+    <div id="resaListe"><div class="empty"><div class="s">Chargement...</div></div></div>
+    <button class="btn ghost wide" style="margin-top:14px" onclick="creerCodeResa()">Générer un nouveau code</button>`);
+  try{
+    const r=await fetch(CP_API+"?resas=1",{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    const l=(j&&j.resas)||[];
+    const box=document.getElementById("resaListe");
+    if(!box) return;
+    if(!l.length){
+      box.innerHTML=`<div class="empty"><div class="s">Aucun code en cours. Les codes déjà utilisés ou expirés n'apparaissent plus ici.</div></div>`;
+      return;
+    }
+    box.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px">`+l.map(c=>`
+      <div class="row">
+        <div class="row-main">
+          <div class="t" style="letter-spacing:.08em">${esc(c.code)}</div>
+          <div class="s">${esc(c.beneficiaire||"Sans nom")} · créé le ${new Date(c.createdAt).toLocaleDateString("fr-FR")}</div>
+        </div>
+        <div class="row-end"><button class="btn sm danger" onclick="supprimerCodeResa('${esc(c.brut)}','${esc(c.code)}')">Supprimer</button></div>
+      </div>`).join("")+`</div>`;
+  }catch(e){
+    const box=document.getElementById("resaListe");
+    if(box) box.innerHTML=`<div class="empty"><div class="s">Liste indisponible pour le moment. Réessaie dans un instant.</div></div>`;
+  }
+}
+
+async function supprimerCodeResa(brut,affiche){
+  if(!confirm("Supprimer le code "+affiche+" ?\n\nIl ne pourra plus servir à réserver. Une séance déjà réservée avec reste dans ton agenda.")) return;
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"resa-supprimer",code:brut})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j||!j.ok) throw new Error("");
+    toast("Code supprimé");
+    openCodesResa();
+  }catch(e){ alert("Le code n'a pas pu être supprimé. Réessaie dans un instant."); }
 }
 
 function copierMessageResa(){
