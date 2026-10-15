@@ -17,16 +17,22 @@
 // Protege par le mot de passe du CRM (CRM_KEY). Cle Anthropic dans
 // ANTHROPIC_API_KEY, cote Netlify.
 import Anthropic from "@anthropic-ai/sdk";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
 
-function autorise(request) {
-  const attendu = process.env.CRM_KEY || "";
-  if (!attendu) return true;
-  return (request.headers.get("x-crm-key") || "") === attendu;
-}
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 const CONSIGNE = `Tu ranges le pense-bete d'un photographe francais, Matteo, qui dicte
 ses idees a la voix entre deux seances. Ses trois activites : Mybabyshoot
@@ -51,7 +57,8 @@ Reponds UNIQUEMENT avec un objet JSON de cette forme, sans texte autour :
 {"idees":[{"id":"...","titre":"...","action":"..."}],"groupes":["..."]}`;
 
 export default async (request) => {
-  if (!autorise(request)) return json({ ok: false, erreur: "non autorise" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
   if (request.method !== "POST") return json({ ok: false, erreur: "methode refusee" }, 405);
   if (!process.env.ANTHROPIC_API_KEY) {
     return json({ ok: false, message: "La clé Anthropic n'est pas configurée sur Netlify." }, 503);

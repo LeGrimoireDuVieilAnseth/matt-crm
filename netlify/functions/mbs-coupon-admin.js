@@ -17,6 +17,7 @@ import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AM
 import { htmlBonCadeau, htmlBonCorrige, SEANCE_TXT } from "../mbs-bon-mail.mjs";
 import { typeConnu } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 /* Les natures de seance qu'un bon peut porter viennent de TYPES_SEANCE
    (mbs-lib.mjs), la liste qui fait deja foi pour les reservations. Il y en
@@ -32,14 +33,23 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
 
-const REQUIRED = process.env.CRM_KEY || "";
-const authorized = (request) => !REQUIRED || (request.headers.get("x-crm-key") || "") === REQUIRED;
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 const MAX_PAR_LOT = 500;
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-  if (!authorized(request)) return json({ ok: false, error: "unauthorized" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
 
   const store = couponStore();
 

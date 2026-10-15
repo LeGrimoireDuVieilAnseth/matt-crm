@@ -6420,11 +6420,20 @@ function cloudPush(){
 }
 
 /* verifie une cle candidate aupres du serveur */
+/* "ok", "non" ou "attente".
+   Seul un 401 dit que le mot de passe est faux. Avant, tout ce qui n'etait
+   pas un 401 passait pour un succes : un blocage pour trop d'essais (429)
+   aurait fait enregistrer un mot de passe faux.
+   verifyKey.trop dit si l'attente vient d'un blocage, pour le message. */
 async function verifyKey(candidate){
+  verifyKey.trop=false;
   try{
     const res=await fetch(ENDPOINT,{headers:{"Accept":"application/json","X-CRM-Key":candidate},cache:"no-store"});
-    return res.status!==401;
-  }catch(e){ return false; }
+    if(res.status===401) return "non";
+    if(res.ok) return "ok";
+    verifyKey.trop = res.status===429;
+    return "attente";
+  }catch(e){ return "attente"; }
 }
 
 /* ---------- ecran de verrouillage ---------- */
@@ -6490,8 +6499,8 @@ async function submitPassword(){
   const pass=(inp.value||"").trim();
   if(!pass){ return; }
   err.textContent="Vérification...";
-  const ok=await verifyKey(pass);
-  if(ok){
+  const verdict=await verifyKey(pass);
+  if(verdict==="ok"){
     CRM_KEY=pass;
     try{ localStorage.setItem(KEY_STORE,pass); }catch(e){}
     err.textContent="";
@@ -6499,8 +6508,13 @@ async function submitPassword(){
     onAuthenticated();
     // proposer l'empreinte via un bouton (l'activation doit partir d'un appui direct)
     setTimeout(offerBioIfPossible, 400);
-  } else {
+  } else if(verdict==="non"){
     err.textContent="Mot de passe incorrect.";
+  } else {
+    /* Ni bon ni faux : on n'enregistre rien et on dit pourquoi. */
+    err.textContent=verifyKey.trop
+      ? "Trop d'essais. Réessayez dans un quart d'heure."
+      : "Le serveur ne répond pas. Réessayez dans un instant.";
   }
 }
 function onAuthenticated(){
@@ -6898,7 +6912,7 @@ if(CLOUD){
     // Deverrouille il y a peu, ou appareil sans empreinte : on verifie la cle
     // aupres du serveur sans rien demander. L'ecran de verrouillage n'apparait
     // que si le serveur la refuse.
-    verifyKey(CRM_KEY).then(ok=>{ if(ok){ onAuthenticated(); } else { oublierAuth(); showLock(); } });
+    verifyKey(CRM_KEY).then(v=>{ if(v==="non"){ oublierAuth(); showLock(); } else { onAuthenticated(); } });
   } else {
     // acces protege : on passe par l'ecran de verrouillage
     showLock(); // showLock tente l'empreinte tout seul si elle est activee

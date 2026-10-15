@@ -5,17 +5,23 @@
 // GET  ?id=CLE   : renvoie l'image
 // DELETE ?id=CLE : supprime l'image
 import { getStore } from "@netlify/blobs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
-const REQUIRED = process.env.CRM_KEY || "";
-function authorized(request){
-  if(!REQUIRED) return true;
-  return (request.headers.get("x-crm-key") || "") === REQUIRED;
-}
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return new Response(JSON.stringify(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }),
+    { status: statutRefus(etat), headers: { "Content-Type": "application/json" } });
+};
 
 export default async (request) => {
-  if(!authorized(request)){
-    return new Response(JSON.stringify({ ok:false, error:"unauthorized" }), { status:401, headers:{ "Content-Type":"application/json" } });
-  }
+  const refus = await refusCle(request);
+  if (refus) return refus;
   const url = new URL(request.url);
   const id = url.searchParams.get("id") || "";
   const store = getStore({ name: "studio-crm-media", consistency: "strong" });

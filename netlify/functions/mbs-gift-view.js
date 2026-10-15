@@ -3,6 +3,7 @@
 // Public mais il faut CONNAITRE le code (ou l'id de session Stripe juste apres l'achat).
 // Ne renvoie jamais les coordonnees de l'acheteur.
 import { couponStore, normalizeCode, prettyGift } from "../mbs-coupons.mjs";
+import { porteFermee, noterEchec, LIMITE_CODES, MESSAGE_TROP_CODES } from "../mbs-garde.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +28,9 @@ export default async (request) => {
 
   // Retour de Stripe : on ne connait que la session, le webhook a note le code.
   let code = normalizeCode(url.searchParams.get("code") || "");
+  /* Un code SAISI, par opposition a celui retrouve par la session Stripe
+     juste apres un achat : seul le premier peut etre devine. */
+  const saisi = !!code;
   const sess = (url.searchParams.get("session") || "").slice(0, 120);
   if (!code && sess) {
     if (!/^cs_[A-Za-z0-9_]+$/.test(sess)) return json({ ok: false, error: "session" }, 400);
@@ -37,14 +41,18 @@ export default async (request) => {
     code = lien.code;
   }
   if (!code) return json({ ok: false, error: "code" }, 400);
+  if (saisi && await porteFermee("codes", request, LIMITE_CODES))
+    return json({ ok: false, error: "trop", message: MESSAGE_TROP_CODES }, 429);
 
   let c = null;
   try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
   /* Deux genres de codes passent par ici : le bon cadeau, et le code de
      reservation de la seconde seance d'un pack. Le site les presente
      differemment, d'ou le "kind" dans la reponse. */
-  if (!c || (c.kind !== "cadeau" && c.kind !== "reservation"))
+  if (!c || (c.kind !== "cadeau" && c.kind !== "reservation")) {
+    if (saisi) await noterEchec("codes", request, LIMITE_CODES);
     return json({ ok: false, error: "inconnu" }, 404);
+  }
 
   return json({
     ok: true,

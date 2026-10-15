@@ -3,6 +3,7 @@
 // Ne consomme rien : la remise n'est appliquee (et le code brule) que
 // cote serveur dans mbs-checkout / mbs-webhook.
 import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode, prettyGift } from "../mbs-coupons.mjs";
+import { porteFermee, noterEchec, LIMITE_CODES, MESSAGE_TROP_CODES } from "../mbs-garde.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,12 @@ export default async (request) => {
 
   const total = Math.max(0, Math.round(Number(body.total)) || 0);
   const store = couponStore();
+  /* Essais rates limites par adresse : voir mbs-garde.mjs. La reponse
+     garde sa forme habituelle, le site l'affiche telle quelle. */
+  if (await porteFermee("codes", request, LIMITE_CODES))
+    return json({ ok: true, valide: false, message: MESSAGE_TROP_CODES });
   const chk = await checkCoupon(store, body.code);
+  if (!chk.ok && chk.reason === "inconnu") await noterEchec("codes", request, LIMITE_CODES);
 
   if (!chk.ok) return json({ ok: true, valide: false, message: reasonLabel(chk.reason) });
 

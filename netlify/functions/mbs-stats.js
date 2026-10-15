@@ -11,6 +11,7 @@
 // serveur ne manipule que des compteurs. Rien n'est transmis a un tiers,
 // rien ne permet de suivre quelqu'un d'un site a l'autre.
 import { getStore } from "@netlify/blobs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 const JOURS_GARDES = 400;   // un peu plus d'un an, pour comparer les saisons
 
@@ -24,8 +25,16 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 });
 
 const store = () => getStore({ name: "mbs-stats", consistency: "strong" });
-const REQUIRED = process.env.CRM_KEY || "";
-const autorise = (request) => !REQUIRED || (request.headers.get("x-crm-key") || "") === REQUIRED;
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 /* Jour courant a Paris : sans ca, tout ce qui se passe apres minuit heure
    francaise serait compte sur la veille en hiver comme en ete. */
@@ -76,7 +85,8 @@ export default async (request) => {
 
   /* ---------- lecture par le CRM ---------- */
   if (request.method === "GET") {
-    if (!autorise(request)) return json({ ok: false, error: "unauthorized" }, 401);
+    const refus = await refusCle(request);
+    if (refus) return refus;
     const s = store();
     let index = [];
     try { index = (await s.get("index", { type: "json" })) || []; } catch (e) {}
@@ -100,7 +110,8 @@ export default async (request) => {
      que de les masquer a l'affichage, on les retire vraiment. On n'efface
      jamais un jour entier ni une visite : uniquement les etiquettes nommees. */
   if (request.method === "DELETE") {
-    if (!autorise(request)) return json({ ok: false, error: "unauthorized" }, 401);
+    const refus = await refusCle(request);
+    if (refus) return refus;
 
     const url = new URL(request.url);
     const cibles = (url.searchParams.get("clics") || "")

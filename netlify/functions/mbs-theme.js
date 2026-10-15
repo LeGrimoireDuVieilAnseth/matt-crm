@@ -7,6 +7,7 @@
 // Le site part toujours du theme normal si ce service ne repond pas :
 // une decoration ne doit jamais empecher le site de s'afficher.
 import { getStore } from "@netlify/blobs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -17,8 +18,16 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
 
-const REQUIRED = process.env.CRM_KEY || "";
-const autorise = (request) => !REQUIRED || (request.headers.get("x-crm-key") || "") === REQUIRED;
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 const THEMES = ["normal", "noel"];
 const store = () => getStore({ name: "mbs-theme", consistency: "strong" });
@@ -34,7 +43,8 @@ export default async (request) => {
   }
 
   if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
-  if (!autorise(request)) return json({ ok: false, error: "unauthorized" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
 
   let body;
   try { body = await request.json(); }

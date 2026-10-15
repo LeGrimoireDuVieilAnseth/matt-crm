@@ -4,25 +4,27 @@
 // (definie dans la variable d'environnement Netlify CRM_KEY).
 // Tant que CRM_KEY n'est pas definie, l'acces reste ouvert (phase de mise en place).
 import { getStore } from "@netlify/blobs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
-const REQUIRED = process.env.CRM_KEY || "";
 
-function authorized(request){
-  if(!REQUIRED) return true; // pas encore configure
-  const k = request.headers.get("x-crm-key") || "";
-  return k === REQUIRED;
-}
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return new Response(JSON.stringify(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }),
+    { status: statutRefus(etat), headers: { "Content-Type": "application/json" } });
+};
 
 export default async (request) => {
   const store = getStore({ name: "studio-crm", consistency: "strong" });
   const KEY = "data";
 
-  if (!authorized(request)) {
-    return new Response(JSON.stringify({ ok:false, error:"unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
-    });
-  }
+  const refus = await refusCle(request);
+  if (refus) return refus;
 
   if (request.method === "GET") {
     const data = await store.get(KEY, { type: "json", consistency: "strong" });

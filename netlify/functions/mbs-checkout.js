@@ -15,6 +15,7 @@ import {
   reserveCoupon, releaseCoupon, consumeCoupon, prettyGift
 } from "../mbs-coupons.mjs";
 import { calculerDeplacement } from "../mbs-deplacement.mjs";
+import { porteFermee, noterEchec, LIMITE_CODES, MESSAGE_TROP_CODES } from "../mbs-garde.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 
@@ -258,8 +259,16 @@ export default async (request) => {
   let remise = 0, couponCode = "", couponKind = "promo", giftFormule = "";
   if (body.coupon) {
     const cstore = couponStore();
+    /* Essais rates limites par adresse. Sans cette limite, on pouvait
+       essayer les combinaisons une par une jusqu'a tomber sur un bon
+       cadeau ou un code de reservation valable, et reserver sans payer. */
+    if (await porteFermee("codes", request, LIMITE_CODES)) {
+      await releaseLock();
+      return json({ ok: false, error: "coupon", message: MESSAGE_TROP_CODES }, 429);
+    }
     const chk = await checkCoupon(cstore, body.coupon, now);
     if (!chk.ok) {
+      if (chk.reason === "inconnu") await noterEchec("codes", request, LIMITE_CODES);
       await releaseLock();
       return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
     }

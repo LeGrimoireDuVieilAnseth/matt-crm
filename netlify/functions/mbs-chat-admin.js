@@ -9,6 +9,7 @@
 import { getStore } from "@netlify/blobs";
 import Anthropic from "@anthropic-ai/sdk";
 import { normBrand, idxKey, consKey } from "../chat-brands.mjs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 /* Retrouve le prenom dans une conversation deja commencee (anciennes
    discussions, ou visiteur qui se presente au fil de l'echange).
@@ -53,8 +54,16 @@ const cors = {
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-const REQUIRED = process.env.CRM_KEY || "";
-const authorized = (request) => !REQUIRED || (request.headers.get("x-crm-key") || "") === REQUIRED;
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 async function updateIndex(store, conv, removed) {
   const brand = normBrand(conv.brand);
@@ -81,7 +90,8 @@ async function updateIndex(store, conv, removed) {
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-  if (!authorized(request)) return json({ ok: false, error: "unauthorized" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
 
   const store = getStore({ name: "mbs-chat", consistency: "strong" });
 

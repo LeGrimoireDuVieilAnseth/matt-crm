@@ -10,16 +10,22 @@ import { lienStore, creerLien, majIndex, normaliserCode, montantValide,
          vuePublique, optionsDe, extrasDe, aDesExtras, normaliserExtras,
          LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
 import { sendMail } from "../mbs-mail.mjs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
 
-function autorise(request) {
-  const attendu = process.env.CRM_KEY || "";
-  if (!attendu) return true;
-  return (request.headers.get("x-crm-key") || "") === attendu;
-}
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 const siteUrl = () =>
   (process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr").replace(/\/+$/, "");
@@ -30,7 +36,8 @@ const esc = (s) => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export default async (request) => {
-  if (!autorise(request)) return json({ ok: false, erreur: "non autorise" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
   const store = lienStore();
   const url = new URL(request.url);
 

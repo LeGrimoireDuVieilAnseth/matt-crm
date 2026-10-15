@@ -23,6 +23,7 @@
 // une seule reconstruction du site.
 import { PROPRIETAIRE, BRANCHE, config, lireBloc, remplacerBloc,
          construireBloc, nomAccepte } from "../galerie-lib.mjs";
+import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
 const API = "https://api.github.com";
 
@@ -31,11 +32,16 @@ const json = (corps, status = 200) =>
     status, headers: { "Content-Type": "application/json" },
   });
 
-function autorise(request) {
-  const attendu = process.env.CRM_KEY || "";
-  if (!attendu) return true;
-  return (request.headers.get("x-crm-key") || "") === attendu;
-}
+/* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
+   manque, et bloque une adresse apres trop d'essais rates. Renvoie la
+   reponse de refus, ou null si la cle est bonne. */
+const refusCle = async (request) => {
+  const etat = await cleCRM(request);
+  if (etat === "ok") return null;
+  return json(etat === "bloque"
+    ? { ok: false, error: "trop", message: MESSAGE_TROP_CRM }
+    : { ok: false, error: "unauthorized" }, statutRefus(etat));
+};
 
 async function github(chemin, options = {}) {
   const cle = process.env.GITHUB_TOKEN;
@@ -68,7 +74,8 @@ const lireFichier = async (s) => {
 };
 
 export default async (request) => {
-  if (!autorise(request)) return json({ ok: false, erreur: "non autorise" }, 401);
+  const refus = await refusCle(request);
+  if (refus) return refus;
   const url = new URL(request.url);
   const action = url.searchParams.get("action") || "";
 
