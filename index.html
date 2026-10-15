@@ -3807,7 +3807,11 @@ async function creerBonManuel(){
       alert("Bon créé.\n\nCode : "+j.code+"\nFormule : "+j.formule+" ("+j.montant+" €)\n"
         +(exp?"Valable jusqu'au "+exp+"\n":"")
         +"\nDonne ce code à "+beneficiaire+" : elle le saisira au moment de réserver sur le site.");
-      chargerCadeaux();
+      /* La liste des bons ne se rafraichit que si c'est elle qu'on regarde :
+         lancee depuis le "+" de l'accueil, elle ecrirait dans la liste des
+         clientes, cachee. */
+      if(vueCourante==="clients" && FILTER==="mybabyshoot" && mbsView==="cadeaux") chargerCadeaux();
+      else cadeauxCache=null;
     } else {
       alert("Échec : "+((j&&j.error)||"raison inconnue"));
     }
@@ -5408,6 +5412,7 @@ function openAddMenu(){
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerCodeResa()"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Générer un code de réservation</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerBonManuel()"><svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>Créer un bon cadeau</button>
     </div>`);
 }
 
