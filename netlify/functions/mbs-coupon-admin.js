@@ -13,7 +13,7 @@
 // - POST {action:"cadeau-renvoyer", code, email, explication}
 //                       : renvoie le bon par email, avec le meme code
 import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT,
-         createGiftCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
+         createGiftCoupon, createResaCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
 import { htmlBonCadeau, htmlBonCorrige, SEANCE_TXT } from "../mbs-bon-mail.mjs";
 import { typeConnu } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
@@ -246,6 +246,23 @@ export default async (request) => {
     });
     if (!coupon) return json({ ok: false, error: "code" }, 500);
     return json({ ok: true, code: prettyGift(coupon.code), montant: coupon.amount,
+                  formule: coupon.formule, expiresAt: coupon.expiresAt });
+  }
+
+  /* Un code de reservation pour la SECONDE seance d'un pack, deja reglee.
+     Aucun montant : il n'ouvre pas un droit a une remise, il ouvre un
+     droit a choisir un creneau. */
+  if (body.action === "resa-creer") {
+    const beneficiaire = String(body.beneficiaire || "").trim().slice(0, 80);
+    if (!beneficiaire) return json({ ok: false, error: "beneficiaire" }, 400);
+    const seance = typeConnu(body.seance) ? body.seance : "naissance";
+    const coupon = await createResaCoupon(store, {
+      beneficiaire, seance,
+      formule: String(body.formule || "").trim().slice(0, 60),
+      note: String(body.note || "").trim().slice(0, 200)
+    });
+    if (!coupon) return json({ ok: false, error: "code" }, 500);
+    return json({ ok: true, code: prettyGift(coupon.code), seance: coupon.seance,
                   formule: coupon.formule, expiresAt: coupon.expiresAt });
   }
 

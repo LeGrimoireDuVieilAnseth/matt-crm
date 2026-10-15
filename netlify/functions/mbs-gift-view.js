@@ -40,11 +40,18 @@ export default async (request) => {
 
   let c = null;
   try { c = await store.get("c-" + code, { type: "json" }); } catch (e) {}
-  if (!c || c.kind !== "cadeau") return json({ ok: false, error: "inconnu" }, 404);
+  /* Deux genres de codes passent par ici : le bon cadeau, et le code de
+     reservation de la seconde seance d'un pack. Le site les presente
+     differemment, d'ou le "kind" dans la reponse. */
+  if (!c || (c.kind !== "cadeau" && c.kind !== "reservation"))
+    return json({ ok: false, error: "inconnu" }, 404);
 
   return json({
     ok: true,
     bon: {
+      /* "cadeau" ou "reservation" : le site ne presente pas les deux de la
+         meme facon, et il ne peut pas le deviner du code seul. */
+      kind: c.kind,
       code: prettyGift(c.code),
       formule: c.formule || "",
       seance: c.seance || "grossesse",

@@ -74,6 +74,49 @@ export function discountFor(total, amount = COUPON_AMOUNT, kind = "promo") {
   return Math.max(0, Math.min(amount, total - MIN_TOTAL));
 }
 
+/* ---------- Codes de reservation ----------
+   Pour la SECONDE seance d'un pack grossesse + naissance, deja reglee.
+   Meme stockage et meme cycle de vie que les bons cadeaux (code unique,
+   usage unique, reservation pendant le paiement, consommation a la
+   confirmation), mais sans montant : il n'y a rien a prelever, et rien a
+   compter en recette.
+
+   Validite plus courte qu'un bon cadeau : la seance naissance se place
+   dans les semaines qui suivent, pas dans dix-huit mois. */
+export const RESA_VALIDITE_MOIS = 12;
+
+export async function createResaCoupon(store, { beneficiaire, seance, formule, note, now = Date.now() }) {
+  /* Six caracteres comme les bons cadeaux : Matt les dicte au telephone. */
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    const essai = makeCode(6);
+    const deja = await store.get("c-" + essai, { type: "json" }).catch(() => null);
+    if (!deja) { code = essai; break; }
+  }
+  if (!code) return null;
+
+  const exp = new Date(now);
+  exp.setMonth(exp.getMonth() + RESA_VALIDITE_MOIS);
+  const coupon = {
+    code, kind: "reservation", amount: 0,
+    formule: formule || "", seance: seance || "naissance",
+    beneficiaire: beneficiaire || "", note: note || "",
+    expiresAt: exp.getTime(), createdAt: now,
+    usedAt: 0, sessionId: "", reservedUntil: 0, disabled: false
+  };
+  await store.setJSON("c-" + code, coupon);
+
+  try {
+    const idx = (await store.get("resas", { type: "json" })) || [];
+    idx.unshift({ code, seance: coupon.seance, formule: coupon.formule,
+                  beneficiaire: coupon.beneficiaire, note: coupon.note,
+                  createdAt: now, expiresAt: coupon.expiresAt });
+    await store.setJSON("resas", idx.slice(0, 500));
+  } catch (e) {}
+
+  return coupon;
+}
+
 /* ---------- Bons cadeaux ----------
    Meme stockage que les codes promo, avec kind:"cadeau" et le montant reellement
    paye par l'acheteur. Index dedie "gifts" pour le suivi cote CRM. */

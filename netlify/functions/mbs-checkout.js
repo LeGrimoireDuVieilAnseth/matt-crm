@@ -62,14 +62,25 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
     client.status = "Client";
   }
 
-  const detail = "Bon cadeau " + prettyGift(md.coupon) + " (-" + md.remise + " €, séance " + md.totalPlein + " €).";
+  /* Un code de RESERVATION n'est pas un bon cadeau : la seance a deja ete
+     payee dans le pack. On enregistre la seance, et AUCUNE ligne de
+     paiement : en creer une ferait compter le pack deux fois dans le
+     tableau de bord des ventes. */
+  const estResa = md.kind === "reservation";
+  const detail = estResa
+    ? "Code de réservation " + prettyGift(md.coupon) + (md.formule ? " (" + md.formule + ")" : "") + "."
+    : "Bon cadeau " + prettyGift(md.coupon) + " (-" + md.remise + " €, séance " + md.totalPlein + " €).";
+
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date: md.date, time: md.time, place: PLACE, status: "A venir",
-    notes: "Réservation en ligne réglée avec un bon cadeau. " + detail + " Rien à encaisser le jour J.",
+    notes: estResa
+      ? "Seconde séance du pack, déjà réglée. La cliente a choisi son créneau elle-même avec son code. "
+        + detail + " Rien à encaisser."
+      : "Réservation en ligne réglée avec un bon cadeau. " + detail + " Rien à encaisser le jour J.",
     createdAt: now, giftCode: md.coupon
   });
-  data.paiements.push({
+  if (!estResa) data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
     label: "Séance réglée par bon cadeau",
     total: String(md.totalPlein), acompte: String(md.totalPlein), statut: "Solde",
@@ -107,7 +118,7 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
 
   try {
     await notifyAll(
-      "Nouvelle réservation (bon cadeau)",
+      estResa ? "Seconde séance calée" : "Nouvelle réservation (bon cadeau)",
       name + " · " + typeLbl + " le " + frDate(md.date) + " à " + md.time + " · rien à encaisser",
       "/"
     );
@@ -117,7 +128,9 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
     const site = md.site || "https://mybabyshoot.fr";
     const html =
       "<p>Bonjour " + (md.prenom || "") + " !</p>" +
-      "<p>Tout d'abord, j'espère que ce cadeau vous fait plaisir !</p>" +
+      (estResa
+        ? "<p>C'est noté, votre seconde séance est réservée.</p>"
+        : "<p>Tout d'abord, j'espère que ce cadeau vous fait plaisir !</p>") +
       "<p>Votre réservation est bien confirmée.</p>" +
       "<ul>" +
       "<li><b>Séance :</b> " + typeLbl + "</li>" +
@@ -250,7 +263,19 @@ export default async (request) => {
       await releaseLock();
       return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
     }
-    couponKind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
+    couponKind = chk.coupon.kind === "cadeau" ? "cadeau"
+               : chk.coupon.kind === "reservation" ? "reservation" : "promo";
+
+    /* Code de reservation : la seance a DEJA ete reglee, c'est la seconde
+       d'un pack. Rien a prelever, et surtout rien a recompter en recette :
+       une ligne de paiement ferait compter le pack deux fois dans le
+       tableau de bord des ventes. */
+    if (couponKind === "reservation") {
+      total = 0; totalPlein = 0;
+      const s = chk.coupon.seance;
+      type = typeConnu(s) ? s : "naissance";
+      giftFormule = String(chk.coupon.formule || "");
+    }
 
     // Reservation faite AVEC un bon cadeau seul : la prestation et sa valeur
     // viennent du bon, jamais du navigateur (la personne ne choisit que sa date).
@@ -267,10 +292,15 @@ export default async (request) => {
       giftFormule = String(chk.coupon.formule || "");
     }
 
-    remise = discountFor(total, chk.coupon.amount, couponKind);
-    if (remise <= 0) {
-      await releaseLock();
-      return json({ ok: false, error: "coupon", message: "Ce code ne s'applique pas à cette formule." }, 400);
+    /* Un code de reservation ne porte pas de remise : il n'y a deja plus
+       rien a payer. Le controle ci-dessous ne vaut que pour les deux
+       autres genres. */
+    if (couponKind !== "reservation") {
+      remise = discountFor(total, chk.coupon.amount, couponKind);
+      if (remise <= 0) {
+        await releaseLock();
+        return json({ ok: false, error: "coupon", message: "Ce code ne s'applique pas à cette formule." }, 400);
+      }
     }
     /* Le code, et non le creneau : il tient plus longtemps, sinon deux
        personnes pourraient utiliser le meme bon. */
@@ -330,7 +360,7 @@ export default async (request) => {
         md: {
           type, date, time, prenom, nom, email, tel, site,
           coupon: couponCode, remise: String(remise), totalPlein: String(totalPlein),
-          formule: giftFormule
+          formule: giftFormule, kind: couponKind
         }
       });
       return json({ ok: true, gratuit: true });

@@ -2231,8 +2231,11 @@ async function loadBonsCadeaux(){
   /* Le meme bouton que dans Clients > Bons cadeaux, et la meme fonction
      derriere. L'entree des Reglages annonce la creation manuelle : elle doit
      etre possible ici aussi, sinon le sous-titre ment. */
-  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:14px" onclick="creerBonManuel()">
+  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:8px" onclick="creerBonManuel()">
       Créer un bon à la main
+    </button>
+    <button class="btn ghost wide" style="margin-bottom:14px" onclick="creerCodeResa()">
+      Créer un code de réservation
     </button>`;
   try{
     const r=await fetch(CP_API+"?cadeaux=1",{headers:apiHeaders(),cache:"no-store"});
@@ -3814,6 +3817,51 @@ async function creerBonManuel(){
   }catch(e){ alert("Erreur réseau."); }
 }
 
+/* ============================================================
+   UN CODE DE RESERVATION
+   Pour la seconde seance d'un pack, deja reglee. La cliente le saisit
+   sur le site a la place d'un bon cadeau, choisit son creneau, et n'a
+   rien a payer. A usage unique, comme un bon.
+   ============================================================ */
+async function creerCodeResa(){
+  const beneficiaire=(prompt("Code de réservation pour la 2e séance d'un pack.\n\nNom de la cliente :","")||"").trim();
+  if(!beneficiaire) return;
+
+  const types=[["naissance","Naissance"],["grossesse","Grossesse"],["bebe","Bébé"]];
+  const rt=prompt("Quelle séance reste à faire ?\n\n"+types.map((t,i)=>(i+1)+". "+t[1]).join("\n")+"\n\nTape le numéro :","1");
+  if(rt===null) return;
+  const choisi=types[parseInt(rt,10)-1];
+  if(!choisi){ alert("Numéro inconnu."); return; }
+
+  /* La formule deja payee : facultative, mais c'est elle qui te dira
+     combien de photos retoucher le jour venu. */
+  const formules=["Essentielle","Confort","Prestige"];
+  const rf=prompt("Quelle formule a-t-elle prise pour cette séance ? (facultatif)\n\n"
+    +formules.map((f,i)=>(i+1)+". "+f).join("\n")+"\n\nTape le numéro, ou laisse vide :","");
+  if(rf===null) return;
+  const formule=formules[parseInt(rf,10)-1]||"";
+
+  if(!confirm("Créer un code pour "+beneficiaire+" ?\n\nSéance "+choisi[1].toLowerCase()
+    +(formule?", formule "+formule:"")+"\nValable 12 mois, utilisable une seule fois.\n\n"
+    +"Elle choisira son créneau elle-même sur le site, sans rien payer.")) return;
+
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
+      body:JSON.stringify({action:"resa-creer",beneficiaire,seance:choisi[0],formule})});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(j&&j.ok){
+      const exp=j.expiresAt?new Date(j.expiresAt).toLocaleDateString("fr-FR"):"";
+      alert("Code créé.\n\nCode : "+j.code+"\nSéance "+choisi[1].toLowerCase()
+        +(formule?", formule "+formule:"")+"\n"+(exp?"Valable jusqu'au "+exp+"\n":"")
+        +"\nDonne ce code à "+beneficiaire+". Sur le site, elle clique sur "
+        +"\"J'ai un bon cadeau ou un code\", le saisit, et choisit sa date. Rien à payer.");
+    } else {
+      alert("Échec : "+((j&&j.error)||"raison inconnue"));
+    }
+  }catch(e){ alert("Erreur réseau."); }
+}
+
 async function chargerCadeaux(){
   const box=document.getElementById("clientsList");
   if(!CLOUD){
@@ -3857,8 +3905,11 @@ function dessinerCadeaux(list){
   const total=l.reduce((s,b)=>s+(Number(b.montant)||0),0);
   document.getElementById("clientCount").textContent=l.length+" bon(s)";
 
-  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:12px" onclick="creerBonManuel()">
+  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:8px" onclick="creerBonManuel()">
       Créer un bon à la main
+    </button>
+    <button class="btn ghost wide" style="margin-bottom:12px" onclick="creerCodeResa()">
+      Créer un code de réservation
     </button>`;
 
   if(!l.length){
