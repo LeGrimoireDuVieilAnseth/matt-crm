@@ -263,8 +263,10 @@ export default async (request) => {
      Aucun montant : il n'ouvre pas un droit a une remise, il ouvre un
      droit a choisir un creneau. */
   if (body.action === "resa-creer") {
+    /* Le nom est facultatif : Matt genere souvent le code pendant qu'il
+       parle a la cliente, et la fiche de la seance portera de toute facon
+       le nom qu'elle saisira en reservant. */
     const beneficiaire = String(body.beneficiaire || "").trim().slice(0, 80);
-    if (!beneficiaire) return json({ ok: false, error: "beneficiaire" }, 400);
     const seance = typeConnu(body.seance) ? body.seance : "naissance";
     const coupon = await createResaCoupon(store, {
       beneficiaire, seance,

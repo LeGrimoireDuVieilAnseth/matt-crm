@@ -2231,11 +2231,8 @@ async function loadBonsCadeaux(){
   /* Le meme bouton que dans Clients > Bons cadeaux, et la meme fonction
      derriere. L'entree des Reglages annonce la creation manuelle : elle doit
      etre possible ici aussi, sinon le sous-titre ment. */
-  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:8px" onclick="creerBonManuel()">
+  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:14px" onclick="creerBonManuel()">
       Créer un bon à la main
-    </button>
-    <button class="btn ghost wide" style="margin-bottom:14px" onclick="creerCodeResa()">
-      Créer un code de réservation
     </button>`;
   try{
     const r=await fetch(CP_API+"?cadeaux=1",{headers:apiHeaders(),cache:"no-store"});
@@ -3819,47 +3816,55 @@ async function creerBonManuel(){
 
 /* ============================================================
    UN CODE DE RESERVATION
-   Pour la seconde seance d'un pack, deja reglee. La cliente le saisit
-   sur le site a la place d'un bon cadeau, choisit son creneau, et n'a
-   rien a payer. A usage unique, comme un bon.
+   Pour une cliente qui a pris le pack grossesse + naissance : avec ce
+   code, elle choisit elle-meme la date de sa seance naissance sur le
+   site, sans rien payer. A usage unique.
+
+   Volontairement minimal, a la demande de Matt : pas de liste d'offres,
+   pas de formule a choisir. Un nom facultatif, un bouton, le code.
    ============================================================ */
-async function creerCodeResa(){
-  const beneficiaire=(prompt("Code de réservation pour la 2e séance d'un pack.\n\nNom de la cliente :","")||"").trim();
-  if(!beneficiaire) return;
+function creerCodeResa(){
+  openModal(`<h2>Code de réservation</h2>
+    <p class="hint" style="margin:0 0 14px">Pour une cliente du pack grossesse + naissance : elle choisira elle-même la date de sa séance naissance sur le site, sans rien payer. Le code ne sert qu'une fois.</p>
+    <div class="field"><label>Pour qui ? <span style="font-weight:400;opacity:.6">facultatif</span></label>
+      <input id="resaPour" placeholder="Nom de la cliente" autocomplete="off"></div>
+    <div id="resaZone"><button class="btn wide" id="resaGo" onclick="genererCodeResa()">Générer le code</button></div>`);
+  setTimeout(()=>{ const i=document.getElementById("resaPour"); if(i) i.focus(); },60);
+}
 
-  const types=[["naissance","Naissance"],["grossesse","Grossesse"],["bebe","Bébé"]];
-  const rt=prompt("Quelle séance reste à faire ?\n\n"+types.map((t,i)=>(i+1)+". "+t[1]).join("\n")+"\n\nTape le numéro :","1");
-  if(rt===null) return;
-  const choisi=types[parseInt(rt,10)-1];
-  if(!choisi){ alert("Numéro inconnu."); return; }
+/* Le message pret a envoyer par WhatsApp ou SMS, garde ici plutot que
+   dans l'attribut onclick : une apostrophe ("J'ai un bon cadeau")
+   casserait l'attribut. */
+let messageResa="";
 
-  /* La formule deja payee : facultative, mais c'est elle qui te dira
-     combien de photos retoucher le jour venu. */
-  const formules=["Essentielle","Confort","Prestige"];
-  const rf=prompt("Quelle formule a-t-elle prise pour cette séance ? (facultatif)\n\n"
-    +formules.map((f,i)=>(i+1)+". "+f).join("\n")+"\n\nTape le numéro, ou laisse vide :","");
-  if(rf===null) return;
-  const formule=formules[parseInt(rf,10)-1]||"";
-
-  if(!confirm("Créer un code pour "+beneficiaire+" ?\n\nSéance "+choisi[1].toLowerCase()
-    +(formule?", formule "+formule:"")+"\nValable 12 mois, utilisable une seule fois.\n\n"
-    +"Elle choisira son créneau elle-même sur le site, sans rien payer.")) return;
-
+async function genererCodeResa(){
+  const btn=document.getElementById("resaGo");
+  if(btn){ btn.disabled=true; btn.textContent="Création..."; }
+  const pour=((document.getElementById("resaPour")||{}).value||"").trim();
   try{
     const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),
-      body:JSON.stringify({action:"resa-creer",beneficiaire,seance:choisi[0],formule})});
+      body:JSON.stringify({action:"resa-creer",beneficiaire:pour,seance:"naissance"})});
     if(r.status===401){ handleUnauthorized(); return; }
     const j=await r.json();
-    if(j&&j.ok){
-      const exp=j.expiresAt?new Date(j.expiresAt).toLocaleDateString("fr-FR"):"";
-      alert("Code créé.\n\nCode : "+j.code+"\nSéance "+choisi[1].toLowerCase()
-        +(formule?", formule "+formule:"")+"\n"+(exp?"Valable jusqu'au "+exp+"\n":"")
-        +"\nDonne ce code à "+beneficiaire+". Sur le site, elle clique sur "
-        +"\"J'ai un bon cadeau ou un code\", le saisit, et choisit sa date. Rien à payer.");
-    } else {
-      alert("Échec : "+((j&&j.error)||"raison inconnue"));
-    }
-  }catch(e){ alert("Erreur réseau."); }
+    if(!j||!j.ok) throw new Error((j&&j.error)||"");
+    const prenom=pour?" "+pour.split(" ")[0]:"";
+    messageResa="Bonjour"+prenom+" ! Voici votre code pour réserver votre séance naissance : "+j.code
+      +". Sur mybabyshoot.fr, cliquez sur « J'ai un bon cadeau ou un code », entrez-le et choisissez votre date. Il n'y a rien à payer.";
+    document.getElementById("resaZone").innerHTML=`
+      <div style="text-align:center;margin:4px 0 16px">
+        <div style="font-size:12px;opacity:.6;letter-spacing:.06em;text-transform:uppercase">Le code</div>
+        <div style="font-size:30px;font-weight:800;letter-spacing:.14em;margin-top:4px">${esc(j.code)}</div>
+      </div>
+      <button class="btn wide" onclick="copierMessageResa()">Copier le message pour la cliente</button>`;
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent="Générer le code"; }
+    alert("Le code n'a pas pu être créé. Réessaie dans un instant.");
+  }
+}
+
+function copierMessageResa(){
+  try{ navigator.clipboard.writeText(messageResa); toast("Message copié"); }
+  catch(e){ prompt("Copie ce message :",messageResa); }
 }
 
 async function chargerCadeaux(){
@@ -3905,11 +3910,8 @@ function dessinerCadeaux(list){
   const total=l.reduce((s,b)=>s+(Number(b.montant)||0),0);
   document.getElementById("clientCount").textContent=l.length+" bon(s)";
 
-  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:8px" onclick="creerBonManuel()">
+  const boutonManuel=`<button class="btn ghost wide" style="margin-bottom:12px" onclick="creerBonManuel()">
       Créer un bon à la main
-    </button>
-    <button class="btn ghost wide" style="margin-bottom:12px" onclick="creerCodeResa()">
-      Créer un code de réservation
     </button>`;
 
   if(!l.length){
@@ -5359,6 +5361,7 @@ function openAddMenu(){
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openPayEdit(null)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Nouveau paiement</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerCodeResa()"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Générer un code de réservation</button>
     </div>`);
 }
 
