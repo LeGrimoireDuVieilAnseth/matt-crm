@@ -4194,15 +4194,20 @@ function galeriePrete(clientId,adresse,nb){
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       ${nb} photos${c?" pour <b>"+esc(c.name)+"</b>":""}. Elle reste en ligne 3 mois.</div>
     <div class="card" style="padding:13px 15px;font-size:13px;word-break:break-all;margin-bottom:12px">
-      <a href="${esc(adresse)}" target="_blank" rel="noopener">${esc(adresse)}</a></div>
+      <span style="user-select:all">${esc(adresse)}</span></div>
     <div style="display:flex;gap:8px;margin-bottom:9px">
       <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
-      <a class="btn ghost sm" style="flex:1" href="${esc(adresse)}" target="_blank" rel="noopener">Ouvrir</a>
+      <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a>
     </div>
     ${c&&c.email?`<button class="btn wide" onclick="closeModal();openMailFinal('${esc(clientId)}')">Envoyer galerie + facture</button>
     <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">Le lien de la galerie est déjà rempli dans le mail.</div>`:""}`);
   if(galeriesVisibles()) renderGaleriesList();
 }
+
+/* Le lien que Matt ouvre lui-meme : l'apercu (&apercu=1), ou ses essais ne
+   sont pas enregistres et ne comptent pas comme une visite de la cliente.
+   Le lien a envoyer, lui, reste le lien nu (Copier le lien). */
+const apercuDeGalerie=a=>a+(a.includes("?")?"&":"?")+"apercu=1";
 
 function copierTexteGal(t,msg){
   try{ navigator.clipboard.writeText(t).then(()=>toast(msg||"Copié"),()=>prompt("Copie ceci :",t)); }
@@ -4259,10 +4264,10 @@ function dessinerGalerie(){
       <button class="btn wide" id="gpGo" style="margin-top:4px" onclick="document.getElementById('grFichiers').click()">Reprendre l'envoi des photos</button>`;
   } else {
     lienHtml=`<div class="grouplab" style="margin-top:18px">Lien de la galerie</div>
-      <div class="card" style="padding:12px 15px;font-size:13px;word-break:break-all"><a href="${esc(adresse)}" target="_blank" rel="noopener">${esc(adresse)}</a></div>
+      <div class="card" style="padding:12px 15px;font-size:13px;word-break:break-all"><span style="user-select:all">${esc(adresse)}</span></div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
-        <a class="btn ghost sm" style="flex:1" href="${esc(adresse)}" target="_blank" rel="noopener">Ouvrir</a></div>`;
+        <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a></div>`;
   }
 
   /* la selection */

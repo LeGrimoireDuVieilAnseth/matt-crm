@@ -77,8 +77,12 @@ export default async (request) => {
   if (g.statut === "preparation") return json({ ok: false, erreur: "preparation" }, 409);
 
   if (request.method === "GET") {
-    /* La premiere ouverture : Matt sait ainsi que le lien a ete vu. */
-    if (!g.vueAt) { g.vueAt = Date.now(); try { await enregistrer(store, g); } catch (e) {} }
+    /* La premiere ouverture : Matt sait ainsi que le lien a ete vu. Sauf
+       son propre apercu depuis le CRM (&apercu=1), qui ne doit pas faire
+       croire que la cliente est passee. */
+    if (!g.vueAt && url.searchParams.get("apercu") !== "1") {
+      g.vueAt = Date.now(); try { await enregistrer(store, g); } catch (e) {}
+    }
     return json({ ok: true, galerie: vuePublique(g), grille: grillePublique() });
   }
   if (request.method !== "POST") return json({ ok: false, erreur: "methode" }, 405);
