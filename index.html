@@ -3969,8 +3969,38 @@ function openPreparerGalerie(clientId){
         <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpDossier').click()">Choisir un dossier</button>
       </div>
       <div id="gpResume" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5"></div></div>
+    ${allegementPossible()?`<div class="field">
+      <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:var(--ink)">
+        <input type="checkbox" id="gpAllege" onchange="galAllegeCoche(this)" style="margin-top:2px;width:auto">
+        <span><b>Créer aussi les photos allégées pour SwissTransfer</b><br>
+        <span style="font-weight:400;color:var(--ink-3);font-size:12.5px">Même définition, qualité 92 % : environ 4 fois plus léger, sans différence visible. Tes originaux ne sont pas touchés.</span></span></label>
+      <div id="gpAllegeOu" style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.5"></div></div>`
+    :`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">Sur ordinateur avec Chrome ou Edge, le CRM peut aussi alléger tes photos pour SwissTransfer, en même temps.</div>`}
     <div id="gpProgres"></div>
     <button class="btn wide" id="gpGo" onclick="lancerGalerie()">Créer la galerie</button>`);
+}
+
+/* La case cochee : Matt choisit ou ranger les copies (en general le dossier
+   de la seance). Le sous-dossier n'est cree qu'au lancement. */
+async function galAllegeCoche(cb){
+  if(!galPrep) return;
+  if(!cb.checked){ galPrep.parent=null; majAllegeOuGal(); return; }
+  const d=await choisirRangementAl();
+  if(!d){ cb.checked=false; galPrep.parent=null; majAllegeOuGal(); return; }
+  galPrep.parent=d; majAllegeOuGal();
+}
+/* Changer d'emplacement : si Matt ferme la fenetre, on garde le precedent. */
+async function galAllegeChanger(){
+  if(!galPrep) return;
+  const d=await choisirRangementAl();
+  if(d){ galPrep.parent=d; majAllegeOuGal(); }
+}
+function majAllegeOuGal(){
+  const el=document.getElementById("gpAllegeOu"); if(!el||!galPrep) return;
+  if(!galPrep.parent){ el.innerHTML=""; return; }
+  const c=clientById(galPrep.clientId);
+  el.innerHTML=`Dans <b>${esc(galPrep.parent.name)}</b>, un nouveau dossier <b>${esc(nomDossierAllegeAl(galPrep.fichiers,"Photos "+((c&&c.name)||"")))}</b>.
+    <a style="cursor:pointer;text-decoration:underline" onclick="galAllegeChanger()">Changer</a>`;
 }
 
 /* Les fichiers retenus : des photos, dans l'ordre des noms (celui de
@@ -3978,6 +4008,9 @@ function openPreparerGalerie(clientId){
 function trierFichiersGal(liste){
   const ok=/\.(jpe?g|png|webp)$/i, vus=new Set(), photos=[], ignores=[];
   [...liste].forEach(f=>{
+    /* Le sous-dossier des copies allegees, si Matt choisit le dossier
+       parent : sans ca, chaque photo arriverait deux fois. */
+    if(f.webkitRelativePath && f.webkitRelativePath.split("/").slice(0,-1).some(d=>d.endsWith(ALLEGE_SUFFIXE))) return;
     if(!(/^image\/(jpeg|png|webp)$/.test(f.type) || ok.test(f.name))){ if(!/^\./.test(f.name)) ignores.push(f.name); return; }
     const cle=f.name+"|"+f.size; if(vus.has(cle)) return; vus.add(cle);
     photos.push(f);
@@ -3990,6 +4023,7 @@ function galFichiersChoisis(input){
   const {photos,ignores}=trierFichiersGal(input.files||[]);
   input.value="";
   galPrep.fichiers=photos.slice(0,GAL_PHOTOS_MAX);
+  majAllegeOuGal();
   const r=document.getElementById("gpResume"); if(!r) return;
   if(!photos.length){ r.innerHTML=`<span style="color:var(--danger)">Aucune photo JPEG dans ce choix.</span>`; return; }
   const mo=photos.reduce((s,f)=>s+f.size,0)/1048576;
@@ -4031,13 +4065,242 @@ async function jpegGal(source,{cote,qualite,plafond}){
   for(let i=0;i<buf.length;i+=0x8000) bin+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));
   return {b64:btoa(bin),canvas:cv};
 }
-async function allegerPhotoGal(fichier){
+async function allegerPhotoGal(fichier,sortie){
   const img=await decoderPhotoGal(fichier);
-  const v=await jpegGal(img,GAL_APERCU);
-  if(img.close) img.close();
-  const t=await jpegGal(v.canvas,GAL_VIGNETTE);
-  return {v:v.b64,t:t.b64};
+  let allege=null;
+  try{
+    /* La copie pleine definition d'abord, pendant que la photo est lue.
+       Un echec d'ecriture arrete tout (disque plein) ; une photo que le
+       navigateur ne sait pas reenregistrer garde au moins sa place dans la
+       galerie. */
+    if(sortie && estJpegAl(fichier)){
+      try{
+        const octets=await pleineDefinitionAl(img,fichier);
+        await ecrireAl(sortie,fichier.name,octets);
+        allege={avant:fichier.size,apres:octets.length};
+      }catch(e){ if(e.ecriture) throw e; allege={rate:true}; }
+    }
+    const v=await jpegGal(img,GAL_APERCU);
+    const t=await jpegGal(v.canvas,GAL_VIGNETTE);
+    return {v:v.b64,t:t.b64,allege};
+  }finally{ if(img.close) img.close(); }
 }
+
+/* ---------- l'allegement en pleine definition, pour SwissTransfer ----------
+   Choix de Matt (20/10/2026) : qualite 92 %, MEME definition. Mesure sur
+   une seance de son Sony A7R V (60 Mpx, JPEG enregistre en qualite 99,
+   37 Mo la photo) : -75 % de poids, aucune difference visible a 100 %.
+
+   LES ORIGINAUX NE SONT JAMAIS TOUCHES : les copies vont dans un
+   sous-dossier cree pour elles ("<dossier> - allégées"), jamais a cote des
+   originaux, et trierFichiersGal ignore ce sous-dossier si Matt rechoisit
+   le dossier parent. Les informations de l'appareil (EXIF, XMP, profil
+   couleur) sont recopiees depuis l'original.
+
+   Reserve a Chrome et Edge sur ordinateur : il faut pouvoir ecrire dans un
+   dossier (showDirectoryPicker). */
+const ALLEGE_QUALITE=0.92;
+const ALLEGE_SUFFIXE=" - allégées";
+const allegementPossible=()=>typeof window.showDirectoryPicker==="function";
+const estJpegAl=f=>/\.jpe?g$/i.test(f.name)||f.type==="image/jpeg";
+
+/* Les segments d'en-tete d'un JPEG, jusqu'au debut de l'image. */
+function segmentsJpegAl(b){
+  const out=[];
+  let i=2;
+  while(i<b.length-4){
+    if(b[i]!==0xFF) break;
+    const m=b[i+1];
+    if(m===0xDA) break;
+    const len=(b[i+2]<<8)|b[i+3];
+    out.push({m,debut:i,fin:i+2+len,data:b.subarray(i+4,i+2+len)});
+    i+=2+len;
+  }
+  return out;
+}
+const texteAl=(d,n)=>String.fromCharCode.apply(null,d.subarray(0,n));
+const estExifAl=s=>s.m===0xE1&&texteAl(s.data,4)==="Exif";
+const estXmpAl=s=>s.m===0xE1&&texteAl(s.data,28)==="http://ns.adobe.com/xap/1.0/";
+const estIccAl=s=>s.m===0xE2&&texteAl(s.data,11)==="ICC_PROFILE";
+
+/* Le navigateur rend toujours la photo redressee (verifie sous Chrome 152,
+   meme en lui demandant de ne pas le faire). Les pixels de la copie sont
+   donc droits : l'orientation EXIF passe a 1 ("normal"), sinon les
+   logiciels la tourneraient une seconde fois. La petite vignette EXIF est
+   restee couchee : on la detache, l'Explorateur Windows l'afficherait de
+   travers. Travaille sur une COPIE du segment. */
+function exifRedresseAl(seg){
+  const s=seg.slice(), t=10;           // FF E1 LL LL "Exif\0\0", puis l'en-tete TIFF
+  const le=s[t]===0x49;
+  const u16=o=>le?s[t+o]|(s[t+o+1]<<8):(s[t+o]<<8)|s[t+o+1];
+  const u32=o=>le?(s[t+o]|(s[t+o+1]<<8)|(s[t+o+2]<<16)|(s[t+o+3]<<24))>>>0
+                 :((s[t+o]<<24)|(s[t+o+1]<<16)|(s[t+o+2]<<8)|s[t+o+3])>>>0;
+  const ifd0=u32(4);
+  if(ifd0+2>s.length-t) return seg;
+  const n=u16(ifd0);
+  if(ifd0+2+n*12+4>s.length-t) return seg;
+  for(let k=0;k<n;k++){
+    const e=ifd0+2+k*12;
+    if(u16(e)===0x0112){ if(le){ s[t+e+8]=1; s[t+e+9]=0; } else { s[t+e+8]=0; s[t+e+9]=1; } }
+  }
+  const suivant=ifd0+2+n*12;
+  for(let k=0;k<4;k++) s[t+suivant+k]=0;
+  return s;
+}
+/* L'en-tete de l'original greffe sur le JPEG reencode, a la place de son
+   en-tete JFIF. L'apercu MPF que Sony range apres l'image n'est pas repris :
+   il ne sert plus a rien. */
+function grefferAl(original,nouveau){
+  const garde=segmentsJpegAl(original).filter(s=>estExifAl(s)||estXmpAl(s)||estIccAl(s));
+  const jfif=segmentsJpegAl(nouveau).filter(s=>s.m===0xE0);
+  const coupe=jfif.length?jfif[jfif.length-1].fin:2;
+  const morceaux=[nouveau.subarray(0,2),
+    ...garde.map(s=>estExifAl(s)?exifRedresseAl(original.subarray(s.debut,s.fin)):original.subarray(s.debut,s.fin)),
+    nouveau.subarray(coupe)];
+  const out=new Uint8Array(morceaux.reduce((a,x)=>a+x.length,0));
+  let p=0; morceaux.forEach(x=>{ out.set(x,p); p+=x.length; });
+  return out;
+}
+/* La photo entiere, reenregistree. Si la copie ne gagne presque rien (une
+   photo deja compressee), on garde l'original tel quel. */
+async function pleineDefinitionAl(img,fichier){
+  const original=new Uint8Array(await fichier.arrayBuffer());
+  const w=img.width||img.naturalWidth, h=img.height||img.naturalHeight;
+  const cv=document.createElement("canvas");
+  cv.width=w; cv.height=h;
+  cv.getContext("2d").drawImage(img,0,0);
+  const blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",ALLEGE_QUALITE));
+  cv.width=1; cv.height=1;             // rend tout de suite la memoire (60 Mpx = 240 Mo)
+  if(!blob) throw new Error("photo trop grande pour ce navigateur");
+  const copie=grefferAl(original,new Uint8Array(await blob.arrayBuffer()));
+  return copie.length<original.length*0.95?copie:original;
+}
+/* Le nom du sous-dossier : celui du dossier choisi, suivi de "- allégées". */
+function nomDossierAllegeAl(fichiers,repli){
+  const f=fichiers.find(x=>x.webkitRelativePath);
+  const base=f?f.webkitRelativePath.split("/")[0]:(repli||"Photos");
+  return (base.replace(/[\\/:*?"<>|]/g," ").replace(/\s+/g," ").trim().slice(0,80)||"Photos")+ALLEGE_SUFFIXE;
+}
+/* Ou ranger les copies : Matt choisit un dossier (en general celui de la
+   seance), on y creera le sous-dossier au moment de commencer. */
+async function choisirRangementAl(){
+  try{ return await window.showDirectoryPicker({id:"mbs-allegees",mode:"readwrite"}); }
+  catch(e){ return null; }        // fenetre fermee sans choisir
+}
+async function ouvrirSousDossierAl(parent,nom){
+  let droit="granted";
+  try{ droit=await parent.queryPermission({mode:"readwrite"}); }catch(e){}
+  if(droit!=="granted"){ try{ droit=await parent.requestPermission({mode:"readwrite"}); }catch(e){} }
+  if(droit!=="granted") throw new Error("le CRM n'a pas le droit d'écrire dans ce dossier");
+  return parent.getDirectoryHandle(nom,{create:true});
+}
+async function ecrireAl(dossier,nom,octets){
+  try{
+    const fh=await dossier.getFileHandle(nom,{create:true});
+    const w=await fh.createWritable();
+    await w.write(octets); await w.close();
+  }catch(e){
+    const err=new Error("impossible d'écrire "+nom+" ("+(e&&e.name==="QuotaExceededError"?"disque plein":(e&&e.message)||"erreur")+")");
+    err.ecriture=true; throw err;
+  }
+}
+const goAl=o=>o>=1073741824?(o/1073741824).toFixed(1).replace(".",",")+" Go":Math.round(o/1048576)+" Mo";
+
+/* ---------- l'outil seul, depuis le "+" de l'accueil ----------
+   Pour un mariage, ou une seance dont la galerie est deja faite : alleger
+   un dossier sans rien mettre en ligne. */
+let alSeul=null;
+function openAllegerPhotos(){
+  if(!allegementPossible()){
+    alert("Pour alléger des photos, ouvre le CRM sur ordinateur, avec Chrome ou Edge : il faut pouvoir écrire dans un dossier de ton PC.");
+    return;
+  }
+  if(alSeul && alSeul.enCours){ alert("Un allègement est déjà en cours. Attends qu'il se termine."); return; }
+  alSeul={fichiers:[],parent:null,enCours:false};
+  openModal(`<h2>Alléger des photos</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Pour les envoyer par SwissTransfer. Même définition, qualité 92 % : environ 4 fois plus léger,
+      sans différence visible. <b>Tes originaux ne sont pas touchés</b> : les copies vont dans un nouveau dossier.</div>
+    <div class="field"><label>Les photos *</label>
+      <input type="file" id="alDossier" webkitdirectory multiple style="display:none" onchange="alPhotosChoisies(this)">
+      <button class="btn ghost sm wide" onclick="document.getElementById('alDossier').click()">Choisir le dossier de photos</button>
+      <div id="alResume" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5"></div></div>
+    <div class="field"><label>Où ranger les photos allégées *</label>
+      <button class="btn ghost sm wide" onclick="alRangement()">Choisir l'emplacement</button>
+      <div id="alOu" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5">En général, le dossier de la séance : le CRM y crée un nouveau dossier « … - allégées ».</div></div>
+    <div id="gpProgres"></div>
+    <button class="btn wide" id="alGo" onclick="lancerAllegement()">Alléger</button>`);
+}
+function alPhotosChoisies(input){
+  if(!alSeul) return;
+  const {photos}=trierFichiersGal(input.files||[]);
+  input.value="";
+  alSeul.fichiers=photos.filter(estJpegAl);
+  const r=document.getElementById("alResume"); if(!r) return;
+  if(!alSeul.fichiers.length){ r.innerHTML=`<span style="color:var(--danger)">Aucune photo JPEG dans ce dossier.</span>`; return; }
+  r.innerHTML=`<b>${alSeul.fichiers.length} photos</b>, ${goAl(alSeul.fichiers.reduce((s,f)=>s+f.size,0))}.`;
+  majOuAl();
+}
+async function alRangement(){
+  if(!alSeul) return;
+  const d=await choisirRangementAl(); if(!d) return;
+  alSeul.parent=d; majOuAl();
+}
+function majOuAl(){
+  const el=document.getElementById("alOu"); if(!el||!alSeul||!alSeul.parent) return;
+  el.innerHTML=`Dans <b>${esc(alSeul.parent.name)}</b>, un nouveau dossier <b>${esc(nomDossierAllegeAl(alSeul.fichiers,"Photos"))}</b>.`;
+}
+async function lancerAllegement(){
+  const a=alSeul; if(!a||a.enCours) return;
+  if(!a.fichiers.length){ alert("Choisis le dossier de photos."); return; }
+  if(!a.parent){ alert("Choisis où ranger les photos allégées."); return; }
+  const go=document.getElementById("alGo");
+  let dossier;
+  try{ dossier=await ouvrirSousDossierAl(a.parent,nomDossierAllegeAl(a.fichiers,"Photos")); }
+  catch(e){ alert("Impossible de créer le dossier : "+e.message); return; }
+  a.enCours=true; go.disabled=true; go.textContent="Allègement en cours...";
+  let verrou=null;
+  try{ if(navigator.wakeLock) verrou=await navigator.wakeLock.request("screen"); }catch(e){}
+  const quitter=e=>{ e.preventDefault(); e.returnValue=""; };
+  window.addEventListener("beforeunload",quitter);
+  let avant=0, apres=0, fait=0, illisibles=[], erreur="";
+  try{
+    for(const f of a.fichiers){
+      progresGal(fait,a.fichiers.length,"Photo "+nomDeFichierGal(f.name));
+      let img;
+      try{ img=await decoderPhotoGal(f); }catch(e){ illisibles.push(f.name); fait++; continue; }
+      try{
+        const octets=await pleineDefinitionAl(img,f);
+        await ecrireAl(dossier,f.name,octets);
+        avant+=f.size; apres+=octets.length;
+      }catch(e){ if(e.ecriture) throw e; illisibles.push(f.name); }
+      finally{ if(img.close) img.close(); }
+      fait++;
+    }
+  }catch(e){ erreur=e.message; }
+  finally{
+    a.enCours=false;
+    window.removeEventListener("beforeunload",quitter);
+    try{ if(verrou) verrou.release(); }catch(e){}
+  }
+  if(!document.getElementById("alGo")){ toast(erreur?"Allègement interrompu":"Photos allégées : "+goAl(avant)+" → "+goAl(apres)); return; }
+  if(erreur){
+    progresGal(fait,a.fichiers.length,"Allègement interrompu",erreur+". Libère de la place si besoin, puis relance : les photos déjà faites sont simplement réécrites.");
+    go.disabled=false; go.textContent="Relancer";
+    return;
+  }
+  alSeul=null;
+  openModal(`<h2>Photos allégées</h2>
+    <div class="card" style="padding:14px 16px;font-size:14px;line-height:1.6">
+      <b>${fait-illisibles.length} photos</b> : ${goAl(avant)} → <b>${goAl(apres)}</b>
+      (${avant?Math.round((1-apres/avant)*100):0} % de moins).<br>
+      Dans <b>${esc(a.parent.name)}</b> › <b>${esc(dossier.name)}</b>.
+      ${illisibles.length?`<div style="color:var(--danger);margin-top:6px">${illisibles.length} photo(s) illisible(s), non copiée(s) : ${esc(illisibles.slice(0,5).join(", "))}${illisibles.length>5?"...":""}</div>`:""}
+    </div>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin:12px 0">Envoie ce dossier sur SwissTransfer, puis colle le lien dans la galerie de la cliente (onglet Galeries).</div>
+    <a class="btn wide" href="https://www.swisstransfer.com/fr" target="_blank" rel="noopener">Ouvrir SwissTransfer</a>`);
+}
+
 
 function progresGal(fait,total,texte,erreur){
   const el=document.getElementById("gpProgres"); if(!el) return;
@@ -4069,6 +4332,13 @@ async function lancerGalerie(){
   if(!p.fichiers.length){ alert("Choisis les photos de la séance."); return; }
   if(transfert && !/^https:\/\//i.test(transfert)){ alert("Le lien de téléchargement doit commencer par https://"); return; }
   const go=document.getElementById("gpGo");
+  if(p.parent){
+    const c=clientById(p.clientId);
+    try{ p.sortie=await ouvrirSousDossierAl(p.parent,nomDossierAllegeAl(p.fichiers,"Photos "+((c&&c.name)||""))); }
+    catch(e){ alert("Impossible de créer le dossier des photos allégées : "+e.message); return; }
+    p.allegees=new Set(); p.allege={avant:0,apres:0,nb:0,rates:[]};
+  }
+  p.transfert=transfert;
   go.disabled=true; go.textContent="Création de la galerie...";
   try{
     const {statut,j}=await appelGal({action:"creer",clientId:p.clientId,formule,seance,transfert,
@@ -4081,7 +4351,7 @@ async function lancerGalerie(){
     p.jeton=j.jeton; p.photos=j.photos; p.adresse=j.adresse;
     galeriesLu=0;
     /* On ne revient plus en arriere : les champs se figent. */
-    ["gpFormule","gpSeance","gpTransfert"].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=true; });
+    ["gpFormule","gpSeance","gpTransfert","gpAllege"].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=true; });
     document.querySelectorAll("#gpFichiers,#gpDossier").forEach(e=>e.disabled=true);
     await envoyerPhotosGal(p);
   }catch(e){
@@ -4124,17 +4394,27 @@ async function envoyerPhotosGal(p){
       throw dernier||new Error("envoi impossible");
     };
     for(const {ph,f} of aFaire){
-      progresGal(p.recues.size+paquet.length,total,"Photo "+ph.nom);
+      progresGal(p.recues.size+paquet.length,total,"Photo "+ph.nom+(p.sortie?" · allégée":""));
       let it;
-      try{ const a=await allegerPhotoGal(f); it={id:ph.id,t:a.t,v:a.v}; }
-      catch(e){ refusees.push(ph.id); continue; }
+      try{
+        const a=await allegerPhotoGal(f,(p.sortie && !p.allegees.has(ph.id))?p.sortie:null);
+        it={id:ph.id,t:a.t,v:a.v};
+        if(a.allege){
+          p.allegees.add(ph.id);
+          if(a.allege.rate) p.allege.rates.push(ph.nom);
+          else { p.allege.avant+=a.allege.avant; p.allege.apres+=a.allege.apres; p.allege.nb++; }
+        }
+      }
+      catch(e){ if(e.ecriture) throw e; refusees.push(ph.id); continue; }
       const taille=it.t.length+it.v.length;
       if(paquet.length && (paquet.length>=GAL_ENVOI_MAX_PHOTOS || poids+taille>GAL_ENVOI_MAX_OCTETS)) await vider();
       paquet.push(it); poids+=taille;
     }
     await vider();
   }catch(e){
-    erreur=e.message==="cle"?"":("Envoi interrompu ("+e.message+"). Vérifie ta connexion, puis reprends : les photos déjà envoyées ne repartent pas.");
+    erreur=e.message==="cle"?"":e.ecriture
+      ?("Copie allégée impossible : "+e.message+". Libère de la place sur le disque, puis reprends : rien n'est perdu.")
+      :("Envoi interrompu ("+e.message+"). Vérifie ta connexion, puis reprends : les photos déjà envoyées ne repartent pas.");
   }finally{
     p.enCours=false;
     window.removeEventListener("beforeunload",quitter);
@@ -4159,7 +4439,7 @@ async function envoyerPhotosGal(p){
     const {j}=await appelGal({action:"publier",g:p.jeton});
     if(!j.ok) throw new Error(j.error||"publication refusée");
     galeriesLu=0;
-    if(ouverte()) galeriePrete(p.clientId,j.adresse||p.adresse,total);
+    if(ouverte()) galeriePrete(p.clientId,j.adresse||p.adresse,total,p);
     else { galPrep=null; toast("La galerie de "+qui+" est en ligne"); }
   }catch(e){
     if(e.message==="cle") return;
@@ -4187,9 +4467,24 @@ async function preRemplirGalerieMail(clientId){
   if(n) n.textContent="La galerie Mybabyshoot de "+(c.name||"la cliente")+", préparée le "+dateGal(g.createdAt)+".";
 }
 
-function galeriePrete(clientId,adresse,nb){
+function galeriePrete(clientId,adresse,nb,p){
   galPrep=null;
   const c=clientById(clientId);
+  const al=p&&p.allege, jeton=p&&p.jeton;
+  /* Les photos allegees, et le lien SwissTransfer a coller des qu'il existe :
+     il s'affiche alors dans sa galerie ("Telecharger toutes les photos"). */
+  const blocTransfert=(jeton && !(p.transfert))?`
+    <div class="grouplab" style="margin-top:4px">${al&&al.nb?"Photos allégées pour SwissTransfer":"Lien pour tout télécharger"}</div>
+    ${al&&al.nb?`<div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;margin-bottom:8px">
+      <b>${al.nb} photos</b> : ${goAl(al.avant)} → <b>${goAl(al.apres)}</b> (${al.avant?Math.round((1-al.apres/al.avant)*100):0} % de moins).<br>
+      Dans <b>${esc(p.parent.name)}</b> › <b>${esc(p.sortie.name)}</b>.
+      ${al.rates.length?`<div style="color:var(--danger);margin-top:6px">${al.rates.length} photo(s) non allégée(s), à envoyer telles quelles : ${esc(al.rates.slice(0,5).join(", "))}</div>`:""}
+    </div>`:""}
+    <div style="font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:8px">${al&&al.nb?"Envoie ce dossier sur SwissTransfer, puis colle le lien ici :":"Colle ici le lien WeTransfer ou SwissTransfer de toutes les photos :"}</div>
+    <div class="field" style="margin-bottom:8px"><input id="gpLienFin" type="url" inputmode="url" autocomplete="off" placeholder="https://www.swisstransfer.com/d/..."></div>
+    <div id="gpLienFinOk" style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn ghost sm" style="flex:1" onclick="enregistrerLienFinGal('${esc(jeton)}')">Enregistrer le lien</button>
+      <a class="btn ghost sm" style="flex:1" href="https://www.swisstransfer.com/fr" target="_blank" rel="noopener">Ouvrir SwissTransfer</a></div>`:"";
   openModal(`<h2>La galerie est en ligne</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       ${nb} photos${c?" pour <b>"+esc(c.name)+"</b>":""}. Elle reste en ligne 3 mois.</div>
@@ -4199,9 +4494,24 @@ function galeriePrete(clientId,adresse,nb){
       <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
       <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a>
     </div>
+    ${blocTransfert}
     ${c&&c.email?`<button class="btn wide" onclick="closeModal();openMailFinal('${esc(clientId)}')">Envoyer galerie + facture</button>
     <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">Le lien de la galerie est déjà rempli dans le mail.</div>`:""}`);
   if(galeriesVisibles()) renderGaleriesList();
+}
+
+async function enregistrerLienFinGal(jeton){
+  const champ=document.getElementById("gpLienFin"); if(!champ) return;
+  const lien=champ.value.trim();
+  if(!/^https:\/\//i.test(lien)){ alert("Colle le lien SwissTransfer (il commence par https://)."); return; }
+  try{
+    const {j}=await appelGal({action:"transfert",g:jeton,lien});
+    if(!j.ok){ alert("Lien refusé."); return; }
+    galeriesLu=0;
+    const ok=document.getElementById("gpLienFinOk");
+    if(ok) ok.innerHTML=`<div style="font-size:13px;color:var(--ok);font-weight:600">Lien enregistré : il apparaît dans sa galerie.</div>`;
+    champ.disabled=true;
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
 }
 
 /* Le lien que Matt ouvre lui-meme : l'apercu (&apercu=1), ou ses essais ne
@@ -6171,6 +6481,7 @@ function openAddMenu(){
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerCodeResa()"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Générer un code de réservation</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerBonManuel()"><svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>Créer un bon cadeau</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openAllegerPhotos()"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Alléger des photos pour SwissTransfer</button>
     </div>`);
 }
 
