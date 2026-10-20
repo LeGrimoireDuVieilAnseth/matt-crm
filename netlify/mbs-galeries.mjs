@@ -215,8 +215,10 @@ export async function supprimerGalerie(store, g) {
   } catch (e) {}
 }
 
-/* Le texte de la selection, pour la tache du CRM et la notification. */
-export function texteSelection(g) {
+/* Le texte de la selection, pour la tache du CRM et la notification.
+   photosSeules : le rappel d'une commande payee donne deja les tirages et
+   l'adresse (lignes du lien de paiement) ; on ne les repete pas. */
+export function texteSelection(g, { photosSeules = false } = {}) {
   const s = g.selection; if (!s) return "";
   const nom = Object.fromEntries(g.photos.map(p => [p.id, p.nom]));
   const lignes = [];
@@ -224,6 +226,7 @@ export function texteSelection(g) {
     + (s.coeurs.length > 1 ? "s" : "") + (g.quota ? " (" + g.quota + " comprises dans la formule "
     + NOM_FORMULE[g.formule] + ")" : " (formule Prestige)") + " :");
   if (s.coeurs.length) lignes.push(s.coeurs.map(id => nom[id] || id).join(", "));
+  if (photosSeules) return lignes.join("\n");
   if (s.tiragesTexte) lignes.push("", "Tirages :", s.tiragesTexte);
   if (s.adresseTexte) lignes.push("", "À poster à :", s.adresseTexte);
   return lignes.join("\n");

@@ -21,7 +21,7 @@ import Stripe from "stripe";
 import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton,
          idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection,
          NOM_FORMULE, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
-import { calculerPanier, grillePublique, TAILLES, PHOTOS_MAX } from "../mbs-panier.mjs";
+import { calculerPanier, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
 import { lienStore, creerLien, memoriserPanier, LIEN_MIN, LIEN_MAX, LIEN_SEUIL_3X } from "../mbs-liens.mjs";
 import { ouvrirSessionPanier } from "../mbs-paiement-panier.mjs";
 import { porteFermee, noterEchec, LIMITE_CODES } from "../mbs-garde.mjs";
@@ -114,6 +114,13 @@ export default async (request) => {
   }
   const tir = tiragesParTaille(g, corps.tirages, TAILLES);
   const aDuPapier = Object.keys(tir.totaux).length > 0;
+  /* Le panier ramene chaque taille a TIRAGES_MAX sans rien dire : 40 tirages
+     demandes en 20 x 30 en auraient fait payer 30. On refuse plutot. */
+  const tropDe = TAILLES.filter(t => (tir.totaux[t.cle] || 0) > TIRAGES_MAX);
+  if (tropDe.length) {
+    return json({ ok: false, erreur: "trop_de_tirages", messages: tropDe.map(t =>
+      "Au plus " + TIRAGES_MAX + " tirages en " + t.nom + " par commande. Pour davantage, appelez Matteo au 06 47 76 54 17.") }, 400);
+  }
   if (!coeurs.length && !aDuPapier && g.quota) {
     return json({ ok: false, erreur: "vide", messages: ["Choisissez vos photos avant de valider."] }, 400);
   }

@@ -143,7 +143,7 @@ export function calculerPanier({ formules = [], extras = {}, choix = {} }) {
       const numeros = propre(num[t.cle], 200);
       /* Sans les numeros, Matt ne saurait pas quoi imprimer : on refuse
          plutot que d'encaisser une commande inexecutable. */
-      if (!numeros) erreurs.push("Indique les numéros des photos à tirer en " + t.nom + ".");
+      if (!numeros) erreurs.push("Indiquez les numéros des photos à tirer en " + t.nom + ".");
       const montant = n * t.prix;
       totalTirages += montant; nbTirages += n;
       lignes.push({
@@ -171,9 +171,9 @@ export function calculerPanier({ formules = [], extras = {}, choix = {} }) {
     cp: propre(a.cp, 12), ville: propre(a.ville, 80),
   };
   if (nbTirages > 0) {
-    if (!adresse.nom) erreurs.push("Indique le nom inscrit sur la boîte aux lettres.");
-    if (!adresse.ligne1) erreurs.push("Indique l'adresse postale.");
-    if (!adresse.cp || !adresse.ville) erreurs.push("Indique le code postal et la ville.");
+    if (!adresse.nom) erreurs.push("Indiquez le nom inscrit sur la boîte aux lettres.");
+    if (!adresse.ligne1) erreurs.push("Indiquez l'adresse postale.");
+    if (!adresse.cp || !adresse.ville) erreurs.push("Indiquez le code postal et la ville.");
   }
 
   const total = lignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);

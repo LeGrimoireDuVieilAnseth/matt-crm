@@ -207,7 +207,7 @@ async function traiterLien(session, md) {
           + (adresseTexte ? "\n\nÀ POSTER À :\n" + adresseTexte : "")
           /* La selection entiere : les photos comprises dans la formule ne
              figurent pas dans le panier paye. */
-          + (gal ? "\n\nSA SÉLECTION :\n" + texteSelection(gal)
+          + (gal ? "\n\nSA SÉLECTION :\n" + texteSelection(gal, { photosSeules: true })
               + "\n\nLes miniatures et les numéros : CRM > Galeries." : "")
           + "\n\nÀ faire : " + (gal
               ? "retoucher sa sélection" + (adresseTexte ? ", préparer et poster les tirages." : ".")
