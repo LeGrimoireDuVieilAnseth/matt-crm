@@ -222,6 +222,17 @@ export default async (request) => {
     return json({ ok: true, envoye });
   }
 
+  /* ---------- la photo de couverture ----------
+     Choisie par Matt dans le CRM. Vide : la galerie prend la premiere photo
+     en paysage. */
+  if (corps.action === "couverture") {
+    const id = String(corps.id || "");
+    if (id && !(idPhotoValide(id) && g.photos.some(p => p.id === id))) return json({ ok: false, error: "photo" }, 400);
+    g.couverture = id;
+    await enregistrer(store, g);
+    return json({ ok: true, couverture: id });
+  }
+
   /* ---------- supprimer ---------- */
   if (corps.action === "supprimer") {
     await supprimerGalerie(store, g);

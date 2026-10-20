@@ -209,7 +209,7 @@ export function vuePublique(g) {
       coeurs: s.coeurs, tirages: s.tirages || {}, at: s.at,
       enAttente: !!s.enAttente, paye: !!s.paye, montant: s.montant || 0,
     } : null,
-    statut: g.statut, expiresAt: g.expiresAt,
+    statut: g.statut, expiresAt: g.expiresAt, couverture: g.couverture || "",
   };
 }
 

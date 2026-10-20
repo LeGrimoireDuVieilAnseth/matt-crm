@@ -4435,6 +4435,19 @@ function dessinerGalerie(){
   }
 
   h+=lienHtml;
+  /* La photo de couverture : celle que Matt a choisie, sinon la premiere en
+     paysage (meme regle que la page de la cliente, photoDeCouverture). */
+  if(g.statut!=="preparation"){
+    const c=couvertureGal(g);
+    h+=`<div class="grouplab" style="margin-top:18px">Photo de couverture</div>
+      <div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
+        ${c?`<img src="${esc(vignetteGal(g.jeton,c.id))}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;background:var(--surface-3);flex:none">`:""}
+        <div style="flex:1;min-width:0;font-size:13px;line-height:1.5">
+          <b>${esc(c?c.nom:"")}</b><br>
+          <span style="color:var(--ink-3)">${g.couverture?"Choisie par toi.":"Choisie automatiquement (la première en paysage)."}</span></div>
+      </div>
+      <button class="btn ghost sm wide" style="margin-top:8px" onclick="choisirCouvertureGal()">Changer la photo de couverture</button>`;
+  }
   if(g.statut!=="preparation"){
     /* le lien "tout telecharger" */
     h+=`<div class="grouplab" style="margin-top:18px">Toutes les photos en pleine qualité</div>
@@ -4552,6 +4565,44 @@ async function envoyerMailRetouches(){
   go.disabled=true; go.textContent="Envoi en cours...";
   const ok=await enregistrerRetouchesGal(galOuverte.lienRetouches,true,texte);
   if(!ok && document.getElementById("mrGo")){ go.disabled=false; go.textContent="Envoyer"; }
+}
+
+function couvertureGal(g){
+  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id));
+  return (g.couverture && recues.find(p=>p.id===g.couverture)) || recues.find(p=>Number(p.r)>1.2) || recues[0] || null;
+}
+/* Toutes les miniatures, a leur format : Matt touche celle qui accueillera
+   sa cliente. */
+function choisirCouvertureGal(){
+  const {g}=galOuverte;
+  const actuelle=(couvertureGal(g)||{}).id;
+  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id));
+  openModal(`<h2>Photo de couverture</h2>
+    <div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:12px">
+      Touche la photo qui accueillera ta cliente, en grand, avec son prénom.
+      Une photo en paysage rend le mieux : en portrait, le haut et le bas sont coupés.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${recues.map(p=>{
+        const r=Number(p.r)>0.2?Number(p.r):1.5;
+        return `<button onclick="definirCouvertureGal('${p.id}')" style="flex:${r} 1 ${Math.round(r*90)}px;aspect-ratio:${r};padding:0;border:3px solid ${p.id===actuelle?"var(--ok)":"transparent"};border-radius:10px;overflow:hidden;cursor:pointer;background:var(--surface-3);position:relative">
+          <img src="${esc(vignetteGal(g.jeton,p.id))}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+          <span style="position:absolute;left:4px;bottom:4px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(0,0,0,.5);padding:1px 6px;border-radius:99px">${esc(p.nom)}</span>
+        </button>`;
+      }).join("")}
+      <span style="flex:1000 1 0"></span>
+    </div>
+    ${g.couverture?`<button class="btn ghost sm wide" style="margin-top:12px" onclick="definirCouvertureGal('')">Revenir au choix automatique</button>`:""}
+    <button class="btn ghost wide" style="margin-top:8px" onclick="dessinerGalerie()">Retour</button>`);
+}
+async function definirCouvertureGal(id){
+  const {g}=galOuverte;
+  try{
+    const {j}=await appelGal({action:"couverture",g:g.jeton,id});
+    if(!j.ok){ alert("Photo refusée."); return; }
+    g.couverture=id;
+    toast(id?"Couverture choisie":"Couverture automatique");
+    dessinerGalerie();
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
 }
 
 async function supprimerGalerieCRM(){
