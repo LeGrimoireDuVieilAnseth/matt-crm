@@ -714,14 +714,8 @@
 <section id="chiffres" class="view">
   <div class="brandbar" id="chiffresBrandbar"></div>
   <div class="stat-grid" id="chiffresStats"></div>
-  <div class="section-title"><h2>Ce que rapporte chaque marque</h2><span class="count">à ce jour</span></div>
-  <div id="chiffresMarques"></div>
-  <div class="section-title"><h2>Évolution</h2></div>
-  <div id="chiffresGraph"></div>
   <div class="section-title"><h2>Mois par mois</h2></div>
   <div id="chiffresMois"></div>
-  <div class="section-title" id="pubTitre"><h2>Retour sur la publicité</h2><span class="count">Google Ads</span></div>
-  <div id="chiffresPub"></div>
   <p class="aide"><b>Valeur vendue</b> : ce que les clients ont commandé ce mois-là, en entier.
   <b>Rentré en caisse</b> : ce qui arrive vraiment sur le compte ce mois-là.<br>
   Une séance à 390 € réservée en août compte 390 € de valeur vendue en août, mais seulement
@@ -1384,80 +1378,6 @@ function moisCRM(ventes,marque){
   return [...m.values()].map(l=>Object.assign(l,{caisse:l.acomptes+l.soldes}))
     .sort((a,b)=>a.mois.localeCompare(b.mois));
 }
-function courbeCRM(lignes){
-  if(!lignes.length) return "";
-  const L=760,H=210,mg={g:44,d:10,h:12,b:26};
-  const series=[
-    {n:"Valeur vendue",c:"var(--lumiere)",v:lignes.map(l=>Math.round(l.vendu))},
-    {n:"Rentré en caisse",c:"var(--ok)",v:lignes.map(l=>Math.round(l.caisse))}];
-  const maxi=Math.max(1,...series.flatMap(s=>s.v));
-  const mini=0;
-  const x=i=>mg.g+(lignes.length===1?(L-mg.g-mg.d)/2:i*(L-mg.g-mg.d)/(lignes.length-1));
-  const y=v=>mg.h+(1-(v-mini)/(maxi-mini||1))*(H-mg.h-mg.b);
-  let g="";
-  for(let k=0;k<=3;k++){
-    const val=mini+(maxi-mini)*k/3, yy=y(val).toFixed(1);
-    g+=`<line x1="${mg.g}" y1="${yy}" x2="${L-mg.d}" y2="${yy}" class="grille"/>`;
-    g+=`<text x="${mg.g-6}" y="${(y(val)+3.5).toFixed(1)}" class="axe" text-anchor="end">${Math.round(val)}</text>`;
-  }
-  series.forEach(s=>{
-    g+=`<polyline points="${s.v.map((v,i)=>x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ")}" fill="none" stroke="${s.c}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-    g+=s.v.map((v,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${s.c}"/>`).join("");
-  });
-  lignes.forEach((l,i)=>{
-    if(lignes.length>10&&i%2) return;
-    g+=`<text x="${x(i).toFixed(1)}" y="${H-9}" class="axe" text-anchor="middle">${MOIS[Number(l.mois.slice(5,7))-1].slice(0,3)} ${l.mois.slice(2,4)}</text>`;
-  });
-  return `<div class="graphbox"><svg viewBox="0 0 ${L} ${H}">${g}</svg>
-    <div class="legende">${series.map(s=>`<span><i style="background:${s.c}"></i>${s.n}</span>`).join("")}</div></div>`;
-}
-/* Total d'une marque sur tout l'historique, charges comprises. */
-function bilanMarque(marque){
-  const v=ventesCRM(marque);
-  const vendu=v.reduce((s,x)=>s+x.total,0);
-  // l'encaisse vient du statut des paiements, pas des dates : c'est ce qui
-  // est vraiment sur le compte aujourd'hui
-  const caisse=v.reduce((s,x)=>s+x.encaisse,0);
-  return { marque, nb:v.length, vendu, caisse, reste:vendu-caisse };
-}
-function renderMarques(){
-  const box=document.getElementById("chiffresMarques");
-  // volontairement independant du filtre : c'est une comparaison
-  const bilans=BRAND_ORDER.map(bilanMarque);
-  const t={ vendu:0, caisse:0, reste:0, nb:0 };
-  bilans.forEach(b=>{ t.vendu+=b.vendu; t.caisse+=b.caisse; t.reste+=b.reste; t.nb+=b.nb; });
-  const ligne=(nom,b,gras)=>`<tr>
-    <td>${gras?"<b>"+nom+"</b>":nom}</td>
-    <td class="n">${b.nb||""}</td>
-    <td class="n"><b>${euros(b.vendu)}</b></td>
-    <td class="n">${euros(b.caisse)}</td>
-    <td class="n">${b.reste?'<span class="avenir">'+euros(b.reste)+"</span>":""}</td></tr>`;
-  if(DB.reglages && DB.reglages.accueilFil){
-    box.innerHTML=bilans.map(function(b){
-      return '<div class="ch-carte">'
-        +'<div class="h"><b>'+esc(BRANDS[b.marque].name)+'</b><span class="cs">'+(b.nb||0)+' vente'+(b.nb>1?"s":"")+'</span></div>'
-        +'<div class="g">'
-        +'<div class="fort"><span>Encaissé</span><b>'+euros(b.caisse)+'</b></div>'
-        +'<div><span>Valeur vendue</span><b>'+euros(b.vendu)+'</b></div>'
-        +(b.reste?'<div><span>Reste à encaisser</span><b>'+euros(b.reste)+'</b></div>':'')
-        +'</div></div>';
-    }).join("")
-    +'<div class="ch-carte" style="background:var(--surface-2)">'
-      +'<div class="h"><b>Les deux marques</b><span class="cs">'+t.nb+' vente'+(t.nb>1?"s":"")+'</span></div>'
-      +'<div class="g">'
-      +'<div class="fort"><span>Encaissé</span><b>'+euros(t.caisse)+'</b></div>'
-      +'<div><span>Valeur vendue</span><b>'+euros(t.vendu)+'</b></div>'
-      +(t.reste?'<div><span>Reste à encaisser</span><b>'+euros(t.reste)+'</b></div>':'')
-      +'</div></div>';
-    return;
-  }
-  box.innerHTML=`<div class="moisbox"><table class="moistab">
-    <tr><th>Marque</th><th class="n">Ventes</th><th class="n">Valeur vendue</th>
-        <th class="n">Encaissé</th><th class="n">Reste à encaisser</th></tr>
-    ${bilans.map(b=>ligne(BRANDS[b.marque].name,b,false)).join("")}
-    ${ligne("Total",t,true)}
-  </table></div>`;
-}
 /* ---------------------------------------------------------------
    TABLEAU DE VENTES EXPORTABLE
 
@@ -1786,17 +1706,14 @@ function renderChiffres(){
     <div class="stat"><div class="lab">Reste à encaisser</div><div class="num euro">${euros(reste)}</div><div class="foot">sur les séances à venir</div></div>
     <div class="stat"><div class="lab">Séances à venir</div><div class="num">${futures}</div><div class="foot">à honorer</div></div>
     <div class="stat"><div class="lab">Panier moyen</div><div class="num euro">${euros(ventes.length?vendu/ventes.length:0)}</div><div class="foot">par vente</div></div>`;
-  renderMarques();
-
-  // 12 derniers mois presents, pour rester lisible sur telephone
-  document.getElementById("chiffresGraph").innerHTML=
-    lignes.length?courbeCRM(lignes.slice(-12))
-    :`<div class="empty"><div class="t">Pas encore de chiffres</div><div class="s">Les ventes apparaîtront ici dès le premier paiement enregistré.</div></div>`;
-
-  renderPub();
-
+  /* "Ce que rapporte chaque marque", la courbe "Evolution" et "Retour sur
+     la publicite" ont ete retires le 20/10/2026 a la demande de Matt. Les
+     depenses pub deja saisies restent dans DB.reglages.pubParMois. */
   const box=document.getElementById("chiffresMois");
-  if(!lignes.length){ box.innerHTML=""; return; }
+  if(!lignes.length){
+    box.innerHTML=`<div class="empty"><div class="t">Pas encore de chiffres</div><div class="s">Les ventes apparaîtront ici dès le premier paiement enregistré.</div></div>`;
+    return;
+  }
   if(DB.reglages && DB.reglages.accueilFil){
     /* Une carte par mois : chaque nombre garde son etiquette a cote de lui,
        au lieu de dependre d'un en-tete sorti de l'ecran. */
@@ -8888,25 +8805,6 @@ function remettreTexteParDefaut(id){
   if(zone){ zone.value=texteMailParDefaut(c); toast("Texte par défaut rétabli"); }
 }
 
-/* =====================================================================
-   RETOUR SUR LA PUBLICITE
-
-   Met face a face ce que la publicite rapporte et ce qu'elle coute.
-
-   Le chiffre d'affaires vient des fiches : depuis aout 2026, le site
-   retient d'ou vient chaque cliente et l'inscrit sur sa fiche. Les
-   reservations anterieures n'ont pas cette information et ne sont donc
-   pas comptees : le mois ou tu as commence a mesurer part forcement bas.
-
-   La depense, elle, se saisit a la main. Google Ads ne se laisse pas
-   interroger sans passer par son API et une validation de compte : une
-   ligne par mois recopiee depuis ton tableau de bord suffit largement.
-   ===================================================================== */
-function pubDuMois(mois){
-  const r=(DB.reglages&&DB.reglages.pubParMois)||{};
-  const v=num(r[mois]);
-  return v>0?v:0;
-}
 /* Choix de l'accueil. Reversible a tout moment, aucune donnee touchee :
    c'est le meme CRM, lu autrement. */
 function setAccueil(fil){
@@ -8919,86 +8817,6 @@ function setAccueil(fil){
 function majEtatAccueil(){
   const e=document.getElementById("accueilEtat");
   if(e) e.textContent=(DB.reglages&&DB.reglages.accueilFil)?"Le fil est actif.":"L'accueil classique est actif.";
-}
-
-function setPubDuMois(mois,valeur){
-  DB.reglages=DB.reglages||{};
-  DB.reglages.pubParMois=DB.reglages.pubParMois||{};
-  const v=num(valeur);
-  if(v>0) DB.reglages.pubParMois[mois]=v;
-  else delete DB.reglages.pubParMois[mois];
-  saveDB();
-  renderPub();
-}
-
-function renderPub(){
-  const box=document.getElementById("chiffresPub");
-  const titre=document.getElementById("pubTitre");
-  if(!box) return;
-
-  // La mesure ne vaut que pour Mybabyshoot : c'est la seule marque qui a
-  // une campagne et un site qui enregistre la provenance.
-  if(FILTER==="maison-lumiere"){
-    if(titre) titre.style.display="none";
-    box.innerHTML="";
-    return;
-  }
-  if(titre) titre.style.display="";
-
-  const ventes=ventesCRM("mybabyshoot");
-  const mois=new Map();
-  const L=k=>{ if(!mois.has(k)) mois.set(k,{mois:k,nb:0,ca:0,total:0}); return mois.get(k); };
-  ventes.forEach(v=>{
-    const m=(v.reserveLe||"").slice(0,7);
-    if(!/^\d{4}-\d{2}$/.test(m)) return;
-    const l=L(m);
-    l.total+=v.total;
-    if(v.origine==="Google Ads"){ l.nb++; l.ca+=v.total; }
-  });
-
-  // on affiche aussi les mois ou seule une depense est saisie
-  const saisis=(DB.reglages&&DB.reglages.pubParMois)||{};
-  Object.keys(saisis).forEach(m=>{ if(/^\d{4}-\d{2}$/.test(m)) L(m); });
-
-  const lignes=[...mois.values()].sort((a,b)=>b.mois.localeCompare(a.mois)).slice(0,12);
-  if(!lignes.length){
-    box.innerHTML='<div class="empty"><div class="t">Rien à comparer pour l\'instant</div>'
-      +'<div class="s">Dès qu\'une réservation arrivera par une annonce, elle apparaîtra ici.</div></div>';
-    return;
-  }
-
-  const totCa=lignes.reduce((s,l)=>s+l.ca,0);
-  const totNb=lignes.reduce((s,l)=>s+l.nb,0);
-  const totDep=lignes.reduce((s,l)=>s+pubDuMois(l.mois),0);
-
-  box.innerHTML='<div class="moisbox"><table class="moistab">'
-    +'<tr><th>Mois</th><th class="n">Séances via la pub</th><th class="n">Ce qu\'elles ont rapporté</th>'
-    +'<th class="n">Dépense pub</th><th class="n">Coût par séance</th><th class="n">Rapporté par euro</th></tr>'
-    + lignes.map(function(l){
-        const dep=pubDuMois(l.mois);
-        const cout=(dep&&l.nb)?dep/l.nb:0;
-        const ret=dep?l.ca/dep:0;
-        return '<tr>'
-          +'<td>'+MOIS[Number(l.mois.slice(5,7))-1]+' '+l.mois.slice(0,4)+'</td>'
-          +'<td class="n">'+(l.nb||"")+'</td>'
-          +'<td class="n"><b>'+(l.ca?euros(l.ca):"")+'</b></td>'
-          +'<td class="n"><input class="pubin" type="number" min="0" step="0.01" inputmode="decimal" '
-            +'value="'+(dep||"")+'" placeholder="0" '
-            +'onchange="setPubDuMois(\''+l.mois+'\',this.value)"></td>'
-          +'<td class="n">'+(cout?euros(cout):"")+'</td>'
-          +'<td class="n">'+(ret?('<b>'+ret.toFixed(1).replace(".",",")+' €</b>'):"")+'</td>'
-          +'</tr>';
-      }).join("")
-    +'</table></div>'
-    + (totDep
-        ? '<p class="aide">Sur ces '+lignes.length+' mois : <b>'+euros(totDep)+'</b> de publicité, '
-          +'<b>'+totNb+' séance'+(totNb>1?"s":"")+'</b> et <b>'+euros(totCa)+'</b> de chiffre d\'affaires. '
-          +'Soit <b>'+(totCa/totDep).toFixed(1).replace(".",",")+' €</b> rapportés par euro dépensé'
-          +(totNb?' et '+euros(totDep/totNb)+' pour obtenir une séance':'')+'.</p>'
-        : '<p class="aide">Saisis ta dépense Google Ads mois par mois dans la colonne <b>Dépense pub</b>, '
-          +'et le coût par séance se calcule tout seul.</p>')
-    + '<p class="aide">Seules les réservations passées par le site depuis le 16 août 2026 portent leur provenance. '
-      +'Celles d\'avant, et celles que tu saisis toi-même, ne sont pas comptées comme venant de la pub.</p>';
 }
 
 /* =====================================================================
