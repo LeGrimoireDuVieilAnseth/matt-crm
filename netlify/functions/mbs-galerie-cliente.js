@@ -18,7 +18,7 @@
 // identifiants de photos et des quantites. Une commande a payer devient un
 // lien de paiement, et suit le chemin de tous les liens jusqu'a la facture.
 import Stripe from "stripe";
-import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton,
+import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton, completerFormats,
          idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection, autresEnvois,
          NOM_FORMULE, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
 import { calculerPanier, lignesAutresEnvois, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
@@ -80,9 +80,11 @@ export default async (request) => {
     /* La premiere ouverture : Matt sait ainsi que le lien a ete vu. Sauf
        son propre apercu depuis le CRM (&apercu=1), qui ne doit pas faire
        croire que la cliente est passee. */
-    if (!g.vueAt && url.searchParams.get("apercu") !== "1") {
-      g.vueAt = Date.now(); try { await enregistrer(store, g); } catch (e) {}
-    }
+    let change = false;
+    if (!g.vueAt && url.searchParams.get("apercu") !== "1") { g.vueAt = Date.now(); change = true; }
+    /* Une galerie preparee avant le 20/10/2026 : ses formats, lus une fois. */
+    try { if (await completerFormats(store, g)) change = true; } catch (e) {}
+    if (change) { try { await enregistrer(store, g); } catch (e) {} }
     return json({ ok: true, galerie: vuePublique(g), grille: grillePublique() });
   }
   if (request.method !== "POST") return json({ ok: false, erreur: "methode" }, 405);

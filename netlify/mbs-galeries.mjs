@@ -146,6 +146,44 @@ export async function enregistrer(store, g) {
   await majIndex(store, g);
 }
 
+/* ---------- le format des photos ----------
+   La galerie compose ses rangees avec le format de chaque photo (p.r =
+   largeur / hauteur), que le CRM envoie depuis le 20/10/2026. Une galerie
+   preparee avant ne l'a pas : a sa premiere ouverture, on le lit une fois
+   dans l'en-tete de chaque miniature (le marqueur SOF du JPEG, sans rien
+   decoder), et on le garde. Sans ca, les rangees bougeraient au fil du
+   defilement, a mesure que les miniatures arrivent. */
+export function formatJpeg(buf) {
+  const b = new Uint8Array(buf);
+  let i = 2;
+  while (i < b.length - 9) {
+    if (b[i] !== 0xFF) return null;
+    const m = b[i + 1];
+    if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+    const len = (b[i + 2] << 8) | b[i + 3];
+    if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) {
+      const h = (b[i + 5] << 8) | b[i + 6], w = (b[i + 7] << 8) | b[i + 8];
+      return w && h ? Math.round(w / h * 1000) / 1000 : null;
+    }
+    if (m === 0xDA || len < 2) return null;
+    i += 2 + len;
+  }
+  return null;
+}
+export async function completerFormats(store, g) {
+  const manquent = g.photos.filter(p => !(p.r > 0) && (g.recues || []).includes(p.id));
+  if (!manquent.length) return false;
+  for (let i = 0; i < manquent.length; i += 25) {
+    await Promise.all(manquent.slice(i, i + 25).map(async p => {
+      let r = null;
+      try { const buf = await store.get("t-" + g.jeton + "-" + p.id, { type: "arrayBuffer" }); if (buf) r = formatJpeg(buf); } catch (e) {}
+      /* Illisible : un format par defaut, pour ne pas relire a chaque visite. */
+      p.r = (r > 0.2 && r < 5) ? r : 1.5;
+    }));
+  }
+  return true;
+}
+
 /* ---------- ce que la cliente voit ----------
    Ni l'email, ni la fiche du CRM : un lien de galerie se transfere a la
    famille, et se lit par-dessus une epaule. */

@@ -3410,7 +3410,7 @@ const GAL_STATUT={
 };
 /* Les deux tailles d'images, et le plafond que le serveur accepte
    (POIDS_MAX_VIGNETTE et POIDS_MAX_APERCU dans mbs-galeries.mjs). */
-const GAL_VIGNETTE={cote:520,qualite:0.7,plafond:90*1024};
+const GAL_VIGNETTE={cote:640,qualite:0.7,plafond:90*1024};   // 640 : nettes dans les rangees de la galerie, meme sur grand ecran
 const GAL_APERCU  ={cote:1200,qualite:0.72,plafond:450*1024};
 /* Une fonction Netlify refuse un envoi de plus de 6 Mo : on reste loin
    en dessous, en comptant le base64. */
@@ -3720,7 +3720,7 @@ async function allegerPhotoGal(fichier,sortie){
     }
     const v=await jpegGal(img,GAL_APERCU);
     const t=await jpegGal(v.canvas,GAL_VIGNETTE);
-    return {v:v.b64,t:t.b64,allege};
+    return {v:v.b64,t:t.b64,allege,r:v.canvas.width/v.canvas.height};
   }finally{ if(img.close) img.close(); }
 }
 
@@ -4036,7 +4036,7 @@ async function envoyerPhotosGal(p){
       let it;
       try{
         const a=await allegerPhotoGal(f,(p.sortie && !p.allegees.has(ph.id))?p.sortie:null);
-        it={id:ph.id,t:a.t,v:a.v};
+        it={id:ph.id,t:a.t,v:a.v,r:a.r};
         if(a.allege){
           p.allegees.add(ph.id);
           if(a.allege.rate) p.allege.rates.push(ph.nom);

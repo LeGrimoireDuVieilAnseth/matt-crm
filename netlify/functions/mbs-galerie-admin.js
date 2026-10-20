@@ -121,6 +121,11 @@ export default async (request) => {
       await store.set("t-" + g.jeton + "-" + id, t);
       await store.set("v-" + g.jeton + "-" + id, v);
       recues.add(id);
+      /* Le format de la photo (largeur / hauteur), mesure par le CRM : la
+         galerie compose ses rangees des l'ouverture, portraits en portrait,
+         paysages en paysage, sans attendre les miniatures. */
+      const r = Number(it.r);
+      if (r > 0.2 && r < 5) { const ph = g.photos.find(p => p.id === id); if (ph) ph.r = Math.round(r * 1000) / 1000; }
     }
     g.recues = g.photos.map(p => p.id).filter(id => recues.has(id));
     await enregistrer(store, g);
