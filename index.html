@@ -4480,11 +4480,19 @@ function galeriePrete(clientId,adresse,nb,p){
       Dans <b>${esc(p.parent.name)}</b> › <b>${esc(p.sortie.name)}</b>.
       ${al.rates.length?`<div style="color:var(--danger);margin-top:6px">${al.rates.length} photo(s) non allégée(s), à envoyer telles quelles : ${esc(al.rates.slice(0,5).join(", "))}</div>`:""}
     </div>`:""}
-    <div style="font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:8px">${al&&al.nb?"Envoie ce dossier sur SwissTransfer, puis colle le lien ici :":"Colle ici le lien WeTransfer ou SwissTransfer de toutes les photos :"}</div>
+    <button class="btn wide" onclick="envoyerSwissFin('${esc(jeton)}')">Envoyer sur SwissTransfer</button>
+    <div id="swissInfo" style="font-size:13px;color:var(--ink-2);line-height:1.6;margin:10px 0 12px">
+      Dans SwissTransfer :<br>
+      1. glisse le dossier <b>${al&&al.nb?esc(p.sortie.name):"de la séance"}</b> ;<br>
+      2. choisis une durée de <b>30 jours</b>, puis lance le transfert ;<br>
+      3. clique sur <b>« Copier le lien »</b>.<br>
+      Reviens ensuite ici : le lien s'enregistre tout seul dans sa galerie.</div>
+    <div style="font-size:12.5px;color:var(--ink-3);margin-bottom:6px">Ou colle le lien toi-même :</div>
     <div class="field" style="margin-bottom:8px"><input id="gpLienFin" type="url" inputmode="url" autocomplete="off" placeholder="https://www.swisstransfer.com/d/..."></div>
-    <div id="gpLienFinOk" style="display:flex;gap:8px;margin-bottom:16px">
-      <button class="btn ghost sm" style="flex:1" onclick="enregistrerLienFinGal('${esc(jeton)}')">Enregistrer le lien</button>
-      <a class="btn ghost sm" style="flex:1" href="https://www.swisstransfer.com/fr" target="_blank" rel="noopener">Ouvrir SwissTransfer</a></div>`:"";
+    <div id="gpLienFinOk" style="margin-bottom:10px">
+      <button class="btn ghost sm wide" onclick="enregistrerLienFinGal('${esc(jeton)}')">Enregistrer le lien</button></div>
+    <div style="font-size:12px;color:var(--ink-3);line-height:1.5;margin-bottom:16px">SwissTransfer t'enverra un mail le 12e jour pour prolonger jusqu'à 30 jours :
+      clique dessus, sinon le lien s'arrête au 15e jour.</div>`:"";
   openModal(`<h2>La galerie est en ligne</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       ${nb} photos${c?" pour <b>"+esc(c.name)+"</b>":""}. Elle reste en ligne 3 mois.</div>
@@ -4510,8 +4518,73 @@ async function enregistrerLienFinGal(jeton){
     galeriesLu=0;
     const ok=document.getElementById("gpLienFinOk");
     if(ok) ok.innerHTML=`<div style="font-size:13px;color:var(--ok);font-weight:600">Lien enregistré : il apparaît dans sa galerie.</div>`;
+    const info=document.getElementById("swissInfo");
+    if(info) info.innerHTML=`<div class="card" style="padding:12px 14px;border-color:var(--ok)"><b style="color:var(--ok)">Lien SwissTransfer enregistré</b>
+      <div style="word-break:break-all;font-size:12.5px;margin-top:4px">${esc(lien)}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px">Ce n'est pas le bon ? Colle le bon lien dans l'onglet Galeries.</div></div>`;
+    swissAttente=null;
     champ.disabled=true;
   }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+}
+
+/* ---------- SwissTransfer : le lien revient tout seul ----------
+   SwissTransfer n'offre aucun acces officiel pour lui envoyer des fichiers
+   depuis un autre site (verifie le 20/10/2026), et le navigateur ne le
+   permettrait pas : Matt glisse lui-meme le dossier. Le CRM ouvre
+   SwissTransfer, et quand Matt revient sur son onglet apres avoir clique
+   "Copier le lien", il lit ce lien et l'enregistre dans la galerie.
+
+   GARDE-FOU : le presse-papiers est lu une premiere fois AU CLIC. Un lien
+   copie avant (celui d'une autre cliente, d'un mariage) est ainsi ignore ;
+   seul un lien NOUVEAU est pris. Si Chrome refuse la lecture, rien n'est
+   devine : Matt colle le lien lui-meme. */
+const RE_SWISS=/https:\/\/(?:www\.)?swisstransfer\.com\/[^\s"'<>]*[A-Za-z0-9-]{8,}[^\s"'<>]*/;
+let swissAttente=null;    // { avant, champ, deja, enregistrer, info }
+async function lirePressePapierSwiss(){
+  try{ return await navigator.clipboard.readText(); }catch(e){ return null; }
+}
+async function envoyerSurSwiss(o){
+  /* D'abord lire (la premiere fois, Chrome demande l'autorisation ici, sur
+     la page du CRM), ensuite ouvrir SwissTransfer. */
+  const avant=await lirePressePapierSwiss();
+  const w=window.open("https://www.swisstransfer.com/fr","_blank");
+  if(w) try{ w.opener=null; }catch(e){}
+  const info=document.getElementById(o.info);
+  if(!w && info) info.insertAdjacentHTML("afterbegin",`<div style="margin-bottom:8px"><a class="btn sm" href="https://www.swisstransfer.com/fr" target="_blank" rel="noopener">Ouvrir SwissTransfer</a></div>`);
+  if(avant==null){
+    swissAttente=null;
+    if(info) info.insertAdjacentHTML("beforeend",`<div style="color:var(--warn,var(--ink-3));margin-top:8px">Chrome n'autorise pas le CRM à lire le lien copié : colle-le toi-même dans la case.</div>`);
+    return;
+  }
+  swissAttente={...o, avant:avant.trim()};
+}
+async function retourSwiss(){
+  const a=swissAttente; if(!a || document.hidden || a.lecture) return;
+  const champ=document.getElementById(a.champ);
+  if(!champ || champ.disabled){ swissAttente=null; return; }
+  /* Revenir sur l'onglet declenche deux evenements (onglet visible, puis
+     fenetre active) : une seule lecture a la fois. */
+  a.lecture=true;
+  let t=null;
+  try{ t=await lirePressePapierSwiss(); }finally{ a.lecture=false; }
+  if(t==null) return;
+  if(t.trim()===a.avant) return;                 // rien de nouveau : il n'a pas encore copie
+  const m=t.match(RE_SWISS); if(!m) return;
+  if(a.deja && m[0]===a.deja) return;            // le lien deja enregistre
+  swissAttente=null;
+  champ.value=m[0];
+  await a.enregistrer();
+}
+window.addEventListener("focus",retourSwiss);
+document.addEventListener("visibilitychange",retourSwiss);
+function envoyerSwissFin(jeton){
+  return envoyerSurSwiss({champ:"gpLienFin",info:"swissInfo",enregistrer:()=>enregistrerLienFinGal(jeton)});
+}
+function envoyerSwissDetail(){
+  const g=galOuverte&&galOuverte.g; if(!g) return;
+  const info=document.getElementById("swissInfoDetail");
+  if(info) info.innerHTML="Glisse le dossier dans SwissTransfer, choisis 30 jours, puis clique sur « Copier le lien ». Reviens ici : le nouveau lien remplace l'ancien tout seul.";
+  return envoyerSurSwiss({champ:"gdTransfert",info:"swissInfoDetail",deja:g.transfert||"",enregistrer:enregistrerTransfertGal});
 }
 
 /* Le lien que Matt ouvre lui-meme : l'apercu (&apercu=1), ou ses essais ne
@@ -4636,7 +4709,10 @@ function dessinerGalerie(){
     h+=`<div class="grouplab" style="margin-top:18px">Toutes les photos en pleine qualité</div>
       <div class="field" style="margin-bottom:8px"><input id="gdTransfert" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(g.transfert||"")}"></div>
       <div style="font-size:12px;color:var(--ink-3);margin:-2px 0 8px;line-height:1.5">${g.transfert?"Un WeTransfer expire vite : colle ici le nouveau lien si elle te le demande.":"Sans ce lien, la cliente lit « le lien pour tout télécharger arrive très vite »."}</div>
-      <button class="btn ghost sm wide" onclick="enregistrerTransfertGal()">Enregistrer le lien</button>`;
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost sm" style="flex:1" onclick="envoyerSwissDetail()">Envoyer sur SwissTransfer</button>
+        <button class="btn ghost sm" style="flex:1" onclick="enregistrerTransfertGal()">Enregistrer le lien</button></div>
+      <div id="swissInfoDetail" style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:6px"></div>`;
 
     /* les retouches */
     h+=`<div class="grouplab" style="margin-top:18px">Ses photos retouchées</div>`;
