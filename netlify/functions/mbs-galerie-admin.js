@@ -14,7 +14,7 @@
 // fait que les ranger, en refusant ce qui est trop lourd pour etre un
 // apercu : une photo en pleine qualite deposee par erreur couterait de la
 // bande passante a chaque ouverture.
-import { galerieStore, creerGalerie, lireGalerie, enregistrer, supprimerGalerie, lienValide,
+import { galerieStore, creerGalerie, lireGalerie, enregistrer, supprimerGalerie, lienValide, ligneIndex,
          normaliserJeton, idPhotoValide, POIDS_MAX_VIGNETTE, POIDS_MAX_APERCU, IMAGES_PAR_ENVOI } from "../mbs-galeries.mjs";
 import { crmStore, loadData } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
@@ -69,6 +69,16 @@ export default async (request) => {
     if (url.searchParams.get("liste")) {
       let idx = [];
       try { idx = (await store.get("galeries", { type: "json" })) || []; } catch (e) {}
+      /* Les selections recues avant le 20/10/2026 n'ont pas encore leur date
+         dans l'index (onglet "A retoucher") : on relit leur galerie une fois. */
+      const aRelire = idx.filter(x => x.statut === "choisie" && !x.choisieAt).slice(0, 50);
+      if (aRelire.length) {
+        for (const x of aRelire) {
+          const g = await lireGalerie(store, x.jeton);
+          if (g) Object.assign(x, ligneIndex(g));
+        }
+        try { await store.setJSON("galeries", idx); } catch (e) {}
+      }
       /* L'adresse vient d'ici et pas du CRM : c'est MBS_SITE_URL qui la
          decide, comme dans le mail des retouches. */
       return json({ ok: true, galeries: idx.map(x => ({ ...x, adresse: adresseGalerie(x.jeton) })) });

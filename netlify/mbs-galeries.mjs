@@ -121,11 +121,21 @@ async function ajouterIndex(store, g) {
   } catch (e) {}
 }
 export function ligneIndex(g) {
+  const s = g.selection;
+  /* Les tirages de la commande : les siens et ceux envoyes a d'autres. */
+  const nbTirages = s ? Object.values(s.tirages || {}).reduce((a, q) =>
+      a + Object.values(q || {}).reduce((b, n) => b + (parseInt(n, 10) || 0), 0), 0)
+    + (s.envois || []).reduce((a, e) => a + (e.nb || 0), 0) : 0;
   return {
     jeton: g.jeton, clientId: g.clientId, nom: [g.prenom, g.nom].filter(Boolean).join(" "),
     formule: g.formule, statut: g.statut, nbPhotos: g.photos.length,
-    nbCoeurs: (g.selection ? g.selection.coeurs.length : (g.coeurs || []).length),
+    nbCoeurs: (s ? s.coeurs.length : (g.coeurs || []).length),
     createdAt: g.createdAt, expiresAt: g.expiresAt, vueAt: g.vueAt || 0,
+    /* L'onglet "A retoucher" du CRM : depuis quand la selection est arrivee
+       chez Matt (payee s'il y avait a payer), et ce qu'il a a faire. */
+    choisieAt: (s && !s.enAttente) ? (s.payeAt || s.at || 0) : 0,
+    enPlus: s ? (s.enPlus || 0) : 0, quota: g.quota || 0, nbTirages,
+    retouchesAt: g.retouchesAt || 0,
   };
 }
 export async function majIndex(store, g) {

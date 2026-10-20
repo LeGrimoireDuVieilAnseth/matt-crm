@@ -221,6 +221,14 @@
   .subtabs{display:flex;gap:6px;margin:14px 0 2px;}
   .subtabs button{flex:1;padding:10px;border-radius:11px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-weight:500;font-size:13.5px;cursor:pointer;transition:.15s;}
   .subtabs button.on{background:var(--lumiere);border-color:var(--lumiere);color:#fff;}
+  /* Cinq onglets Mybabyshoot : sur telephone, deux lignes (trois, puis deux). */
+  @media(max-width:600px){ .subtabs{flex-wrap:wrap} .subtabs button{flex:1 1 30%;padding:9px 6px;font-size:13px} }
+  .subtabs button.retard:not(.on){border-color:var(--danger);color:var(--danger);font-weight:600}
+  .cadran{position:relative;width:46px;height:46px;flex:none}
+  .cadran svg{width:46px;height:46px;display:block}
+  .cadran-n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:1px;line-height:1}
+  .cadran-n b{font-size:15px;font-weight:700}
+  .cadran-n span{font-size:10px;font-weight:600;margin-top:3px}
   .chev svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;}
 
   /* ---------- badges ---------- */
@@ -3168,7 +3176,8 @@ function renderClients(){
       <button class="${mbsView==='clients'?'on':''}" onclick="setMbsView('clients')">Fiches clients</button>
       <button class="${mbsView==='resa'?'on':''}" onclick="setMbsView('resa')">Réservations${nbResa?" ("+nbResa+")":""}</button>
       <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>
-      <button id="ongletGaleries" class="${mbsView==='galeries'?'on':''}" onclick="setMbsView('galeries')">Galeries${galeriesATraiter()?" ("+galeriesATraiter()+")":""}</button>`;
+      <button id="ongletGaleries" class="${mbsView==='galeries'?'on':''}" onclick="setMbsView('galeries')">Galeries</button>
+      <button id="ongletRetouches" class="${mbsView==='retouches'?'on':''}${galeriesEnRetard()?" retard":""}" onclick="setMbsView('retouches')">À retoucher${galeriesATraiter()?" ("+galeriesATraiter()+")":""}</button>`;
     /* Le chiffre de l'onglet : les selections recues, pas encore traitees. */
     if(CLOUD && !galeriesLu) chargerGaleries().then(majOngletGaleries);
   } else if(FILTER==="maison-lumiere"){
@@ -3189,6 +3198,7 @@ function renderClients(){
   if(FILTER==="mybabyshoot" && mbsView==="resa"){ renderResaList(); return; }
   if(FILTER==="mybabyshoot" && mbsView==="cadeaux"){ renderCadeauxList(); return; }
   if(FILTER==="mybabyshoot" && mbsView==="galeries"){ renderGaleriesList(); return; }
+  if(FILTER==="mybabyshoot" && mbsView==="retouches"){ renderRetouchesList(); return; }
 
   // pills statut
   const pills=document.getElementById("clientStatusPills");
@@ -3452,9 +3462,92 @@ function chargerGaleries(force){
 const galeriesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="galeries" && !!document.querySelector("#clients.view.active");
 const galeriesATraiter=()=>(galeriesCache||[]).filter(g=>g.statut==="choisie").length;
 function majOngletGaleries(){
-  const b=document.getElementById("ongletGaleries"); if(!b) return;
+  const b=document.getElementById("ongletRetouches"); if(!b) return;
   const n=galeriesATraiter();
-  b.textContent="Galeries"+(n?" ("+n+")":"");
+  b.textContent="À retoucher"+(n?" ("+n+")":"");
+  b.classList.toggle("retard",galeriesEnRetard()>0);
+}
+
+/* ---------- l'onglet "A retoucher" ----------
+   Les clientes dont la selection est arrivee (payee s'il y avait a payer)
+   et dont les retouches ne sont pas encore parties. La plus ancienne en
+   haut. Le cadran se remplit en 10 jours : vert, orange des 7 jours, rouge
+   a 10 jours. Une cliente sort de la liste des que ses retouches sont
+   envoyees (onglet Galeries, "Envoyer les retouches"). */
+const RETOUCHE_ALERTE_J=7, RETOUCHE_RETARD_J=10;
+const joursDepuisGal=t=>t?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
+const aRetoucher=()=>(galeriesCache||[]).filter(g=>g.statut==="choisie");
+const galeriesEnRetard=()=>aRetoucher().filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
+const retouchesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="retouches" && !!document.querySelector("#clients.view.active");
+function couleurRetouche(j){ return j>=RETOUCHE_RETARD_J?"var(--danger)":j>=RETOUCHE_ALERTE_J?"var(--warn)":"var(--ok)"; }
+function cadranRetouche(j){
+  const R=19, C=2*Math.PI*R, part=Math.min(1,j/RETOUCHE_RETARD_J), coul=couleurRetouche(j);
+  return `<div class="cadran" title="${j} jour${j>1?"s":""} depuis sa sélection">
+    <svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="${R}" fill="none" stroke="var(--surface-3)" stroke-width="5"/>
+      <circle cx="23" cy="23" r="${R}" fill="none" stroke="${coul}" stroke-width="5" stroke-linecap="round"
+        stroke-dasharray="${(C*part).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 23 23)"/></svg>
+    <div class="cadran-n" style="color:${coul}"><b>${j}</b><span>j</span></div></div>`;
+}
+function renderRetouchesList(){
+  document.getElementById("clientStatusPills").style.display="none";
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent="Photos à retoucher";
+  const box=document.getElementById("clientsList");
+  if(!CLOUD){
+    box.innerHTML=`<div class="empty"><div class="t">Disponible seulement en ligne</div><div class="s">Les galeries sont stockées sur le serveur.</div></div>`;
+    return;
+  }
+  if(galeriesCache) dessinerRetouches();
+  else box.innerHTML=`<div class="empty"><div class="t">Chargement...</div></div>`;
+  chargerGaleries(true).then(l=>{
+    if(!retouchesVisibles()) return;
+    if(l) dessinerRetouches();
+    else box.innerHTML=`<div class="empty"><div class="t">Chargement impossible</div><div class="s">Vérifie ta connexion, puis reviens sur cet onglet.</div></div>`;
+    majOngletGaleries();
+  });
+}
+function dessinerRetouches(){
+  const box=document.getElementById("clientsList");
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  let l=aRetoucher().sort((a,b)=>(a.choisieAt||a.createdAt||0)-(b.choisieAt||b.createdAt||0));
+  if(q) l=l.filter(g=>String(g.nom||"").toLowerCase().includes(q));
+  document.getElementById("clientCount").textContent=l.length+" cliente(s)";
+  if(!l.length){
+    box.innerHTML=`<div class="empty">
+      <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="t">Rien à retoucher</div>
+      <div class="s">Dès qu'une cliente valide sa sélection, elle apparaît ici avec le nombre de jours écoulés.</div></div>`;
+    return;
+  }
+  const enRetard=l.filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
+  const photos=l.reduce((t,g)=>t+(g.nbCoeurs||0),0);
+  let h=`<div class="stat-grid" style="margin-bottom:12px">
+      <div class="stat"><div class="lab">À retoucher</div><div class="num">${l.length}</div><div class="foot">cliente${l.length>1?"s":""} · ${photos} photo${photos>1?"s":""}</div></div>
+      <div class="stat"><div class="lab">En retard</div><div class="num" style="${enRetard?"color:var(--danger)":""}">${enRetard}</div><div class="foot">${RETOUCHE_RETARD_J} jours et plus</div></div>
+    </div>`;
+  h+=l.map(g=>{
+    const j=joursDepuisGal(g.choisieAt);
+    const etat=j>=RETOUCHE_RETARD_J?`<span class="badge danger">En retard</span>`
+              :j>=RETOUCHE_ALERTE_J?`<span class="badge warn">Bientôt ${RETOUCHE_RETARD_J} jours</span>`:"";
+    const n=g.nbCoeurs||0;
+    const quoi=g.quota
+      ? n+" photo"+(n>1?"s":"")+" à retoucher"+(g.enPlus?" (dont "+g.enPlus+" en plus)":"")
+      : "Prestige"+(n?" · "+n+" cœur"+(n>1?"s":""):"")+" · toutes les plus belles";
+    const bouts=[quoi];
+    if(g.nbTirages) bouts.push(g.nbTirages+" tirage"+(g.nbTirages>1?"s":"")+" à poster");
+    bouts.push("reçue le "+new Date(g.choisieAt||g.createdAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}));
+    return `<div class="row" data-b="mybabyshoot" onclick="openGalerie('${esc(g.jeton)}')">
+      ${cadranRetouche(j)}
+      <div class="row-main">
+        <div class="t">${esc(g.nom||"Cliente")} ${etat}</div>
+        <div class="s" style="white-space:normal">${esc(bouts.join(" · "))}</div>
+      </div>
+    </div>`;
+  }).join("");
+  h+=`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:10px">
+      Le cadran se remplit en ${RETOUCHE_RETARD_J} jours : orange à ${RETOUCHE_ALERTE_J} jours, rouge à ${RETOUCHE_RETARD_J}.
+      Une cliente quitte cette liste dès que tu lui envoies ses retouches (ouvre-la, puis « Envoyer les retouches »).</div>`;
+  box.innerHTML=h;
 }
 
 /* ---------- l'onglet Galeries ---------- */
@@ -4393,6 +4486,10 @@ async function envoyerRetouchesGal(){
     const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir});
     if(!j.ok){ alert("Lien refusé."); return; }
     g.retouches=lien; g.statut="retouchee"; g.retouchesAt=Date.now(); galeriesLu=0;
+    const ligne=(galeriesCache||[]).find(x=>x.jeton===g.jeton);
+    if(ligne){ ligne.statut="retouchee"; ligne.retouchesAt=g.retouchesAt; }
+    majOngletGaleries();
+    if(retouchesVisibles()) dessinerRetouches();
     toast(prevenir?(j.envoye?"Retouches envoyées, mail parti":"Lien enregistré, mais le mail n'est pas parti"):"Lien enregistré");
     dessinerGalerie();
   }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
