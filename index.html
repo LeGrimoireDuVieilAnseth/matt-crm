@@ -3426,7 +3426,7 @@ let clientStatusFilter="all";
    commune (FILTER), pour qu'on ne puisse plus etre sur deux marques a la fois. */
 let contactsBrand="all"; // filtre marque de la carte Contacts & campagnes
 let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
-let mbsView="clients";   // sous-vue Mybabyshoot : clients | resa | cadeaux
+let mbsView="clients";   // sous-vue Mybabyshoot : clients | resa | cadeaux | galeries
 
 /* libelle de la date d'evenement selon la marque */
 function eventLabel(brand){
@@ -3529,7 +3529,10 @@ function renderClients(){
     subWrap.innerHTML=`
       <button class="${mbsView==='clients'?'on':''}" onclick="setMbsView('clients')">Fiches clients</button>
       <button class="${mbsView==='resa'?'on':''}" onclick="setMbsView('resa')">Réservations${nbResa?" ("+nbResa+")":""}</button>
-      <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>`;
+      <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>
+      <button id="ongletGaleries" class="${mbsView==='galeries'?'on':''}" onclick="setMbsView('galeries')">Galeries${galeriesATraiter()?" ("+galeriesATraiter()+")":""}</button>`;
+    /* Le chiffre de l'onglet : les selections recues, pas encore traitees. */
+    if(CLOUD && !galeriesLu) chargerGaleries().then(majOngletGaleries);
   } else if(FILTER==="maison-lumiere"){
     const nbRdv=DB.seances.filter(s=>s.type==="RDV telephonique").length;
     subWrap.style.display="flex";
@@ -3547,6 +3550,7 @@ function renderClients(){
   }
   if(FILTER==="mybabyshoot" && mbsView==="resa"){ renderResaList(); return; }
   if(FILTER==="mybabyshoot" && mbsView==="cadeaux"){ renderCadeauxList(); return; }
+  if(FILTER==="mybabyshoot" && mbsView==="galeries"){ renderGaleriesList(); return; }
 
   // pills statut
   const pills=document.getElementById("clientStatusPills");
@@ -3736,6 +3740,644 @@ function renderResaList(){
   if(avenir.length){ h+=`<div class="grouplab">À venir</div>`; avenir.forEach(s=>h+=ligne(s)); }
   if(passees.length){ h+=`<div class="grouplab">Passées et annulées</div>`; passees.forEach(s=>h+=ligne(s)); }
   box.innerHTML=h;
+}
+
+/* ============================================================
+   MYBABYSHOOT - GALERIES LEGERES
+   La cliente regarde ses photos sur le site (galerie.html), met des
+   coeurs sur celles a retoucher et commande des tirages. Ici, Matt
+   prepare la galerie et retrouve la selection, miniatures comprises.
+
+   LES PHOTOS SONT ALLEGEES DANS CE NAVIGATEUR : seules une vignette
+   (~20 Ko) et un apercu (~100 Ko) partent en ligne, jamais l'original.
+   La pleine qualite passe par le lien WeTransfer ou SwissTransfer que
+   Matt colle a la main. Tout est efface trois mois apres.
+
+   Serveur : netlify/functions/mbs-galerie-admin.js (cle du CRM) ;
+   les miniatures sont servies par mbs-galerie-cliente.js (public).
+   ============================================================ */
+const GALA_API="/.netlify/functions/mbs-galerie-admin";
+const GALC_API="/.netlify/functions/mbs-galerie-cliente";
+
+/* Doit rester egal a QUOTA dans netlify/mbs-galeries.mjs. Ne sert qu'a
+   l'affichage : c'est le serveur qui decide de ce qui est compris. */
+const GAL_FORMULES=[["essentielle","Essentielle",5],["confort","Confort",15],["prestige","Prestige",0]];
+const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"]];
+const GAL_STATUT={
+  preparation:["En préparation","warn"],
+  envoyee:["En ligne","info"],
+  attente_paiement:["Paiement en attente","warn"],
+  choisie:["Sélection reçue","ok"],
+  retouchee:["Retouches envoyées","neutral"],
+};
+/* Les deux tailles d'images, et le plafond que le serveur accepte
+   (POIDS_MAX_VIGNETTE et POIDS_MAX_APERCU dans mbs-galeries.mjs). */
+const GAL_VIGNETTE={cote:520,qualite:0.7,plafond:90*1024};
+const GAL_APERCU  ={cote:1200,qualite:0.72,plafond:450*1024};
+/* Une fonction Netlify refuse un envoi de plus de 6 Mo : on reste loin
+   en dessous, en comptant le base64. */
+const GAL_ENVOI_MAX_OCTETS=3.5*1024*1024, GAL_ENVOI_MAX_PHOTOS=10;
+const GAL_PHOTOS_MAX=800;
+
+const nomFormuleGal=k=>{ const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[1]:""; };
+const quotaGal=k=>{ const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[2]:0; };
+const nomSeanceGal=k=>{ const s=GAL_SEANCES.find(x=>x[0]===k); return s?s[1]:""; };
+const dateGal=t=>t?new Date(t).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}):"";
+const vignetteGal=(jeton,id)=>GALC_API+"?g="+encodeURIComponent(jeton)+"&t="+encodeURIComponent(id);
+const apercuGal=(jeton,id)=>GALC_API+"?g="+encodeURIComponent(jeton)+"&v="+encodeURIComponent(id);
+/* Le numero d'une photo, comme le serveur le calcule (nomDePhoto). */
+const nomDeFichierGal=f=>String(f||"").replace(/^.*[\\/]/,"").replace(/\.[a-z0-9]{2,5}$/i,"").replace(/\s+/g," ").trim().slice(0,60)||"photo";
+
+/* ---------- la liste, gardee une minute ---------- */
+let galeriesCache=null, galeriesLu=0, galeriesEnCours=null;
+function chargerGaleries(force){
+  if(!CLOUD) return Promise.resolve(null);
+  if(!force && galeriesLu && Date.now()-galeriesLu<60000) return Promise.resolve(galeriesCache);
+  if(galeriesEnCours) return galeriesEnCours;
+  galeriesEnCours=(async()=>{
+    try{
+      const r=await fetch(GALA_API+"?liste=1",{headers:apiHeaders(),cache:"no-store"});
+      if(r.status===401){ handleUnauthorized(); return null; }
+      const j=await r.json();
+      if(j&&j.ok) galeriesCache=j.galeries||[];
+    }catch(e){}
+    /* Meme en cas d'echec : sans cela, chaque affichage relancerait une
+       requete. */
+    galeriesLu=Date.now();
+    return galeriesCache;
+  })().finally(()=>{ galeriesEnCours=null; });
+  return galeriesEnCours;
+}
+/* Les selections arrivees et pas encore traitees : c'est le chiffre de
+   l'onglet. */
+/* L'onglet Galeries est-il a l'ecran, et pas seulement choisi ? */
+const galeriesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="galeries" && !!document.querySelector("#clients.view.active");
+const galeriesATraiter=()=>(galeriesCache||[]).filter(g=>g.statut==="choisie").length;
+function majOngletGaleries(){
+  const b=document.getElementById("ongletGaleries"); if(!b) return;
+  const n=galeriesATraiter();
+  b.textContent="Galeries"+(n?" ("+n+")":"");
+}
+
+/* ---------- l'onglet Galeries ---------- */
+function renderGaleriesList(){
+  document.getElementById("clientStatusPills").style.display="none";
+  const titleEl=document.querySelector("#clients .section-title h2");
+  if(titleEl) titleEl.textContent="Galeries";
+  const box=document.getElementById("clientsList");
+  if(!CLOUD){
+    box.innerHTML=`<div class="empty"><div class="t">Disponible seulement en ligne</div><div class="s">Les galeries sont stockées sur le serveur.</div></div>`;
+    return;
+  }
+  if(galeriesCache) dessinerGaleries(galeriesCache);
+  else box.innerHTML=`<div class="empty"><div class="t">Chargement des galeries...</div></div>`;
+  chargerGaleries(true).then(l=>{
+    if(!(galeriesVisibles())) return;
+    if(l) dessinerGaleries(l);
+    else box.innerHTML=`<div class="empty"><div class="t">Chargement impossible</div><div class="s">Vérifie ta connexion, puis reviens sur cet onglet.</div></div>`;
+    majOngletGaleries();
+  });
+}
+
+function dessinerGaleries(list){
+  const box=document.getElementById("clientsList");
+  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  /* A traiter d'abord : une selection recue attend Matt. */
+  const ordre={choisie:0,attente_paiement:1,envoyee:2,preparation:3,retouchee:4};
+  let l=list.slice().sort((a,b)=>(ordre[a.statut]??9)-(ordre[b.statut]??9)||(b.createdAt||0)-(a.createdAt||0));
+  if(q) l=l.filter(g=>[g.nom,nomFormuleGal(g.formule),(GAL_STATUT[g.statut]||[])[0]].join(" ").toLowerCase().includes(q));
+  document.getElementById("clientCount").textContent=l.length+" galerie(s)";
+
+  const aide=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:0 0 12px">
+      Une galerie se prépare depuis la fiche de la cliente : <b>Préparer la galerie</b>.
+      Elle reste en ligne 3 mois, puis ses aperçus sont effacés. Tes photos originales ne sont jamais envoyées.</div>`;
+  if(!l.length){
+    box.innerHTML=aide+`<div class="empty">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+      <div class="t">Aucune galerie</div>
+      <div class="s">Les sélections de tes clientes arriveront ici, avec les miniatures et les numéros des photos.</div>
+    </div>`;
+    return;
+  }
+  box.innerHTML=aide+l.map(g=>{
+    const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
+    const bouts=[nomFormuleGal(g.formule),g.nbPhotos+" photos"];
+    if(g.nbCoeurs) bouts.push(g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""));
+    if(g.statut!=="preparation") bouts.push(g.vueAt?"vue":"pas encore ouverte");
+    /* La date de fin, seulement quand elle approche : sur un telephone la
+       ligne est courte. */
+    if(g.expiresAt-Date.now()<14*86400000) bouts.push("fermée le "+new Date(g.expiresAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}));
+    return `<div class="row" data-b="mybabyshoot" onclick="openGalerie('${esc(g.jeton)}')">
+      <div class="avatar" data-b="mybabyshoot">${esc(initials(g.nom||"?"))}</div>
+      <div class="row-main">
+        <div class="t">${esc(g.nom||"Cliente")} <span class="badge ${st[1]}">${esc(st[0])}</span></div>
+        <div class="s">${esc(bouts.join(" · "))}</div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------- dans la fiche de la cliente ---------- */
+function blocGalerie(c){
+  if(!c || c.brand!=="mybabyshoot") return "";
+  setTimeout(()=>remplirBlocGalerie(c.id),0);
+  return `<div id="ficheGalerie" data-c="${esc(c.id)}">${htmlBlocGalerie(c.id,galeriesCache)}</div>`;
+}
+function htmlBlocGalerie(clientId,list){
+  const siennes=(list||[]).filter(g=>g.clientId===clientId);
+  let h="";
+  siennes.forEach(g=>{
+    const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
+    h+=`<div class="card" style="margin:12px 0 6px;padding:13px 15px;cursor:pointer" onclick="openGalerie('${esc(g.jeton)}')">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+        <b style="font-size:14px">Galerie ${esc(nomFormuleGal(g.formule))}</b>
+        <span class="badge ${st[1]}">${esc(st[0])}</span></div>
+      <div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">${g.nbPhotos} photos${g.nbCoeurs?" · "+g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""):""} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>
+    </div>`;
+  });
+  h+=`<button class="btn ghost wide sm" style="margin:${siennes.length?"4px":"12px"} 0 4px" onclick="openPreparerGalerie('${esc(clientId)}')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+    ${siennes.length?"Préparer une autre galerie":"Préparer la galerie"}</button>`;
+  return h;
+}
+async function remplirBlocGalerie(clientId){
+  const l=await chargerGaleries();
+  const el=document.getElementById("ficheGalerie");
+  if(el && el.dataset.c===clientId && l) el.innerHTML=htmlBlocGalerie(clientId,l);
+}
+
+/* La formule et la seance, devinees d'apres la reservation. Une
+   reservation recente porte "Formule Confort." dans ses notes ; un pack
+   porte "Grossesse en Confort, naissance en Essentielle.". Faute de
+   mieux, rien n'est choisi : une mauvaise formule promettrait a la
+   cliente moins de retouches que ce qu'elle a paye, ou plus. */
+function devinerGalerie(c){
+  const seances=(DB.seances||[]).filter(s=>s.clientId===c.id && s.type!=="Indispo" && s.status!=="Annulee")
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const auj=todayStr();
+  /* La seance la plus recente deja passee : c'est d'elle que viennent les
+     photos. Sinon la prochaine. */
+  const s=seances.find(x=>(x.date||"")<=auj)||seances[seances.length-1]||null;
+  let seance="", formule="";
+  const t=s?String(s.type||"").toLowerCase():"";
+  const notes=s?String(s.notes||""):"";
+  const pack=/grossesse\s*\+\s*naissance|duo/.test(t);
+  if(pack){
+    /* Dans un pack, la seance passee la plus ancienne est la grossesse. */
+    const passees=seances.filter(x=>(x.date||"")<=auj && /grossesse\s*\+\s*naissance|duo/.test(String(x.type||"").toLowerCase()));
+    seance=passees.length>=2?"naissance":"grossesse";
+    const m=notes.match(new RegExp((seance==="grossesse"?"Grossesse":"naissance")+" en (Essentielle|Confort|Prestige)","i"));
+    if(m) formule=m[1].toLowerCase();
+  } else {
+    if(/naissance|nouveau/.test(t)) seance="naissance";
+    else if(/b[ée]b[ée]/.test(t)) seance="bebe";
+    else if(/grossesse/.test(t)) seance="grossesse";
+    const m=notes.match(/Formule (Essentielle|Confort|Prestige)/i);
+    if(m) formule=m[1].toLowerCase();
+  }
+  return {seance,formule};
+}
+
+/* ---------- preparer une galerie ---------- */
+let galPrep=null;   // { clientId, fichiers, jeton, photos, recues:Set, enCours }
+
+function openPreparerGalerie(clientId){
+  const c=clientById(clientId); if(!c) return;
+  if(!CLOUD){ alert("Disponible seulement en ligne : les galeries sont sur le serveur."); return; }
+  if(galPrep && galPrep.enCours){ alert("Une galerie est déjà en cours d'envoi. Attends qu'elle se termine."); return; }
+  const d=devinerGalerie(c);
+  galPrep={clientId,fichiers:[],jeton:"",photos:[],recues:new Set(),enCours:false};
+  const opt=(liste,choisi,vide)=>(vide?`<option value="">${vide}</option>`:"")
+    +liste.map(x=>`<option value="${x[0]}"${x[0]===choisi?" selected":""}>${esc(x[1])}${x.length>2?" ("+(x[2]?x[2]+" retouches":"sans limite")+")":""}</option>`).join("");
+  openModal(`<h2>Préparer la galerie</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Pour <b>${esc(c.name)}</b>. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
+      légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 3 mois.</div>
+    <div class="field"><label>Formule *</label>
+      <select id="gpFormule">${opt(GAL_FORMULES,d.formule,"Choisis la formule")}</select>
+      ${d.formule?`<div style="font-size:12px;color:var(--ink-3);margin-top:5px">D'après sa réservation.</div>`:""}</div>
+    <div class="field"><label>Séance</label>
+      <select id="gpSeance">${opt(GAL_SEANCES,d.seance||"grossesse")}</select></div>
+    <div class="field"><label>Lien pour tout télécharger (WeTransfer, SwissTransfer)</label>
+      <input id="gpTransfert" type="url" inputmode="url" autocomplete="off" placeholder="https://...">
+      <div style="font-size:12px;color:var(--ink-3);margin-top:5px">Facultatif ici : tu peux l'ajouter ou le changer plus tard.</div></div>
+    <div class="field"><label>Les photos *</label>
+      <input type="file" id="gpFichiers" multiple accept="image/jpeg,image/png,image/webp" style="display:none" onchange="galFichiersChoisis(this)">
+      <input type="file" id="gpDossier" webkitdirectory multiple style="display:none" onchange="galFichiersChoisis(this)">
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpFichiers').click()">Choisir les photos</button>
+        <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpDossier').click()">Choisir un dossier</button>
+      </div>
+      <div id="gpResume" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5"></div></div>
+    <div id="gpProgres"></div>
+    <button class="btn wide" id="gpGo" onclick="lancerGalerie()">Créer la galerie</button>`);
+}
+
+/* Les fichiers retenus : des photos, dans l'ordre des noms (celui de
+   l'export Lightroom), sans doublon. */
+function trierFichiersGal(liste){
+  const ok=/\.(jpe?g|png|webp)$/i, vus=new Set(), photos=[], ignores=[];
+  [...liste].forEach(f=>{
+    if(!(/^image\/(jpeg|png|webp)$/.test(f.type) || ok.test(f.name))){ if(!/^\./.test(f.name)) ignores.push(f.name); return; }
+    const cle=f.name+"|"+f.size; if(vus.has(cle)) return; vus.add(cle);
+    photos.push(f);
+  });
+  photos.sort((a,b)=>a.name.localeCompare(b.name,"fr",{numeric:true,sensitivity:"base"}));
+  return {photos,ignores};
+}
+function galFichiersChoisis(input){
+  if(!galPrep) return;
+  const {photos,ignores}=trierFichiersGal(input.files||[]);
+  input.value="";
+  galPrep.fichiers=photos.slice(0,GAL_PHOTOS_MAX);
+  const r=document.getElementById("gpResume"); if(!r) return;
+  if(!photos.length){ r.innerHTML=`<span style="color:var(--danger)">Aucune photo JPEG dans ce choix.</span>`; return; }
+  const mo=photos.reduce((s,f)=>s+f.size,0)/1048576;
+  r.innerHTML=`<b>${galPrep.fichiers.length} photos</b>, de ${esc(nomDeFichierGal(photos[0].name))} à ${esc(nomDeFichierGal(photos[galPrep.fichiers.length-1].name))} (${mo.toFixed(0)} Mo sur ton appareil).`
+    +(photos.length>GAL_PHOTOS_MAX?`<br><span style="color:var(--danger)">Au-delà de ${GAL_PHOTOS_MAX} photos, les suivantes ne sont pas prises.</span>`:"")
+    +(ignores.length?`<br><span style="color:var(--ink-3)">${ignores.length} fichier(s) ignoré(s), ce ne sont pas des photos JPEG : ${esc(ignores.slice(0,3).join(", "))}${ignores.length>3?"...":""}</span>`:"");
+}
+
+/* Lit une photo, et en tire l'apercu puis la vignette (la vignette est
+   faite depuis l'apercu : une seule lecture de l'original, qui peut
+   peser 15 Mo). L'orientation de l'appareil est respectee. */
+async function decoderPhotoGal(fichier){
+  try{ return await createImageBitmap(fichier,{imageOrientation:"from-image"}); }
+  catch(e){
+    return await new Promise((ok,ko)=>{
+      const i=new Image(), u=URL.createObjectURL(fichier);
+      i.onload=()=>{ URL.revokeObjectURL(u); ok(i); };
+      i.onerror=()=>{ URL.revokeObjectURL(u); ko(new Error("illisible")); };
+      i.src=u;
+    });
+  }
+}
+async function jpegGal(source,{cote,qualite,plafond}){
+  const w0=source.width||source.naturalWidth, h0=source.height||source.naturalHeight;
+  let c=cote, q=qualite, cv=null, blob=null;
+  for(let essai=0;essai<6;essai++){
+    const r=Math.min(1,c/Math.max(w0,h0));
+    cv=document.createElement("canvas");
+    cv.width=Math.max(1,Math.round(w0*r)); cv.height=Math.max(1,Math.round(h0*r));
+    const ctx=cv.getContext("2d");
+    ctx.imageSmoothingQuality="high";
+    ctx.drawImage(source,0,0,cv.width,cv.height);
+    blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",q));
+    if(blob && blob.size<=plafond) break;
+    if(q>0.55) q=Math.round((q-0.08)*100)/100; else c=Math.round(c*0.85);
+  }
+  const buf=new Uint8Array(await blob.arrayBuffer());
+  let bin="";
+  for(let i=0;i<buf.length;i+=0x8000) bin+=String.fromCharCode.apply(null,buf.subarray(i,i+0x8000));
+  return {b64:btoa(bin),canvas:cv};
+}
+async function allegerPhotoGal(fichier){
+  const img=await decoderPhotoGal(fichier);
+  const v=await jpegGal(img,GAL_APERCU);
+  if(img.close) img.close();
+  const t=await jpegGal(v.canvas,GAL_VIGNETTE);
+  return {v:v.b64,t:t.b64};
+}
+
+function progresGal(fait,total,texte,erreur){
+  const el=document.getElementById("gpProgres"); if(!el) return;
+  const pc=total?Math.round(fait/total*100):0;
+  el.innerHTML=`<div class="card" style="margin:0 0 12px;padding:13px 15px">
+      <div style="display:flex;justify-content:space-between;font-size:13.5px;font-weight:600">
+        <span>${esc(texte)}</span><span>${fait} / ${total}</span></div>
+      <div style="height:7px;border-radius:99px;background:var(--surface-3);margin-top:8px;overflow:hidden">
+        <div style="height:100%;width:${pc}%;background:${erreur?"var(--danger)":"var(--ok)"};transition:width .2s"></div></div>
+      ${erreur?`<div style="font-size:12.5px;color:var(--danger);margin-top:8px;line-height:1.5">${esc(erreur)}</div>`
+              :`<div style="font-size:12px;color:var(--ink-3);margin-top:7px">Laisse cette fenêtre ouverte jusqu'au bout.</div>`}
+    </div>`;
+}
+
+async function appelGal(corps){
+  const r=await fetch(GALA_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify(corps)});
+  if(r.status===401){ handleUnauthorized(); throw new Error("cle"); }
+  const j=await r.json().catch(()=>({}));
+  if(r.status===429) throw new Error((j&&j.message)||"Trop d'essais, réessaie plus tard.");
+  return {statut:r.status,j};
+}
+
+async function lancerGalerie(){
+  const p=galPrep; if(!p || p.enCours) return;
+  const formule=document.getElementById("gpFormule").value;
+  const seance=document.getElementById("gpSeance").value;
+  const transfert=document.getElementById("gpTransfert").value.trim();
+  if(!formule){ alert("Choisis la formule : c'est elle qui dit combien de retouches sont comprises."); return; }
+  if(!p.fichiers.length){ alert("Choisis les photos de la séance."); return; }
+  if(transfert && !/^https:\/\//i.test(transfert)){ alert("Le lien de téléchargement doit commencer par https://"); return; }
+  const go=document.getElementById("gpGo");
+  go.disabled=true; go.textContent="Création de la galerie...";
+  try{
+    const {statut,j}=await appelGal({action:"creer",clientId:p.clientId,formule,seance,transfert,
+      photos:p.fichiers.map(f=>({nom:f.name}))});
+    if(!j.ok){
+      go.disabled=false; go.textContent="Créer la galerie";
+      alert(statut===404?"Cette fiche n'est pas encore sur le serveur. Attends la synchronisation, puis réessaie.":"Création impossible ("+(j.error||statut)+").");
+      return;
+    }
+    p.jeton=j.jeton; p.photos=j.photos; p.adresse=j.adresse;
+    galeriesLu=0;
+    /* On ne revient plus en arriere : les champs se figent. */
+    ["gpFormule","gpSeance","gpTransfert"].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=true; });
+    document.querySelectorAll("#gpFichiers,#gpDossier").forEach(e=>e.disabled=true);
+    await envoyerPhotosGal(p);
+  }catch(e){
+    go.disabled=false; go.textContent="Créer la galerie";
+    if(e.message!=="cle") alert("Erreur : "+e.message);
+  }
+}
+
+/* Envoie les photos qui manquent, par paquets, l'un apres l'autre. Un
+   paquet qui echoue est retente trois fois ; au-dela on s'arrete
+   proprement, et "Reprendre" repart de la ou on en etait. */
+async function envoyerPhotosGal(p){
+  const go=document.getElementById("gpGo");
+  const aFaire=p.photos.map((ph,i)=>({ph,f:p.fichiers[i]})).filter(x=>x.f && !p.recues.has(x.ph.id));
+  const total=p.photos.length;
+  p.enCours=true;
+  let verrou=null;
+  try{ if(navigator.wakeLock) verrou=await navigator.wakeLock.request("screen"); }catch(e){}
+  const quitter=(e)=>{ e.preventDefault(); e.returnValue=""; };
+  window.addEventListener("beforeunload",quitter);
+  if(go){ go.disabled=true; go.textContent="Envoi en cours..."; }
+  let erreur="", refusees=[];
+  try{
+    let paquet=[], poids=0;
+    const vider=async()=>{
+      if(!paquet.length) return;
+      let dernier=null;
+      for(let essai=0;essai<3;essai++){
+        try{
+          const {statut,j}=await appelGal({action:"images",g:p.jeton,items:paquet});
+          if(j&&j.ok){
+            paquet.forEach(it=>{ if(!(j.refusees||[]).includes(it.id)) p.recues.add(it.id); });
+            refusees.push(...(j.refusees||[]));
+            paquet=[]; poids=0; return;
+          }
+          dernier=new Error("le serveur a répondu "+statut);
+        }catch(e){ dernier=e; if(e.message==="cle") throw e; }
+        await new Promise(r=>setTimeout(r,1500*(essai+1)));
+      }
+      throw dernier||new Error("envoi impossible");
+    };
+    for(const {ph,f} of aFaire){
+      progresGal(p.recues.size+paquet.length,total,"Photo "+ph.nom);
+      let it;
+      try{ const a=await allegerPhotoGal(f); it={id:ph.id,t:a.t,v:a.v}; }
+      catch(e){ refusees.push(ph.id); continue; }
+      const taille=it.t.length+it.v.length;
+      if(paquet.length && (paquet.length>=GAL_ENVOI_MAX_PHOTOS || poids+taille>GAL_ENVOI_MAX_OCTETS)) await vider();
+      paquet.push(it); poids+=taille;
+    }
+    await vider();
+  }catch(e){
+    erreur=e.message==="cle"?"":("Envoi interrompu ("+e.message+"). Vérifie ta connexion, puis reprends : les photos déjà envoyées ne repartent pas.");
+  }finally{
+    p.enCours=false;
+    window.removeEventListener("beforeunload",quitter);
+    try{ if(verrou) verrou.release(); }catch(e){}
+  }
+  /* La fenetre a pu etre fermee pendant l'envoi : l'envoi, lui, a continue.
+     On publie quand meme, et on le dit par un message. */
+  const ouverte=()=>!!document.getElementById("gpProgres") && document.getElementById("modalBg").classList.contains("on");
+  const c=clientById(p.clientId), qui=c?c.name:"la cliente";
+
+  const manquent=p.photos.filter(ph=>!p.recues.has(ph.id));
+  if(erreur || manquent.length){
+    galeriesLu=0;
+    if(!ouverte()){ toast("Galerie de "+qui+" incomplète : ouvre-la dans Galeries pour reprendre"); return; }
+    const noms=manquent.slice(0,5).map(x=>x.nom).join(", ")+(manquent.length>5?"...":"");
+    progresGal(p.recues.size,total,"Envoi incomplet",erreur||(manquent.length+" photo(s) illisible(s) ou trop lourde(s) : "+noms+". Réexporte-les en JPEG, puis reprends."));
+    if(go){ go.disabled=false; go.textContent="Reprendre l'envoi"; go.onclick=()=>envoyerPhotosGal(p); }
+    return;
+  }
+  progresGal(total,total,"Mise en ligne...");
+  try{
+    const {j}=await appelGal({action:"publier",g:p.jeton});
+    if(!j.ok) throw new Error(j.error||"publication refusée");
+    galeriesLu=0;
+    if(ouverte()) galeriePrete(p.clientId,j.adresse||p.adresse,total);
+    else { galPrep=null; toast("La galerie de "+qui+" est en ligne"); }
+  }catch(e){
+    if(e.message==="cle") return;
+    if(!ouverte()){ toast("Galerie de "+qui+" pas encore en ligne : ouvre-la dans Galeries"); return; }
+    progresGal(total,total,"Mise en ligne impossible",e.message);
+    if(go){ go.disabled=false; go.textContent="Réessayer"; go.onclick=()=>envoyerPhotosGal(p); }
+  }
+}
+
+/* Le mail final de Mybabyshoot : le lien de la galerie legere, si elle
+   est en ligne et plus recente que le dernier envoi (un ancien lien Pelli
+   ne doit pas rester dans le champ). */
+async function preRemplirGalerieMail(clientId){
+  const c=clientById(clientId);
+  const l=await chargerGaleries();
+  const champ=document.getElementById("mfGalerie");
+  if(!c || !champ || !l) return;
+  const g=l.filter(x=>x.clientId===clientId && x.statut!=="preparation" && x.adresse)
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+  if(!g) return;
+  const dernierEnvoi=c.mailFinal&&c.mailFinal.date?Date.parse(c.mailFinal.date):0;
+  if(champ.value.trim() && champ.value.trim()!==g.adresse && dernierEnvoi>(g.createdAt||0)) return;
+  champ.value=g.adresse;
+  const n=document.getElementById("mfGalerieNote");
+  if(n) n.textContent="La galerie Mybabyshoot de "+(c.name||"la cliente")+", préparée le "+dateGal(g.createdAt)+".";
+}
+
+function galeriePrete(clientId,adresse,nb){
+  galPrep=null;
+  const c=clientById(clientId);
+  openModal(`<h2>La galerie est en ligne</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      ${nb} photos${c?" pour <b>"+esc(c.name)+"</b>":""}. Elle reste en ligne 3 mois.</div>
+    <div class="card" style="padding:13px 15px;font-size:13px;word-break:break-all;margin-bottom:12px">
+      <a href="${esc(adresse)}" target="_blank" rel="noopener">${esc(adresse)}</a></div>
+    <div style="display:flex;gap:8px;margin-bottom:9px">
+      <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
+      <a class="btn ghost sm" style="flex:1" href="${esc(adresse)}" target="_blank" rel="noopener">Ouvrir</a>
+    </div>
+    ${c&&c.email?`<button class="btn wide" onclick="closeModal();openMailFinal('${esc(clientId)}')">Envoyer galerie + facture</button>
+    <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">Le lien de la galerie est déjà rempli dans le mail.</div>`:""}`);
+  if(galeriesVisibles()) renderGaleriesList();
+}
+
+function copierTexteGal(t,msg){
+  try{ navigator.clipboard.writeText(t).then(()=>toast(msg||"Copié"),()=>prompt("Copie ceci :",t)); }
+  catch(e){ prompt("Copie ceci :",t); }
+}
+
+/* ---------- le detail d'une galerie ---------- */
+let galOuverte=null;
+async function openGalerie(jeton){
+  if(!CLOUD){ alert("Disponible seulement en ligne."); return; }
+  openModal(`<h2>Galerie</h2><div class="empty"><div class="t">Chargement...</div></div>`);
+  let j;
+  try{
+    const r=await fetch(GALA_API+"?g="+encodeURIComponent(jeton),{headers:apiHeaders(),cache:"no-store"});
+    if(r.status===401){ handleUnauthorized(); return; }
+    j=await r.json();
+  }catch(e){ j=null; }
+  if(!j||!j.ok){ openModal(`<h2>Galerie</h2><div class="empty"><div class="t">Introuvable</div><div class="s">Elle a peut-être été supprimée, ou a expiré.</div></div>`); return; }
+  galOuverte={g:j.galerie,adresse:j.adresse};
+  dessinerGalerie();
+}
+
+function vignettesGal(g,ids){
+  const nom=Object.fromEntries(g.photos.map(p=>[p.id,p.nom]));
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;margin:10px 0">`
+    +ids.map(id=>`<a href="${esc(apercuGal(g.jeton,id))}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit">
+        <img src="${esc(vignetteGal(g.jeton,id))}" loading="lazy" alt="" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;background:var(--surface-3);display:block">
+        <div style="font-size:11.5px;font-weight:600;margin-top:3px;text-align:center;word-break:break-all">${esc(nom[id]||id)}</div></a>`).join("")
+    +`</div>`;
+}
+
+function dessinerGalerie(){
+  const {g,adresse}=galOuverte;
+  const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
+  const s=g.selection;
+  const nom=[g.prenom,g.nom].filter(Boolean).join(" ")||"Cliente";
+  const quota=g.quota;
+  /* Ce que Matt vient chercher ici, c'est la selection : elle passe en
+     premier, le reste tient en deux lignes. */
+  const court=t=>t?new Date(t).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}):"";
+  let h=`<h2>Galerie de ${esc(nom)}</h2>
+    <div class="meta" style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("mybabyshoot")}<span class="badge ${st[1]}">${esc(st[0])}</span></div>
+    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px"><b>${esc(nomFormuleGal(g.formule))}</b> (${quota?quota+" retouches comprises":"retouches sans limite"})${g.seance?" · "+esc(nomSeanceGal(g.seance)):""} · ${g.photos.length} photos${g.statut==="preparation"?" ("+(g.recues||[]).length+" reçues)":""}</div>
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5">Créée le ${esc(court(g.createdAt))}${g.statut==="preparation"?"":" · "+(g.vueAt?"ouverte le "+esc(court(g.vueAt)):"pas encore ouverte")} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>`;
+
+  let lienHtml="";
+  if(g.statut==="preparation"){
+    const manquent=g.photos.length-(g.recues||[]).length;
+    h+=`<div class="card" style="margin-top:12px;padding:13px 15px;font-size:13.5px;line-height:1.55">
+        <b>Pas encore en ligne.</b> ${manquent} photo(s) n'ont pas été envoyées. Choisis à nouveau les photos de la séance :
+        celles déjà en ligne sont reconnues à leur nom et ne repartent pas.</div>
+      <input type="file" id="grFichiers" multiple accept="image/jpeg,image/png,image/webp" style="display:none" onchange="reprendreGalerie(this)">
+      <div id="gpProgres" style="margin-top:12px"></div>
+      <button class="btn wide" id="gpGo" style="margin-top:4px" onclick="document.getElementById('grFichiers').click()">Reprendre l'envoi des photos</button>`;
+  } else {
+    lienHtml=`<div class="grouplab" style="margin-top:18px">Lien de la galerie</div>
+      <div class="card" style="padding:12px 15px;font-size:13px;word-break:break-all"><a href="${esc(adresse)}" target="_blank" rel="noopener">${esc(adresse)}</a></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
+        <a class="btn ghost sm" style="flex:1" href="${esc(adresse)}" target="_blank" rel="noopener">Ouvrir</a></div>`;
+  }
+
+  /* la selection */
+  h+=`<div class="grouplab" style="margin-top:16px">Sa sélection</div>`;
+  if(s){
+    const n=s.coeurs.length, plus=quota?Math.max(0,n-quota):0;
+    const paie=s.montant>0
+      ? (s.paye?`<span class="badge ok">réglé ${s.montant} €</span>`:`<span class="badge warn">${s.montant} € en attente de paiement</span>`)
+      : `<span class="badge neutral">rien à payer</span>`;
+    h+=`<div class="card" style="padding:13px 15px">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+          <b style="font-size:14px">${n} photo${n>1?"s":""} à retoucher</b>${paie}</div>
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${quota?Math.min(n,quota)+" comprise(s) dans la formule"+(plus?", "+plus+" en plus":""):"Prestige : ses cœurs te guident"} · envoyée le ${esc(dateGal(s.at))}</div>
+        ${n?vignettesGal(g,s.coeurs):""}
+        ${n?`<button class="btn ghost sm wide" onclick="copierNumerosGal()">Copier les numéros</button>`:""}
+      </div>`;
+    if(s.tiragesTexte){
+      h+=`<div class="grouplab" style="margin-top:16px">Tirages à imprimer</div>
+        <div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;white-space:pre-line">${esc(s.tiragesTexte)}</div>`;
+      if(s.adresseTexte) h+=`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6;white-space:pre-line"><b>À poster à</b>\n${esc(s.adresseTexte)}</div>`;
+    }
+  } else if((g.coeurs||[]).length){
+    h+=`<div class="card" style="padding:13px 15px">
+        <b style="font-size:14px">Pas encore validée</b>
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${g.coeurs.length} cœur(s) pour l'instant. Tu seras prévenu quand elle validera.</div>
+        ${vignettesGal(g,g.coeurs)}</div>`;
+  } else {
+    h+=`<div class="card" style="padding:13px 15px;font-size:13.5px;color:var(--ink-3)">Aucun cœur pour l'instant. Tu seras prévenu quand elle validera.</div>`;
+  }
+
+  h+=lienHtml;
+  if(g.statut!=="preparation"){
+    /* le lien "tout telecharger" */
+    h+=`<div class="grouplab" style="margin-top:18px">Toutes les photos en pleine qualité</div>
+      <div class="field" style="margin-bottom:8px"><input id="gdTransfert" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(g.transfert||"")}"></div>
+      <div style="font-size:12px;color:var(--ink-3);margin:-2px 0 8px;line-height:1.5">${g.transfert?"Un WeTransfer expire vite : colle ici le nouveau lien si elle te le demande.":"Sans ce lien, la cliente lit « le lien pour tout télécharger arrive très vite »."}</div>
+      <button class="btn ghost sm wide" onclick="enregistrerTransfertGal()">Enregistrer le lien</button>`;
+
+    /* les retouches */
+    h+=`<div class="grouplab" style="margin-top:18px">Ses photos retouchées</div>`;
+    if(g.retouches) h+=`<div style="font-size:13px;color:var(--ok);margin-bottom:8px;line-height:1.5">Envoyées le ${esc(dateGal(g.retouchesAt))}. Le bouton apparaît en haut de sa galerie.</div>`;
+    h+=`<div class="field" style="margin-bottom:8px"><input id="gdRetouches" type="url" inputmode="url" autocomplete="off" placeholder="Lien WeTransfer ou SwissTransfer des retouches" value="${esc(g.retouches||"")}"></div>
+      ${g.email?`<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin:0 0 10px;cursor:pointer">
+        <input type="checkbox" id="gdPrevenir" ${g.retouches?"":"checked"}> Lui envoyer un mail (${esc(g.email)})</label>`:""}
+      <button class="btn sm wide" onclick="envoyerRetouchesGal()">${g.retouches?"Remplacer le lien des retouches":"Envoyer les retouches"}</button>`;
+  }
+
+  if(g.clientId && clientById(g.clientId)) h+=`<button class="btn ghost wide" style="margin-top:18px" onclick="closeModal();openFiche('${esc(g.clientId)}')">Ouvrir la fiche client</button>`;
+  h+=`<button class="btn danger wide" style="margin-top:9px" onclick="supprimerGalerieCRM()">Supprimer la galerie</button>`;
+  openModal(h);
+}
+
+function copierNumerosGal(){
+  const {g}=galOuverte, s=g.selection; if(!s) return;
+  const nom=Object.fromEntries(g.photos.map(p=>[p.id,p.nom]));
+  copierTexteGal(s.coeurs.map(id=>nom[id]||id).join(", "),s.coeurs.length+" numéros copiés");
+}
+
+async function enregistrerTransfertGal(){
+  const {g}=galOuverte;
+  const lien=document.getElementById("gdTransfert").value.trim();
+  if(lien && !/^https:\/\//i.test(lien)){ alert("Le lien doit commencer par https://"); return; }
+  try{
+    const {j}=await appelGal({action:"transfert",g:g.jeton,lien});
+    if(!j.ok){ alert("Lien refusé."); return; }
+    g.transfert=lien; toast(lien?"Lien enregistré":"Lien retiré"); dessinerGalerie();
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+}
+
+async function envoyerRetouchesGal(){
+  const {g}=galOuverte;
+  const lien=document.getElementById("gdRetouches").value.trim();
+  if(!/^https:\/\//i.test(lien)){ alert("Colle le lien des photos retouchées (il commence par https://)."); return; }
+  const ch=document.getElementById("gdPrevenir"), prevenir=!!(ch&&ch.checked);
+  if(prevenir && !confirm("Envoyer le mail « Vos photos retouchées sont prêtes » à "+g.email+" ?")) return;
+  try{
+    const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir});
+    if(!j.ok){ alert("Lien refusé."); return; }
+    g.retouches=lien; g.statut="retouchee"; g.retouchesAt=Date.now(); galeriesLu=0;
+    toast(prevenir?(j.envoye?"Retouches envoyées, mail parti":"Lien enregistré, mais le mail n'est pas parti"):"Lien enregistré");
+    dessinerGalerie();
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+}
+
+async function supprimerGalerieCRM(){
+  const {g}=galOuverte;
+  const nom=[g.prenom,g.nom].filter(Boolean).join(" ")||"cette cliente";
+  if(!confirm("Supprimer la galerie de "+nom+" ?\n\nLe lien ne marchera plus et ses aperçus sont effacés. Tes photos originales ne sont pas touchées.")) return;
+  try{
+    const {j}=await appelGal({action:"supprimer",g:g.jeton});
+    if(!j.ok){ alert("Suppression impossible."); return; }
+    galeriesCache=(galeriesCache||[]).filter(x=>x.jeton!==g.jeton); galeriesLu=0;
+    closeModal(); toast("Galerie supprimée");
+    if(galeriesVisibles()) renderGaleriesList();
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+}
+
+/* Reprendre une galerie restee en preparation : Matt rechoisit les
+   photos, on les reconnait a leur nom. */
+async function reprendreGalerie(input){
+  const {g}=galOuverte;
+  const {photos}=trierFichiersGal(input.files||[]);
+  input.value="";
+  const parNom={}; photos.forEach(f=>{ const n=nomDeFichierGal(f.name); if(!parNom[n]) parNom[n]=f; });
+  const recues=new Set(g.recues||[]);
+  const fichiers=g.photos.map(ph=>parNom[ph.nom]||null);
+  const introuvables=g.photos.filter((ph,i)=>!recues.has(ph.id)&&!fichiers[i]);
+  if(introuvables.length){
+    alert(introuvables.length+" photo(s) à envoyer ne sont pas dans ce choix : "
+      +introuvables.slice(0,5).map(x=>x.nom).join(", ")+(introuvables.length>5?"...":"")
+      +"\n\nChoisis le même dossier que la première fois.");
+    return;
+  }
+  galPrep={clientId:g.clientId,fichiers,jeton:g.jeton,photos:g.photos,recues,enCours:false,adresse:galOuverte.adresse};
+  await envoyerPhotosGal(galPrep);
 }
 
 /* ============================================================
@@ -4387,6 +5029,7 @@ function openFiche(id){
      ici. En presentation "fil", la fiche n'offrait aucun autre moyen. */
   if(c.brand==="maison-lumiere") h+=carteReglement(c);
 
+  h+=blocGalerie(c);
   h+=blocMailFinal(c);
   h+=blocLiensPaiement(c);
 
@@ -7982,7 +8625,8 @@ function openMailFinal(id){
   h+=`
     <div class="field"><label>Lien vers sa galerie *</label>
       <input id="mfGalerie" type="url" inputmode="url" autocomplete="off"
-             placeholder="https://..." value="${esc((c.mailFinal&&c.mailFinal.galerie)||"")}"></div>`;
+             placeholder="https://..." value="${esc((c.mailFinal&&c.mailFinal.galerie)||"")}">
+      <div id="mfGalerieNote" style="font-size:12px;color:var(--ink-3);margin-top:5px"></div></div>`;
 
   // Le repere [bouton avis] est visible dans le texte : inutile d'annoncer
   // qu'il sera ajoute. On ne parle que du cas ou il ne menerait nulle part.
@@ -8007,6 +8651,7 @@ function openMailFinal(id){
     </div>
     <button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}')">Envoyer</button>`;
   openModal(h);
+  if(c.brand==="mybabyshoot") preRemplirGalerieMail(c.id);
   const zone=document.getElementById("mfTexte");
   if(zone) zone.value=texteMailParDefaut(c);
 }

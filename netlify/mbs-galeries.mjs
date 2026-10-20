@@ -125,7 +125,7 @@ export function ligneIndex(g) {
     jeton: g.jeton, clientId: g.clientId, nom: [g.prenom, g.nom].filter(Boolean).join(" "),
     formule: g.formule, statut: g.statut, nbPhotos: g.photos.length,
     nbCoeurs: (g.selection ? g.selection.coeurs.length : (g.coeurs || []).length),
-    createdAt: g.createdAt, expiresAt: g.expiresAt,
+    createdAt: g.createdAt, expiresAt: g.expiresAt, vueAt: g.vueAt || 0,
   };
 }
 export async function majIndex(store, g) {

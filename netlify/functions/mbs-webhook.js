@@ -571,7 +571,11 @@ export default async (request) => {
   const duoTexte = (NOM_GAMME[paire[0]] && NOM_GAMME[paire[1]])
     ? "Grossesse en " + NOM_GAMME[paire[0]] + ", naissance en " + NOM_GAMME[paire[1]] + "."
     : "";
-  /* Le creneau a-t-il ete pris entre-temps ? Le verrou ne tient que 20
+  /* Une seance simple : sa formule, en clair. La galerie du CRM la relit
+     pour savoir combien de retouches sont comprises (devinerGalerie). */
+  const formuleTexte = (!duoTexte && md.type !== "duo" && NOM_GAMME[md.gamme])
+    ? "Formule " + NOM_GAMME[md.gamme] + "." : "";
+  /* Le creneau a-t-il ete pris entre-temps ? Le verrou ne tient que 3
      minutes, la page Stripe reste payable 24 heures : une cliente qui paie
      tard peut tomber sur un creneau deja vendu. On ne refuse pas son
      argent, Stripe l'a pris ; on enregistre et on previent. */
@@ -585,7 +589,8 @@ export default async (request) => {
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: md.lieuExt || PLACE, status: "A venir",
     notes: (dejaPrise ? "CRÉNEAU EN DOUBLE : " + autreNom + " a déjà ce créneau. À déplacer, l'une ou l'autre. " : "")
-      + "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + "Total séance " + total + " €, "
+      + "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + (formuleTexte ? formuleTexte + " " : "")
+      + "Total séance " + total + " €, "
       + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")

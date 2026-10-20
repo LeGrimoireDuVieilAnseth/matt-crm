@@ -69,7 +69,9 @@ export default async (request) => {
     if (url.searchParams.get("liste")) {
       let idx = [];
       try { idx = (await store.get("galeries", { type: "json" })) || []; } catch (e) {}
-      return json({ ok: true, galeries: idx });
+      /* L'adresse vient d'ici et pas du CRM : c'est MBS_SITE_URL qui la
+         decide, comme dans le mail des retouches. */
+      return json({ ok: true, galeries: idx.map(x => ({ ...x, adresse: adresseGalerie(x.jeton) })) });
     }
     const g = await lireGalerie(store, normaliserJeton(url.searchParams.get("g")));
     if (!g) return json({ ok: false, error: "introuvable" }, 404);
