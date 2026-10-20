@@ -4476,15 +4476,22 @@ async function enregistrerTransfertGal(){
   }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
 }
 
+/* Les retouches : le lien est enregistre ; si la case "Lui envoyer un
+   mail" est cochee, le mail s'ouvre d'abord pour etre relu et modifie,
+   comme le mail final. */
 async function envoyerRetouchesGal(){
   const {g}=galOuverte;
   const lien=document.getElementById("gdRetouches").value.trim();
   if(!/^https:\/\//i.test(lien)){ alert("Colle le lien des photos retouchées (il commence par https://)."); return; }
   const ch=document.getElementById("gdPrevenir"), prevenir=!!(ch&&ch.checked);
-  if(prevenir && !confirm("Envoyer le mail « Vos photos retouchées sont prêtes » à "+g.email+" ?")) return;
+  if(prevenir){ ouvrirMailRetouches(lien); return; }
+  await enregistrerRetouchesGal(lien,false,"");
+}
+async function enregistrerRetouchesGal(lien,prevenir,texte){
+  const {g}=galOuverte;
   try{
-    const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir});
-    if(!j.ok){ alert("Lien refusé."); return; }
+    const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir,texte});
+    if(!j.ok){ alert("Lien refusé."); return false; }
     g.retouches=lien; g.statut="retouchee"; g.retouchesAt=Date.now(); galeriesLu=0;
     const ligne=(galeriesCache||[]).find(x=>x.jeton===g.jeton);
     if(ligne){ ligne.statut="retouchee"; ligne.retouchesAt=g.retouchesAt; }
@@ -4492,7 +4499,59 @@ async function envoyerRetouchesGal(){
     if(retouchesVisibles()) dessinerRetouches();
     toast(prevenir?(j.envoye?"Retouches envoyées, mail parti":"Lien enregistré, mais le mail n'est pas parti"):"Lien enregistré");
     dessinerGalerie();
-  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+    return true;
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); return false; }
+}
+
+/* Le texte propose. Matt le modifie a chaque envoi s'il veut ; les trois
+   reperes deviennent les boutons du mail (mbs-galerie-admin.js). */
+function texteRetouchesParDefaut(g){
+  const moment=(new Date().getHours()>=18)?"soirée":"journée";
+  const fin=g.expiresAt?new Date(g.expiresAt).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):"";
+  return [
+    "Bonjour "+(g.prenom||"")+" !",
+    "Vos photos retouchées sont prêtes. Je les ai reprises une à une, avec soin.",
+    "[bouton retouches]",
+    "Pensez à les enregistrer dès aujourd'hui sur votre ordinateur ou votre téléphone : le lien de téléchargement n'est valable que pour une durée limitée.",
+    "Toutes les photos de votre séance restent aussi dans votre galerie"+(fin?", jusqu'au "+fin:"")+".",
+    "[bouton galerie]",
+    "Merci encore pour votre confiance. Ce fut un vrai plaisir de partager ce moment avec vous, et j'espère que ces images vous accompagneront longtemps.",
+    "Si vous avez aimé votre expérience, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres familles de me trouver, et cela ne prend qu'une minute.",
+    "[bouton avis]",
+    "Et pour la suite, je serai heureux de vous retrouver pour d'autres moments à immortaliser : un anniversaire, un baptême, une séance en extérieur ou tout autre événement qui compte pour vous. Il vous suffit de répondre à ce mail, ou de m'appeler au 06 47 76 54 17.",
+    "Très belle "+moment+" à vous\nMatt"
+  ].join("\n\n");
+}
+function ouvrirMailRetouches(lien){
+  const {g}=galOuverte;
+  galOuverte.lienRetouches=lien;
+  openModal(`<h2>Envoyer les retouches</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      À <b>${esc(g.email)}</b>, au nom de Mybabyshoot.<br>Objet : « Vos photos retouchées sont prêtes ».</div>
+    <div class="field"><label>Texte du mail</label>
+      <textarea id="mrTexte" rows="18" style="font-size:14px;line-height:1.55"></textarea></div>
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.6;margin:-4px 0 14px">
+      Écris ce que tu veux. Les trois repères entre crochets deviennent les boutons du mail :
+      <b>[bouton retouches]</b> (le lien de ses retouches), <b>[bouton galerie]</b>, <b>[bouton avis]</b>.
+      Déplace-les, supprime ceux qui ne servent pas, ou ajoute tes propres paragraphes.
+      <a onclick="remettreTexteRetouches()" style="cursor:pointer;text-decoration:underline">Remettre le texte par défaut</a></div>
+    <button class="btn wide" id="mrGo" onclick="envoyerMailRetouches()">Envoyer</button>
+    <button class="btn ghost wide" style="margin-top:8px" onclick="dessinerGalerie()">Retour</button>`);
+  document.getElementById("mrTexte").value=texteRetouchesParDefaut(g);
+}
+function remettreTexteRetouches(){
+  const z=document.getElementById("mrTexte");
+  if(z && galOuverte){ z.value=texteRetouchesParDefaut(galOuverte.g); toast("Texte par défaut rétabli"); }
+}
+async function envoyerMailRetouches(){
+  const z=document.getElementById("mrTexte"), texte=z?z.value.trim():"";
+  if(!texte){ toast("Le texte est vide. Touche « Remettre le texte par défaut » si besoin."); return; }
+  if(!/\[bouton retouches\]/i.test(texte)
+     && !confirm("Le repère [bouton retouches] a disparu : le bouton de téléchargement sera remis après le premier paragraphe, sinon elle n'aurait pas son lien.\n\nEnvoyer quand même ?")) return;
+  const go=document.getElementById("mrGo");
+  go.disabled=true; go.textContent="Envoi en cours...";
+  const ok=await enregistrerRetouchesGal(galOuverte.lienRetouches,true,texte);
+  if(!ok && document.getElementById("mrGo")){ go.disabled=false; go.textContent="Envoyer"; }
 }
 
 async function supprimerGalerieCRM(){

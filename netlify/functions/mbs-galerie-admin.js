@@ -45,6 +45,32 @@ const refusCle = async (request) => {
 const esc = (s) => String(s == null ? "" : s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/* ---------- le mail des retouches ----------
+   Meme principe que le mail final (crm-mail-final.js) : le texte est ecrit
+   par Matt dans le CRM, modifiable a chaque envoi. Tout ce qu'il tape est
+   echappe ; seuls trois reperes, seuls sur leur ligne, deviennent des
+   boutons. Le lien d'avis vient des Reglages du CRM (avisMybabyshoot). */
+const AVIS_MBS_DEFAUT = "https://g.page/r/CTGWLnQvUCwtEBM/review";   // le meme que crm-mail-final.js
+const boutonMail = (href, texte, fond) =>
+  '<p style="margin:24px 0"><a href="' + esc(href) + '" style="background:' + fond +
+  ';color:#FFFFFF;padding:14px 28px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold">' +
+  esc(texte) + "</a></p>";
+function htmlRetouches(texte, ctx) {
+  const jetons = {
+    "[bouton retouches]": boutonMail(ctx.retouches, "Télécharger mes photos retouchées", "#C97B63"),
+    "[bouton galerie]": boutonMail(ctx.galerie, "Revoir ma galerie", "#8A8078"),
+    "[bouton avis]": ctx.avis ? boutonMail(ctx.avis, "Laisser un avis", "#6B6B6B") : "",
+  };
+  const blocs = String(texte || "").replace(/\r\n/g, "\n").split(/\n[ \t]*\n/).map(b => b.trim()).filter(Boolean);
+  /* Sans le repere des retouches, la cliente recevrait un mail sans son
+     lien : on remet le bouton apres le premier paragraphe. */
+  if (!blocs.some(b => b.toLowerCase() === "[bouton retouches]")) blocs.splice(Math.min(1, blocs.length), 0, "[bouton retouches]");
+  return blocs.map(b => {
+    const j = jetons[b.toLowerCase()];
+    return j !== undefined ? j : "<p>" + esc(b).replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+}
+
 /* Une image base64, decodee et pesee. null si ce n'est pas un JPEG ou si
    elle depasse le plafond. */
 function image(b64, plafond) {
@@ -172,7 +198,14 @@ export default async (request) => {
     g.retouchesAt = Date.now();
     await enregistrer(store, g);
     let envoye = false;
-    if (corps.prevenir && g.email) {
+    if (corps.prevenir && g.email && String(corps.texte || "").trim()) {
+      let avis = AVIS_MBS_DEFAUT;
+      try { const data = await loadData(crmStore()); avis = lienValide((data.reglages || {}).avisMybabyshoot) || AVIS_MBS_DEFAUT; } catch (e) {}
+      const html = htmlRetouches(corps.texte, { retouches: l, galerie: adresseGalerie(g.jeton), avis });
+      try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html }); }
+      catch (e) { envoye = false; }
+    } else if (corps.prevenir && g.email) {
+      /* Un CRM pas encore mis a jour n'envoie pas de texte : l'ancien mail. */
       const html =
         "<p>Bonjour " + esc(g.prenom) + " !</p>" +
         "<p>Vos photos retouchées sont prêtes.</p>" +
