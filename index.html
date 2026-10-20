@@ -4383,6 +4383,10 @@ function openFiche(id){
     }
   }
 
+  /* Maison Lumiere : total attendu et acompte recu, directement saisis
+     ici. En presentation "fil", la fiche n'offrait aucun autre moyen. */
+  if(c.brand==="maison-lumiere") h+=carteReglement(c);
+
   h+=blocMailFinal(c);
   h+=blocLiensPaiement(c);
 
@@ -4501,6 +4505,7 @@ function openFiche(id){
 
   document.getElementById("ficheBody").innerHTML=h;
   setView("fiche");
+  majResteReglement();
   loadFichePhotos();
 }
 
@@ -5314,6 +5319,89 @@ function savePay(id){
   else { DB.paiements.push(Object.assign({id:uid()},data)); saveDB(); closeModal();
     if(data.clientId) openFiche(data.clientId); else openPaiements(); toast("Paiement ajouté"); }
 }
+/* ============================================================
+   REGLEMENT D'UN MARIAGE, DIRECTEMENT DANS LA FICHE
+   Matt ne trouvait pas ou saisir l'acompte d'un couple Maison Lumiere.
+   En presentation "fil", la fiche n'avait plus aucun bouton pour ajouter
+   un paiement : son seul "Ajouter" cree un rendez-vous ou une seance.
+
+   Deux cases en haut de la fiche, total attendu et acompte recu, et le
+   reste a payer qui se calcule pendant la saisie. Elles ecrivent dans le
+   paiement du client, le meme que celui de la liste des paiements : le
+   tableau des ventes continue donc de compter juste (valeur vendue =
+   total, rentre en caisse = acompte, statut deduit des deux montants).
+   ============================================================ */
+
+/* Le paiement que les deux cases modifient : le plus ancien du client,
+   celui qui a bloque la date. Un mariage n'en a normalement qu'un. */
+function reglementPrincipal(clientId){
+  return paysOfClient(clientId).slice()
+    .sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")))[0]||null;
+}
+
+function carteReglement(c){
+  const p=reglementPrincipal(c.id);
+  const autres=paysOfClient(c.id).length-(p?1:0);
+  const total=p?num(p.total):0;
+  /* Un paiement marque "Solde" a la main peut avoir un acompte vide : on
+     affiche alors le total comme recu, comme le fait deja la liste. Sans
+     ca, appuyer sur Enregistrer sans rien changer le ferait repasser en
+     "Acompte recu". */
+  const recu=p?(p.statut==="Solde"?total:num(p.acompte)):0;
+  const val=(n)=>n?String(n).replace(".",","):"";
+  return `<div class="grouplab" style="margin:16px 2px 8px">Règlement</div>
+  <div class="card" style="margin:0 0 12px;padding:14px 16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="field" style="margin:0"><label>Total attendu</label>
+        <input id="rgTotal" inputmode="decimal" value="${val(total)}" placeholder="0" oninput="majResteReglement()"></div>
+      <div class="field" style="margin:0"><label>Acompte reçu</label>
+        <input id="rgRecu" inputmode="decimal" value="${val(recu)}" placeholder="0" oninput="majResteReglement()"></div>
+    </div>
+    <div class="hint" style="margin-top:6px">S'ils ont versé en plusieurs fois, indique le total déjà reçu.</div>
+    <div id="rgReste" style="margin:10px 0 12px;font-weight:600;font-size:15px"></div>
+    <button class="btn wide" onclick="enregistrerReglement('${c.id}')">Enregistrer</button>
+    ${autres>0?`<div class="hint" style="margin-top:8px">Ce client a aussi ${autres} autre${autres>1?"s":""} paiement${autres>1?"s":""} : ${autres>1?"ils restent":"il reste"} dans la liste des paiements.</div>`:""}
+  </div>`;
+}
+
+/* Le reste a payer, recalcule a chaque touche. */
+function majResteReglement(){
+  const el=document.getElementById("rgReste"); if(!el) return;
+  const total=num((document.getElementById("rgTotal")||{}).value);
+  const recu=num((document.getElementById("rgRecu")||{}).value);
+  if(!total){ el.style.color="var(--ink-3)"; el.textContent="Indique le total attendu."; return; }
+  const reste=total-recu;
+  if(reste<=0){ el.style.color="var(--ok)"; el.textContent="Tout est réglé."; return; }
+  el.style.color="var(--warn)"; el.textContent="Reste à payer : "+euros(reste);
+}
+
+function enregistrerReglement(clientId){
+  const c=clientById(clientId); if(!c) return;
+  const total=num(document.getElementById("rgTotal").value);
+  const recu=num(document.getElementById("rgRecu").value);
+  if(!total){ toast("Indique le total attendu"); return; }
+  if(recu>total && !confirm("L'acompte reçu ("+euros(recu)+") dépasse le total attendu ("+euros(total)+").\n\nEnregistrer quand même ?")) return;
+  /* Le statut se deduit des deux montants : c'est lui que le tableau des
+     ventes lit pour savoir ce qui est rentre en caisse. */
+  const statut = recu<=0 ? "En attente" : (recu>=total ? "Solde" : "Acompte recu");
+  const p=reglementPrincipal(clientId);
+  if(p){
+    p.total=String(total); p.acompte=String(recu); p.statut=statut;
+    if(!p.dueDate && c.eventDate) p.dueDate=c.eventDate;
+  } else {
+    /* Premier montant saisi : on cree le paiement. Sa date est celle du
+       jour, c'est le mois ou la vente compte ; l'echeance du solde est le
+       jour du mariage. */
+    DB.paiements.push({ id:uid(), brand:c.brand, clientId:c.id,
+      label: c.type ? acc(c.type) : "Forfait mariage",
+      total:String(total), acompte:String(recu), statut,
+      date: todayStr(), dueDate: c.eventDate||"", notes:"" });
+  }
+  saveDB();
+  openFiche(clientId);
+  toast("Montants enregistrés");
+}
+
 function deletePay(id){
   const p=DB.paiements.find(x=>x.id===id); const cid=p?p.clientId:null;
   DB.deleted=(DB.deleted||[]).concat([id]);
