@@ -16,7 +16,7 @@
 import Stripe from "stripe";
 import { lienStore, normaliserCode, vuePublique, panierDuLien, memoriserPanier,
          LIEN_SEUIL_3X, LIEN_MIN, LIEN_MAX } from "../mbs-liens.mjs";
-import { resumePanier } from "../mbs-panier.mjs";
+import { ouvrirSessionPanier } from "../mbs-paiement-panier.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -88,39 +88,12 @@ export default async (request) => {
     const stripe = new Stripe(secret);
     const site = siteUrl();
 
-    /* Une ligne Stripe par ligne du panier : la cliente retrouve le detail
-       sur l'ecran de paiement et sur son recu, pas seulement un total. */
-    const line_items = panier.lignes.map(l => ({
-      quantity: 1,
-      price_data: {
-        currency: "eur",
-        unit_amount: Math.round(l.montant * 100),
-        product_data: {
-          name: String(l.libelle).slice(0, 250),
-          ...(l.detail ? { description: String(l.detail).slice(0, 250) } : {})
-        }
-      }
-    }));
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      /* Un seul moyen par page, celui qu'elle vient de choisir : proposer
-         la carte a cote de Klarna ferait s'ouvrir l'ecran Link par-dessus.
-         Meme regle que sur les reservations et les bons cadeaux. */
-      payment_method_types: troisFois ? ["klarna"] : ["card"],
-      customer_email: lien.email || undefined,
-      line_items,
-      success_url: site + "/payer.html?c=" + code + "&ok=1",
-      cancel_url: site + "/payer.html?c=" + code,
-      metadata: {
-        app: "mbs-lien", lienCode: code,
-        clientId: lien.clientId || "", montant: String(panier.total),
-        /* Le detail complet vit dans le lien, attache a cette session :
-           les metadonnees Stripe sont limitees a 500 caracteres par champ. */
-        libelle: resumePanier(panier).slice(0, 480),
-        prenom: lien.prenom || "", nom: lien.nom || "",
-        email: lien.email || "", site
-      }
+    /* La session vit dans mbs-paiement-panier.mjs, partagee avec la
+       galerie : une seule facon de presenter un panier a Stripe. */
+    const session = await ouvrirSessionPanier(stripe, {
+      lien, panier, troisFois, site,
+      retourOk: site + "/payer.html?c=" + code + "&ok=1",
+      retourAnnule: site + "/payer.html?c=" + code
     });
 
     /* On garde le panier de CETTE session : c'est lui que la facture

@@ -8,6 +8,7 @@ import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice, lignesSeance } from "../mbs-invoice.mjs";
+import { galerieStore, lireGalerie, enregistrer as enregistrerGalerie, texteSelection } from "../mbs-galeries.mjs";
 import { lienStore, normaliserCode, majIndex, optionChoisie, titreChoisi,
          panierDeSession } from "../mbs-liens.mjs";
 import { resumePanier, TAILLES } from "../mbs-panier.mjs";
@@ -144,6 +145,23 @@ async function traiterLien(session, md) {
     });
   } catch (e) { invNum = null; invPdf = null; }
 
+  /* Une commande passee depuis la galerie : sa selection devient payee. On
+     verifie que la selection en attente est bien celle de CE lien : si la
+     cliente a change d'avis et rouvert le paiement, seul le dernier lien
+     fait foi. */
+  let gal = null;
+  if (lien.galerie) {
+    try {
+      const gs = galerieStore();
+      gal = await lireGalerie(gs, lien.galerie);
+      if (gal && gal.selection && gal.selection.lienCode === code) {
+        gal.selection.paye = true; gal.selection.enAttente = false; gal.selection.payeAt = now;
+        gal.statut = "choisie";
+        await enregistrerGalerie(gs, gal);
+      } else gal = null;
+    } catch (e) { gal = null; }
+  }
+
   /* La recette entre dans le CRM, rattachee a la fiche si on la connait. */
   try {
     const store = crmStore();
@@ -175,7 +193,7 @@ async function traiterLien(session, md) {
       data.taches = data.taches || [];
       data.taches.push({
         id: uid(), done: false,
-        title: libelle + " — " + nom,
+        title: gal ? "Galerie : sélection de " + nom : libelle + " — " + nom,
         dueDate: new Date(now).toISOString().slice(0, 10),
         priority: "Haute",
         clientId: lien.clientId || "",
@@ -187,7 +205,13 @@ async function traiterLien(session, md) {
           /* L'adresse dans le rappel : sans elle, Matt encaisserait des
              tirages sans savoir ou les poster. */
           + (adresseTexte ? "\n\nÀ POSTER À :\n" + adresseTexte : "")
-          + "\n\nÀ faire : " + (adresseTexte
+          /* La selection entiere : les photos comprises dans la formule ne
+             figurent pas dans le panier paye. */
+          + (gal ? "\n\nSA SÉLECTION :\n" + texteSelection(gal)
+              + "\n\nLes miniatures et les numéros : CRM > Galeries." : "")
+          + "\n\nÀ faire : " + (gal
+              ? "retoucher sa sélection" + (adresseTexte ? ", préparer et poster les tirages." : ".")
+              : adresseTexte
               ? "préparer les tirages, les poster, et mettre sa galerie à jour."
               : "mettre sa galerie à jour selon ce qu'elle vient de prendre."),
         stripeSession: session.id, lienCode: code
