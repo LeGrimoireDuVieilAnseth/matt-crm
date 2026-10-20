@@ -4284,10 +4284,32 @@ function dessinerGalerie(){
         ${n?vignettesGal(g,s.coeurs):""}
         ${n?`<button class="btn ghost sm wide" onclick="copierNumerosGal()">Copier les numéros</button>`:""}
       </div>`;
-    if(s.tiragesTexte){
-      h+=`<div class="grouplab" style="margin-top:16px">Tirages à imprimer</div>
-        <div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;white-space:pre-line">${esc(s.tiragesTexte)}</div>`;
-      if(s.adresseTexte) h+=`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6;white-space:pre-line"><b>À poster à</b>\n${esc(s.adresseTexte)}</div>`;
+    /* Les tirages, colis par colis : le sien, puis ceux qu'elle fait
+       envoyer a d'autres personnes. Chaque colis a son adresse. */
+    const autres=s.envois||[];
+    if(s.tiragesTexte || autres.length){
+      const colis=(titre,tir,adr)=>`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
+          <b style="font-size:14px">${esc(titre)}</b>
+          <div style="white-space:pre-line;margin-top:4px">${esc(tir)}</div>
+          ${adr?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);white-space:pre-line"><b>À poster à</b>\n${esc(adr)}</div>`:""}
+        </div>`;
+      h+=`<div class="grouplab" style="margin-top:16px">Tirages à imprimer${autres.length?" · "+(autres.length+(s.tiragesTexte?1:0))+" colis":""}</div>`;
+      if(s.tiragesTexte) h+=colis(autres.length?"Pour elle":"Ses tirages",s.tiragesTexte,s.adresseTexte);
+      autres.forEach(e=>{ h+=colis("Pour "+((e.adresse&&e.adresse.nom)||"une autre personne"),e.tiragesTexte,e.adresseTexte); });
+      /* Pour l'etiquette ou une question sur la livraison : ses coordonnees,
+         prises dans sa fiche (la galerie ne les redemande pas). */
+      const fiche=g.clientId?clientById(g.clientId):null;
+      const tel=fiche&&fiche.tel?String(fiche.tel):"", mail=(fiche&&fiche.email)||g.email||"";
+      const telNu=tel.replace(/[^\d+]/g,"");
+      h+=`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
+          <b style="font-size:14px">Pour la joindre</b>
+          <div style="margin-top:4px">${esc(nom)}</div>
+          <div>${tel?`<a href="tel:${esc(telNu)}">${esc(tel)}</a>`:`<span style="color:var(--ink-3)">pas de téléphone dans sa fiche</span>`}</div>
+          ${mail?`<div style="word-break:break-all"><a href="mailto:${esc(mail)}">${esc(mail)}</a></div>`:""}
+          ${tel?`<div style="display:flex;gap:8px;margin-top:10px">
+            <a class="btn ghost sm" style="flex:1" href="tel:${esc(telNu)}">Appeler</a>
+            <a class="btn ghost sm" style="flex:1" href="sms:${esc(telNu)}">SMS</a></div>`:""}
+        </div>`;
     }
   } else if((g.coeurs||[]).length){
     h+=`<div class="card" style="padding:13px 15px">

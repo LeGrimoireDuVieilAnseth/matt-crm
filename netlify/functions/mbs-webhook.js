@@ -210,7 +210,8 @@ async function traiterLien(session, md) {
           + (gal ? "\n\nSA SÉLECTION :\n" + texteSelection(gal, { photosSeules: true })
               + "\n\nLes miniatures et les numéros : CRM > Galeries." : "")
           + "\n\nÀ faire : " + (gal
-              ? "retoucher sa sélection" + (adresseTexte ? ", préparer et poster les tirages." : ".")
+              ? "retoucher sa sélection" + ((adresseTexte || ((gal.selection || {}).envois || []).length)
+                  ? ", préparer et poster les tirages." : ".")
               : adresseTexte
               ? "préparer les tirages, les poster, et mettre sa galerie à jour."
               : "mettre sa galerie à jour selon ce qu'elle vient de prendre."),

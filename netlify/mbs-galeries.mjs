@@ -187,6 +187,41 @@ export function tiragesParTaille(g, tirages, tailles) {
   return { totaux, numeros: numerosTexte, detail };
 }
 
+/* ---------- les envois a d'autres personnes ----------
+   "Envoyer des tirages a d'autres personnes" : sa mere, ses beaux-parents.
+   Chaque envoi a son adresse et ses tirages, photo par photo. Les PRIX
+   (tirages, et frais d'envoi par adresse) sont dans mbs-panier.mjs,
+   lignesAutresEnvois. Ici on ne fait que nettoyer et verifier. */
+export const ENVOIS_MAX = 5;
+export function autresEnvois(g, envois, tailles) {
+  const out = [], erreurs = [];
+  const nomTaille = Object.fromEntries(tailles.map(t => [t.cle, t.nom]));
+  (Array.isArray(envois) ? envois.slice(0, ENVOIS_MAX) : []).forEach((e, i) => {
+    if (!e || typeof e !== "object") return;
+    const a = (e.adresse && typeof e.adresse === "object") ? e.adresse : {};
+    const adresse = { nom: propre(a.nom, 80), ligne1: propre(a.ligne1, 120), ligne2: propre(a.ligne2, 120),
+                      cp: propre(a.cp, 12), ville: propre(a.ville, 80) };
+    const t = tiragesParTaille(g, e.tirages, tailles);
+    const nb = t.detail.reduce((s, x) => s + x.n, 0);
+    /* Un bloc ouvert puis laisse vide : on l'ignore sans rien dire. */
+    if (!nb && !Object.values(adresse).some(Boolean)) return;
+    const qui = adresse.nom || "la personne n° " + (i + 1);
+    if (!nb) { erreurs.push("Ajoutez au moins un tirage pour " + qui + ", ou retirez cette adresse."); return; }
+    if (!adresse.nom || !adresse.ligne1 || !adresse.cp || !adresse.ville) {
+      erreurs.push("Indiquez l'adresse complète pour " + qui + " : nom, adresse, code postal et ville."); return;
+    }
+    const tirages = {};
+    t.detail.forEach(x => { (tirages[x.id] = tirages[x.id] || {})[x.cle] = x.n; });
+    out.push({
+      adresse, tirages, totaux: t.totaux, numeros: t.numeros, nb,
+      adresseTexte: [adresse.nom, adresse.ligne1, adresse.ligne2, [adresse.cp, adresse.ville].join(" ")]
+        .filter(Boolean).join("\n"),
+      tiragesTexte: Object.entries(t.numeros).map(([cle, n]) => (nomTaille[cle] || cle) + " : " + n).join("\n"),
+    });
+  });
+  return { envois: out, erreurs };
+}
+
 /* Les coeurs gardes : seulement des photos de cette galerie, sans doublon. */
 export function coeursPropres(g, coeurs) {
   const ids = new Set(g.photos.map(p => p.id));
@@ -226,8 +261,14 @@ export function texteSelection(g, { photosSeules = false } = {}) {
     + (s.coeurs.length > 1 ? "s" : "") + (g.quota ? " (" + g.quota + " comprises dans la formule "
     + NOM_FORMULE[g.formule] + ")" : " (formule Prestige)") + " :");
   if (s.coeurs.length) lignes.push(s.coeurs.map(id => nom[id] || id).join(", "));
-  if (photosSeules) return lignes.join("\n");
-  if (s.tiragesTexte) lignes.push("", "Tirages :", s.tiragesTexte);
-  if (s.adresseTexte) lignes.push("", "À poster à :", s.adresseTexte);
+  if (!photosSeules) {
+    if (s.tiragesTexte) lignes.push("", "Tirages :", s.tiragesTexte);
+    if (s.adresseTexte) lignes.push("", "À poster à :", s.adresseTexte);
+  }
+  /* Les autres adresses ne figurent nulle part ailleurs : le paiement ne
+     garde que celle de la cliente. Elles sont donc toujours ici. */
+  (s.envois || []).forEach(e => {
+    lignes.push("", "AUSSI À POSTER À :", e.adresseTexte, "Tirages pour cette adresse :", e.tiragesTexte);
+  });
   return lignes.join("\n");
 }

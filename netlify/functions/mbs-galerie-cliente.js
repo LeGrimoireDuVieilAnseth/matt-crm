@@ -19,9 +19,9 @@
 // lien de paiement, et suit le chemin de tous les liens jusqu'a la facture.
 import Stripe from "stripe";
 import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton,
-         idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection,
+         idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection, autresEnvois,
          NOM_FORMULE, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
-import { calculerPanier, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
+import { calculerPanier, lignesAutresEnvois, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
 import { lienStore, creerLien, memoriserPanier, LIEN_MIN, LIEN_MAX, LIEN_SEUIL_3X } from "../mbs-liens.mjs";
 import { ouvrirSessionPanier } from "../mbs-paiement-panier.mjs";
 import { porteFermee, noterEchec, LIMITE_CODES } from "../mbs-garde.mjs";
@@ -117,10 +117,17 @@ export default async (request) => {
       + plafond + " photos : " + g.quota + " comprises dans votre formule, et " + PHOTOS_MAX + " en plus."] }, 400);
   }
   const tir = tiragesParTaille(g, corps.tirages, TAILLES);
-  const aDuPapier = Object.keys(tir.totaux).length > 0;
+  const aSonPapier = Object.keys(tir.totaux).length > 0;
+  /* Les tirages envoyes a d'autres personnes, chacun a son adresse. */
+  const autres = autresEnvois(g, corps.envois, TAILLES);
+  if (autres.erreurs.length) return json({ ok: false, erreur: "incomplet", messages: autres.erreurs }, 400);
+  const aDuPapier = aSonPapier || autres.envois.length > 0;
   /* Le panier ramene chaque taille a TIRAGES_MAX sans rien dire : 40 tirages
-     demandes en 20 x 30 en auraient fait payer 30. On refuse plutot. */
-  const tropDe = TAILLES.filter(t => (tir.totaux[t.cle] || 0) > TIRAGES_MAX);
+     demandes en 20 x 30 en auraient fait payer 30. On refuse plutot. Le
+     plafond vaut pour la commande entiere, tous envois confondus. */
+  const parTaille = { ...tir.totaux };
+  autres.envois.forEach(e => Object.entries(e.totaux).forEach(([k, n]) => { parTaille[k] = (parTaille[k] || 0) + n; }));
+  const tropDe = TAILLES.filter(t => (parTaille[t.cle] || 0) > TIRAGES_MAX);
   if (tropDe.length) {
     return json({ ok: false, erreur: "trop_de_tirages", messages: tropDe.map(t =>
       "Au plus " + TIRAGES_MAX + " tirages en " + t.nom + " par commande. Pour davantage, appelez Matteo au 06 47 76 54 17.") }, 400);
@@ -131,12 +138,17 @@ export default async (request) => {
 
   /* Le panier du comptoir, recalcule ici. Les photos comprises dans la
      formule n'y entrent pas : elles sont deja payees. */
-  const panier = calculerPanier({
+  const panierSien = calculerPanier({
     formules: [],
-    extras: { photos: enPlus > 0, tirages: aDuPapier },
+    extras: { photos: enPlus > 0, tirages: aSonPapier },
     choix: { photos: enPlus, tirages: tir.totaux, numeros: tir.numeros, adresse: corps.adresse }
   });
-  if (panier.erreurs.length) return json({ ok: false, erreur: "incomplet", messages: panier.erreurs }, 400);
+  if (panierSien.erreurs.length) return json({ ok: false, erreur: "incomplet", messages: panierSien.erreurs }, 400);
+  /* Les autres envois s'ajoutent en lignes du meme panier : un seul
+     paiement, une seule facture, un seul rappel. */
+  const lignesAutres = lignesAutresEnvois(autres.envois);
+  const panier = { ...panierSien, lignes: [...panierSien.lignes, ...lignesAutres],
+                   total: panierSien.total + lignesAutres.reduce((s, l) => s + l.montant, 0) };
   if (panier.total > LIEN_MAX)
     return json({ ok: false, erreur: "trop_haut", messages: ["Ce total dépasse ce qui peut être réglé en ligne. Appelez Matteo au 06 47 76 54 17."] }, 400);
 
@@ -162,6 +174,8 @@ export default async (request) => {
   g.selection = {
     coeurs, tirages: corps.tirages && typeof corps.tirages === "object" ? corps.tirages : {},
     tiragesTexte, adresse: panier.adresse, adresseTexte,
+    envois: autres.envois.map(e => ({ adresse: e.adresse, adresseTexte: e.adresseTexte,
+                                      tirages: e.tirages, tiragesTexte: e.tiragesTexte, nb: e.nb })),
     enPlus, montant: panier.total, at: now,
     enAttente: panier.total > 0, paye: false, lienCode: "",
   };

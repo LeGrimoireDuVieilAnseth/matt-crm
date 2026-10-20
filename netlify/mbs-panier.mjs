@@ -205,6 +205,36 @@ export function prixTirages(tirages) {
   return { lignes, nb, papier, envoi, total: papier + envoi };
 }
 
+/* Des tirages postes a d'autres adresses, depuis la galerie ("Envoyer des
+   tirages a d'autres personnes"). Chaque adresse est un colis de plus que
+   Matt paie a la poste : les frais d'envoi s'appliquent a CHACUNE, sans le
+   seuil d'envoi offert, qui ne vaut que pour le colis de la cliente. Choix
+   de Matt, 20/10/2026.
+   `envois` vient de autresEnvois (mbs-galeries.mjs), deja nettoye : des
+   quantites par taille et les numeros des photos, jamais un prix. */
+export function lignesAutresEnvois(envois) {
+  const lignes = [];
+  (Array.isArray(envois) ? envois : []).forEach((e, i) => {
+    const qui = propre(e && e.adresse && e.adresse.nom, 60) || "l'adresse n° " + (i + 1);
+    let nb = 0;
+    TAILLES.forEach(t => {
+      const n = entier(e && e.totaux && e.totaux[t.cle], TIRAGES_MAX);
+      if (!n) return;
+      nb += n;
+      const numeros = propre(e.numeros && e.numeros[t.cle], 200);
+      lignes.push({
+        cle: "tirage:" + t.cle + ":" + (i + 1),
+        libelle: n + " tirage" + (n > 1 ? "s" : "") + " " + t.nom + " pour " + qui,
+        detail: numeros ? "photo" + (n > 1 ? "s" : "") + " n° " + numeros : "",
+        quantite: n, montant: n * t.prix,
+      });
+    });
+    if (nb) lignes.push({ cle: "envoi:" + (i + 1), libelle: "Envoi postal à " + qui, detail: "",
+                          quantite: 1, montant: FRAIS_ENVOI });
+  });
+  return lignes;
+}
+
 /* Une ligne de resume, pour le CRM et les notifications. */
 export function resumePanier(panier) {
   return (panier.lignes || []).map(l => l.libelle).join(" · ") || "Complément";
