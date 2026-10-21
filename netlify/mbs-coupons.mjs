@@ -74,6 +74,41 @@ export function discountFor(total, amount = COUPON_AMOUNT, kind = "promo") {
   return Math.max(0, Math.min(amount, total - MIN_TOTAL));
 }
 
+/* ---------- Liens de reservation a prix convenu ----------
+   Matt fait parfois un geste : il fixe lui-meme le montant final et
+   l'acompte, puis envoie un lien (reserver.html?c=CODE). Le prix est lu
+   dans le code, cote serveur, JAMAIS dans le navigateur ni dans l'adresse :
+   un lien qui porterait son prix se modifierait en deux secondes.
+   Dix caracteres : le code circule par SMS, il ne se dicte pas, et il doit
+   rester impossible a deviner. Usage unique, comme tous les codes.
+   amount: 0 : si quelqu'un le tape comme code promo sur la page normale,
+   il ne vaut rien (mbs-coupon et mbs-checkout le reconnaissent a part). */
+export const SURMESURE_VALIDITE_JOURS = 60;
+export async function createSurMesureCoupon(store, { seance, gamme, gammes, total, acompte, plein, beneficiaire, now = Date.now() }) {
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    const essai = makeCode(10);
+    const deja = await store.get("c-" + essai, { type: "json" }).catch(() => null);
+    if (!deja) { code = essai; break; }
+  }
+  if (!code) return null;
+  const coupon = {
+    code, kind: "surmesure", amount: 0,
+    seance, gamme: gamme || "", gammes: gammes || null,
+    total, acompte, plein, beneficiaire: beneficiaire || "",
+    expiresAt: now + SURMESURE_VALIDITE_JOURS * 86400000, createdAt: now,
+    usedAt: 0, sessionId: "", reservedUntil: 0, disabled: false
+  };
+  await store.setJSON("c-" + code, coupon);
+  try {
+    const idx = (await store.get("surmesures", { type: "json" })) || [];
+    idx.unshift({ code, seance, gamme: coupon.gamme, gammes: coupon.gammes, total, acompte, plein,
+                  beneficiaire: coupon.beneficiaire, createdAt: now, expiresAt: coupon.expiresAt });
+    await store.setJSON("surmesures", idx.slice(0, 500));
+  } catch (e) {}
+  return coupon;
+}
+
 /* ---------- Codes de reservation ----------
    Pour la SECONDE seance d'un pack grossesse + naissance, deja reglee.
    Meme stockage et meme cycle de vie que les bons cadeaux (code unique,

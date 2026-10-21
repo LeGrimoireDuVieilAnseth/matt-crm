@@ -393,6 +393,18 @@ async function traiterAbandon(session, md) {
   // idempotence : une seule relance par session Stripe
   if ((data.clients || []).some(c => c.abandonSession === session.id)) return;
 
+  /* Un lien a prix convenu : si elle a fini par reserver avec (le code est
+     consomme), il n'y a rien a relancer. Sinon la relance la renvoie vers
+     SA page, avec ses montants, et non vers les tarifs publics. */
+  let lienSurMesure = "";
+  if (md.kind === "surmesure" && md.coupon) {
+    try {
+      const c = await couponStore().get("c-" + md.coupon, { type: "json" });
+      if (c && c.usedAt) return;
+    } catch (e) {}
+    lienSurMesure = siteClient(md) + "/reserver.html?c=" + md.coupon;
+  }
+
   const prenom = md.prenom || "";
   const nom    = md.nom || "";
   const email  = (md.email || session.customer_email || "").trim();
@@ -438,7 +450,7 @@ async function traiterAbandon(session, md) {
       "<p>Bonjour " + (prenom || "") + ",</p>" +
       "<p>Vous avez commencé à réserver une <b>séance " + typeLbl.toLowerCase() + "</b> au studio, et la réservation n'est pas allée au bout. Aucun souci : votre créneau a simplement été libéré.</p>" +
       "<p>Si vous souhaitez toujours venir, tout est encore possible :</p>" +
-      "<p><a href=\"" + site + "/#tarifs\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
+      "<p><a href=\"" + (lienSurMesure || site + "/#tarifs") + "\" style=\"background:#5E4430;color:#FAF4EA;padding:12px 22px;border-radius:999px;text-decoration:none;display:inline-block\">Choisir une nouvelle date</a></p>" +
       "<p>Et si vous avez la moindre question (déroulement, tenues, meilleur moment pour la séance), répondez simplement à cet email ou appelez-moi au <b>06 47 76 54 17</b>. Je réponds toujours avec plaisir.</p>" +
       "<p>À très vite,<br>Matteo · Mybabyshoot</p>" +
       "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une réservation a été commencée avec cette adresse. Si ce n'était pas vous, ignorez simplement cet email.</p>";
@@ -595,7 +607,9 @@ export default async (request) => {
       + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
-      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " €)." : ""),
+      + (md.coupon ? (md.kind === "surmesure"
+          ? " Prix convenu par lien de réservation : " + md.total + " € au lieu de " + md.totalPlein + " €."
+          : " Code promo " + prettyCode(md.coupon) + " (-" + md.remise + " €).") : ""),
     createdAt: now, stripeSession: session.id
   });
 
@@ -609,7 +623,9 @@ export default async (request) => {
     statut: toutRegle ? "Solde" : "Acompte recu",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
     notes: (toutRegle ? "Totalité réglée en ligne via Stripe, rien à encaisser le jour J." : "Réglé en ligne via Stripe.")
-      + (md.coupon ? " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €)." : "")
+      + (md.coupon ? (md.kind === "surmesure"
+          ? " Prix convenu par lien de réservation : " + md.total + " € au lieu de " + md.totalPlein + " €, acompte " + md.acompte + " €."
+          : " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €).") : "")
       + (tiragesLignes.length
           ? "\nTirages commandés et réglés d'avance :\n"
             + tiragesLignes.map(l => "· " + l).join("\n")

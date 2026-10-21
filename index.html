@@ -6435,6 +6435,17 @@ function openLienResa(){
       <div class="field"><label>Formule de la séance grossesse</label><select id="lrDuoG" onchange="majLienResa()">${opt("lrDuoG","confort")}</select></div>
       <div class="field"><label>Formule de la séance naissance</label><select id="lrDuoN" onchange="majLienResa()">${opt("lrDuoN","confort")}</select></div>
     </div>
+    <label style="display:flex;gap:9px;align-items:center;font-size:14px;font-weight:600;margin:0 0 10px;cursor:pointer">
+      <input type="checkbox" id="lrPrix" onchange="basculerPrixResa()" style="width:auto"> Faire un prix (ristourne)</label>
+    <div id="lrPrixBloc" style="display:none">
+      <div style="display:flex;gap:10px">
+        <div class="field" style="flex:1"><label>Montant final (€)</label><input id="lrTotal" type="number" inputmode="numeric" min="1" step="1" oninput="majLienResa()"></div>
+        <div class="field" style="flex:1"><label>Acompte (€)</label><input id="lrAcompte" type="number" inputmode="numeric" min="1" step="1" oninput="majLienResa()"></div>
+      </div>
+      <div class="field"><label>Son prénom (facultatif)</label><input id="lrPrenom" autocomplete="off" placeholder="Julie" oninput="majLienResa()"></div>
+      <button class="btn wide" id="lrCreer" onclick="creerLienSurMesure()">Créer le lien à ce prix</button>
+      <div style="font-size:12px;color:var(--ink-3);line-height:1.5;margin:6px 0 14px">Elle verra ces montants sur une page à elle (et non sur le site), qui ne sert qu'une fois et reste valable 60 jours. Le prix est gardé sur le serveur : personne ne peut le changer.</div>
+    </div>
     <div class="card" id="lrResume" style="padding:12px 14px;font-size:13.5px;line-height:1.55;margin-bottom:14px"></div>
     <div class="field"><label>Son numéro (facultatif)</label>
       <input id="lrTel" type="tel" inputmode="tel" autocomplete="off" placeholder="06 12 34 56 78" oninput="majLienResa()">
@@ -6449,8 +6460,58 @@ function openLienResa(){
     <div style="display:flex;gap:8px">
       <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal(document.getElementById('lrMessage').value,'Message copié')">Copier le message</button>
       <a class="btn ghost sm" style="flex:1" id="lrVoir" href="#" target="_blank" rel="noopener">Voir la page</a></div>`);
+  lrSurMesure=null;
   majLienResa(true);
 }
+/* ---------- le prix sur mesure ---------- */
+let lrSurMesure=null;   // { lien, sig } : le dernier lien cree, et ce qu'il porte
+function choixLienResa(){
+  const seance=document.getElementById("lrSeance").value;
+  return seance==="duo"
+    ? { seance, gammes:{ grossesse:document.getElementById("lrDuoG").value, naissance:document.getElementById("lrDuoN").value } }
+    : { seance, gamme:document.getElementById("lrFormule").value };
+}
+function signatureLienResa(){
+  return JSON.stringify({ ...choixLienResa(), total:Math.round(Number(document.getElementById("lrTotal").value)||0),
+    acompte:Math.round(Number(document.getElementById("lrAcompte").value)||0),
+    prenom:document.getElementById("lrPrenom").value.trim() });
+}
+function prixGrilleLienResa(){
+  const c=choixLienResa();
+  return c.seance==="duo" ? formuleParCle("duo-"+c.gammes.grossesse+"-"+c.gammes.naissance).prix : formuleParCle(c.gamme).prix;
+}
+function basculerPrixResa(){
+  const on=document.getElementById("lrPrix").checked;
+  document.getElementById("lrPrixBloc").style.display=on?"":"none";
+  if(on && !document.getElementById("lrTotal").value){
+    const p=prixGrilleLienResa();
+    document.getElementById("lrTotal").value=p;
+    document.getElementById("lrAcompte").value=p>=590?190:90;
+  }
+  majLienResa(true);
+}
+async function creerLienSurMesure(){
+  const c=choixLienResa();
+  const total=Math.round(Number(document.getElementById("lrTotal").value)||0);
+  const acompte=Math.round(Number(document.getElementById("lrAcompte").value)||0);
+  const plein=prixGrilleLienResa();
+  if(!(total>=1 && total<=plein)){ alert("Le montant final doit être compris entre 1 € et le tarif de la formule ("+plein+" €)."); return; }
+  if(!(acompte>=1 && acompte<=total)){ alert("L'acompte doit être compris entre 1 € et le montant final ("+total+" €)."); return; }
+  if(!CLOUD){ alert("Disponible seulement en ligne : le prix est gardé sur le serveur."); return; }
+  const b=document.getElementById("lrCreer"); b.disabled=true; b.textContent="Création...";
+  const sig=signatureLienResa();
+  try{
+    const r=await fetch(CP_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify({ action:"surmesure-creer", ...c, total, acompte,
+      beneficiaire:document.getElementById("lrPrenom").value.trim() })});
+    if(r.status===401){ handleUnauthorized(); return; }
+    const j=await r.json();
+    if(!j.ok){ alert(j.message||"Création impossible."); b.disabled=false; b.textContent="Créer le lien à ce prix"; return; }
+    lrSurMesure={ lien:j.lien, sig };
+    toast("Lien créé à "+total+" €");
+    majLienResa(true);
+  }catch(e){ alert("Erreur réseau."); b.disabled=false; b.textContent="Créer le lien à ce prix"; }
+}
+
 /* Le lien, le resume et le message suivent les choix. Le message n'est
    reecrit que tant que Matt ne l'a pas retouche lui-meme. */
 let lrMessageAuto="";
@@ -6475,11 +6536,28 @@ function majLienResa(premier){
     titre="Séance "+mot+", formule "+formuleParCle(f).nom;
   }
   /* Meme regle que le site et le serveur (acompteFor) : 190 euros des 590. */
-  const acompte=prix>=590?190:90;
-  document.getElementById("lrResume").innerHTML=`<b>${esc(titre)}</b><br>
-    ${prix} €, acompte en ligne de ${acompte} €, solde le jour de la séance.
+  let acompte=prix>=590?190:90;
+  /* Le prix sur mesure : le lien vient du serveur (creerLienSurMesure),
+     qui garde les montants. Tant qu'il n'est pas cree, ou si Matt change
+     quoi que ce soit apres, il n'y a pas de lien a envoyer. */
+  const perso=document.getElementById("lrPrix").checked;
+  let pret=true, sousTitre;
+  if(perso){
+    const total=Math.round(Number(document.getElementById("lrTotal").value)||0);
+    const ac=Math.round(Number(document.getElementById("lrAcompte").value)||0);
+    const sig=signatureLienResa();
+    pret=!!(lrSurMesure && lrSurMesure.sig===sig);
+    lien=pret?lrSurMesure.lien:"[le lien apparaît dès que tu as créé le lien à ce prix]";
+    sousTitre=(total<prix?"<s>"+prix+" €</s> ":"")+"<b>"+total+" €</b>, acompte en ligne de "+ac+" €, solde de "+Math.max(0,total-ac)+" € le jour de la séance.";
+    quoi+=", au tarif convenu de "+total+" €";
+    acompte=ac;
+    const cr=document.getElementById("lrCreer");
+    if(cr){ cr.textContent=pret?"Lien créé ✓":"Créer le lien à ce prix"; cr.disabled=pret; }
+  } else sousTitre=prix+" €, acompte en ligne de "+acompte+" €, solde le jour de la séance.";
+  document.getElementById("lrResume").innerHTML=`<b>${esc(titre)}</b><br>${sousTitre}
     <div style="font-size:12px;color:var(--ink-3);margin-top:6px;word-break:break-all">${esc(lien)}</div>`;
-  const msg="Bonjour,\n\nVoici le lien pour réserver "+quoi+". Tout est déjà choisi : il ne vous reste qu'à choisir "+quand
+  const msg="Bonjour"+(perso&&document.getElementById("lrPrenom").value.trim()?" "+document.getElementById("lrPrenom").value.trim():"")
+    +",\n\nVoici le lien pour réserver "+quoi+". Tout est déjà choisi : il ne vous reste qu'à choisir "+quand
     +", puis à régler l'acompte de "+acompte+" € en ligne.\n\n"+lien+"\n\nÀ très vite,\nMatt, Mybabyshoot";
   const zone=document.getElementById("lrMessage");
   const avert=document.getElementById("lrAvert");
@@ -6487,14 +6565,15 @@ function majLienResa(premier){
   else if(zone.value.indexOf(SITE_MBS)>=0){
     if(avert) avert.style.display="";
     /* Message retouche a la main : on remplace seulement le lien. */
-    zone.value=zone.value.replace(/https:\/\/www\.mybabyshoot\.fr\/\?seance=[^\s]*/g,lien);
+    zone.value=zone.value.replace(/(https:\/\/www\.mybabyshoot\.fr\/(\?seance=|reserver\.html\?c=)[^\s]*|\[le lien apparaît[^\]]*\])/g,lien);
   }
   const tel=document.getElementById("lrTel").value.replace(/[^\d+]/g,"");
   const intl=tel.replace(/^\+/,"").replace(/^0(\d{9})$/,"33$1");
   const corps=()=>encodeURIComponent(document.getElementById("lrMessage").value);
   const sms=document.getElementById("lrSms"), wa=document.getElementById("lrWa");
-  sms.onclick=()=>{ sms.href="sms:"+tel+"?&body="+corps(); };
-  wa.onclick=()=>{ wa.href="https://wa.me/"+intl+"?text="+corps(); };
+  [sms,wa].forEach(b=>{ b.style.opacity=pret?"":".45"; });
+  sms.onclick=(e)=>{ if(!pret){ e.preventDefault(); toast("Crée d'abord le lien à ce prix"); return; } sms.href="sms:"+tel+"?&body="+corps(); };
+  wa.onclick=(e)=>{ if(!pret){ e.preventDefault(); toast("Crée d'abord le lien à ce prix"); return; } wa.href="https://wa.me/"+intl+"?text="+corps(); };
   document.getElementById("lrVoir").href=lien;
 }
 

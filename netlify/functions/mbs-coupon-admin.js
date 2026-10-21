@@ -13,9 +13,9 @@
 // - POST {action:"cadeau-renvoyer", code, email, explication}
 //                       : renvoie le bon par email, avec le meme code
 import { couponStore, makeCode, prettyCode, prettyGift, normalizeCode, COUPON_AMOUNT,
-         createGiftCoupon, createResaCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
+         createGiftCoupon, createResaCoupon, createSurMesureCoupon, offreCadeau, GIFT_OFFRES, styleValide } from "../mbs-coupons.mjs";
 import { htmlBonCadeau, htmlBonCorrige, SEANCE_TXT } from "../mbs-bon-mail.mjs";
-import { typeConnu } from "../mbs-lib.mjs";
+import { typeConnu, prixSeance, GAMMES_DUO } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
 
@@ -278,6 +278,40 @@ export default async (request) => {
   /* Un code de reservation pour la SECONDE seance d'un pack, deja reglee.
      Aucun montant : il n'ouvre pas un droit a une remise, il ouvre un
      droit a choisir un creneau. */
+  /* Un lien de reservation a prix convenu (CRM, "+" > Creer un lien de
+     reservation > Faire un prix). Le tarif de la grille est recalcule ici :
+     le montant final ne peut que baisser, jamais monter, et l'acompte reste
+     entre 1 euro et ce montant. */
+  if (body.action === "surmesure-creer") {
+    const seance = String(body.seance || "");
+    if (!typeConnu(seance)) return json({ ok: false, error: "seance", message: "Séance non reconnue." }, 400);
+    let gamme = "", gammes = null, plein = null;
+    if (seance === "duo") {
+      const g = String((body.gammes || {}).grossesse || ""), n = String((body.gammes || {}).naissance || "");
+      if (!GAMMES_DUO.includes(g) || !GAMMES_DUO.includes(n)) return json({ ok: false, error: "formule", message: "Formule non reconnue." }, 400);
+      gammes = { grossesse: g, naissance: n };
+      plein = prixSeance({ section: "duo", gammes });
+    } else {
+      gamme = String(body.gamme || "");
+      if (!GAMMES_DUO.includes(gamme)) return json({ ok: false, error: "formule", message: "Formule non reconnue." }, 400);
+      plein = prixSeance({ section: "simple", gamme });
+    }
+    if (!plein) return json({ ok: false, error: "formule", message: "Formule non reconnue." }, 400);
+    const total = Math.round(Number(body.total)), acompte = Math.round(Number(body.acompte));
+    if (!(total >= 1 && total <= plein))
+      return json({ ok: false, error: "total", message: "Le montant final doit être compris entre 1 € et le tarif de la formule (" + plein + " €)." }, 400);
+    if (!(acompte >= 1 && acompte <= total))
+      return json({ ok: false, error: "acompte", message: "L'acompte doit être compris entre 1 € et le montant final (" + total + " €)." }, 400);
+    const coupon = await createSurMesureCoupon(store, {
+      seance, gamme, gammes, total, acompte, plein,
+      beneficiaire: String(body.beneficiaire || "").trim().slice(0, 80)
+    });
+    if (!coupon) return json({ ok: false, error: "code" }, 500);
+    const site = (process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr").replace(/\/+$/, "");
+    return json({ ok: true, code: coupon.code, lien: site + "/reserver.html?c=" + coupon.code,
+                  plein, total, acompte, expiresAt: coupon.expiresAt });
+  }
+
   if (body.action === "resa-creer") {
     /* Le nom est facultatif : Matt genere souvent le code pendant qu'il
        parle a la cliente, et la fiche de la seance portera de toute facon

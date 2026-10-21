@@ -202,7 +202,9 @@ export default async (request) => {
      Une reservation avec un bon cadeau seul ne passe pas par le
      configurateur, sa formule vient du bon et non du navigateur. */
   let total = 0, affiche = null;
-  if (!body.giftOnly) {
+  /* Un lien a prix convenu (reserver.html) n'envoie pas de formule : elle
+     est dans le code, comme pour un bon cadeau. */
+  if (!body.giftOnly && !body.surMesure) {
     const calcule = prixSeance({
       section: body.section, gamme: body.gamme, gammes: body.gammes,
       photos: body.photos, album: body.album, tirages: body.tirages
@@ -256,7 +258,7 @@ export default async (request) => {
   // 1bis) Code de reduction ou bon cadeau : verifie ET applique cote serveur
   //       (jamais depuis le navigateur). Le code est seulement reserve ici ;
   //       il n'est consomme qu'au paiement confirme.
-  let remise = 0, couponCode = "", couponKind = "promo", giftFormule = "";
+  let remise = 0, couponCode = "", couponKind = "promo", giftFormule = "", acompteImpose = null, gammeCode = "";
   if (body.coupon) {
     const cstore = couponStore();
     /* Essais rates limites par adresse. Sans cette limite, on pouvait
@@ -273,7 +275,25 @@ export default async (request) => {
       return json({ ok: false, error: "coupon", message: reasonLabel(chk.reason) }, 400);
     }
     couponKind = chk.coupon.kind === "cadeau" ? "cadeau"
-               : chk.coupon.kind === "reservation" ? "reservation" : "promo";
+               : chk.coupon.kind === "reservation" ? "reservation"
+               : chk.coupon.kind === "surmesure" ? "surmesure" : "promo";
+
+    /* Lien a prix convenu : la seance, la formule, le montant final et
+       l'acompte viennent du code, que Matt a cree dans le CRM. Le
+       navigateur ne decide de rien : ni options, ni deplacement. La remise
+       est l'ecart avec la grille, pour que la fiche et la facture montrent
+       le tarif, le geste, et ce qui reste. */
+    if (couponKind === "surmesure") {
+      const c = chk.coupon;
+      type = typeConnu(c.seance) ? c.seance : "grossesse";
+      if (type === "duo" && c.gammes) { paireDuo = c.gammes.grossesse + "+" + c.gammes.naissance; giftFormule = paireDuo; }
+      else { gammeCode = String(c.gamme || ""); giftFormule = gammeCode; }
+      const plein = Number(c.plein) || Number(c.total) || 0;
+      const fixe = Math.min(Number(c.total) || 0, plein);
+      total = plein; totalPlein = plein; remise = Math.max(0, plein - fixe);
+      acompteImpose = Math.max(1, Math.min(Number(c.acompte) || 0, fixe));
+      body.photos = 0; body.album = false; body.tirages = {}; body.exterieur = null;
+    }
 
     /* Code de reservation : la seance a DEJA ete reglee, c'est la seconde
        d'un pack. Rien a prelever, et surtout rien a recompter en recette :
@@ -304,7 +324,7 @@ export default async (request) => {
     /* Un code de reservation ne porte pas de remise : il n'y a deja plus
        rien a payer. Le controle ci-dessous ne vaut que pour les deux
        autres genres. */
-    if (couponKind !== "reservation") {
+    if (couponKind !== "reservation" && couponKind !== "surmesure") {
       remise = discountFor(total, chk.coupon.amount, couponKind);
       if (remise <= 0) {
         await releaseLock();
@@ -328,7 +348,9 @@ export default async (request) => {
 
      En paiement integral, il n'y a plus d'acompte : on prend tout. Le solde
      du jour J tombe a zero. */
-  const acompte = integral ? total : Math.min(acompteFor(totalPlein), total);
+  const acompte = integral ? total
+    : acompteImpose !== null ? Math.min(acompteImpose, total)   // fixe par Matt (lien a prix convenu)
+    : Math.min(acompteFor(totalPlein), total);
 
   // Seance en exterieur : les frais sont RECALCULES ici depuis l'adresse.
   // Le navigateur n'envoie qu'une adresse, jamais un montant. Les frais
@@ -432,7 +454,9 @@ export default async (request) => {
       // la vente rapporte vraiment, et c'est la-dessus que Google doit
       // apprendre a optimiser.
       success_url: site + "/?reservation=ok&valeur=" + total + (integral ? "&integral=1" : "") + "&session_id={CHECKOUT_SESSION_ID}",
-      cancel_url: site + "/?reservation=annulee",
+      cancel_url: couponKind === "surmesure" && couponCode
+        ? site + "/reserver.html?c=" + couponCode + "&annule=1"   // elle retrouve sa page, pas le configurateur
+        : site + "/?reservation=annulee",
       // La relance part quand Stripe declare la session expiree. Matt la veut
       // le lendemain a la meme heure : Stripe plafonne a 24 h, on prend une
       // petite marge pour ne pas se faire refuser a la seconde pres.
@@ -449,7 +473,10 @@ export default async (request) => {
         /* La formule et les options, pour que la facture puisse detailler.
            Des identifiants et des quantites, jamais des montants : les
            prix se retrouvent cote serveur, dans la grille. */
-        gamme: String(body.gamme || ""),
+        gamme: gammeCode || String(body.gamme || ""),
+        /* Le genre du code : le webhook ecrit "prix convenu" et non "code
+           promo" pour un lien de Matt. */
+        kind: couponCode ? couponKind : "",
         photos: String(Math.min(Math.max(parseInt(body.photos, 10) || 0, 0), 50)),
         album: body.album ? "1" : "",
         /* La formule de chaque seance du pack, "confort+prestige". Sans

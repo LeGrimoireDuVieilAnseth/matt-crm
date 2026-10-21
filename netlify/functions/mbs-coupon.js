@@ -2,12 +2,13 @@
 // Verification d'un code de reduction depuis le site (avant paiement).
 // Ne consomme rien : la remise n'est appliquee (et le code brule) que
 // cote serveur dans mbs-checkout / mbs-webhook.
-import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode, prettyGift } from "../mbs-coupons.mjs";
+import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode, prettyGift, releaseCoupon, normalizeCode } from "../mbs-coupons.mjs";
+import { acompteFor } from "../mbs-lib.mjs";
 import { porteFermee, noterEchec, LIMITE_CODES, MESSAGE_TROP_CODES } from "../mbs-garde.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type"
 };
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
@@ -16,6 +17,35 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+
+  /* La page reserver.html lit son lien a prix convenu : la seance, la
+     formule, le montant final et l'acompte que Matt a fixes. Memes limites
+     d'essais que les autres codes. */
+  if (request.method === "GET") {
+    const url = new URL(request.url);
+    if (await porteFermee("codes", request, LIMITE_CODES))
+      return json({ ok: true, valide: false, message: MESSAGE_TROP_CODES }, 429);
+    /* Elle revient de la page de paiement par "Annuler" : le code etait
+       reserve le temps du paiement (20 minutes). On le libere tout de
+       suite, sinon sa page lui dirait d'attendre. */
+    if (url.searchParams.get("annule") === "1") {
+      try {
+        const code = normalizeCode(url.searchParams.get("surmesure"));
+        const c = await couponStore().get("c-" + code, { type: "json" });
+        if (c && c.kind === "surmesure" && !c.usedAt) await releaseCoupon(couponStore(), code);
+      } catch (e) {}
+    }
+    const chk = await checkCoupon(couponStore(), url.searchParams.get("surmesure"));
+    if (!chk.ok && chk.reason === "inconnu") await noterEchec("codes", request, LIMITE_CODES);
+    if (!chk.ok) return json({ ok: true, valide: false, raison: chk.reason, message: reasonLabel(chk.reason) });
+    const c = chk.coupon;
+    if (c.kind !== "surmesure") { await noterEchec("codes", request, LIMITE_CODES); return json({ ok: true, valide: false, message: reasonLabel("inconnu") }); }
+    return json({ ok: true, valide: true, seance: c.seance, gamme: c.gamme, gammes: c.gammes,
+                  total: c.total, acompte: c.acompte, plein: c.plein || c.total,
+                  /* l'acompte qu'elle aurait paye sans le geste, pour comparer */
+                  acompteNormal: acompteFor(c.plein || c.total),
+                  prenom: String(c.beneficiaire || "").split(/\s+/)[0] || "", expiresAt: c.expiresAt });
+  }
   if (request.method !== "POST") return json({ ok: false, error: "method" }, 405);
 
   let body;
@@ -33,6 +63,10 @@ export default async (request) => {
 
   if (!chk.ok) return json({ ok: true, valide: false, message: reasonLabel(chk.reason) });
 
+  /* Un lien a prix convenu ne se tape pas comme code promo : il ne vaut que
+     sur sa page, avec la formule qu'il porte. */
+  if (chk.coupon.kind === "surmesure")
+    return json({ ok: true, valide: false, message: "Ce code s'utilise avec le lien de réservation que vous avez reçu." });
   const kind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
   const remise = discountFor(total, chk.coupon.amount, kind);
   if (remise <= 0) {

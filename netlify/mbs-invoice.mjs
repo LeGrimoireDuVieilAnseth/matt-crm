@@ -109,7 +109,7 @@ export function lignesSeance(md = {}){
 
   const remise = Number(md.remise) || 0;
   if (remise > 0) L.push({
-    libelle: md.coupon ? "Bon ou code de réduction" : "Remise", montant: -remise
+    libelle: md.kind === "surmesure" ? "Remise accordée" : md.coupon ? "Bon ou code de réduction" : "Remise", montant: -remise
   });
 
   return L;
