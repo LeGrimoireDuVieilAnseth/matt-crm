@@ -6402,8 +6402,100 @@ function openAddMenu(){
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerCodeResa()"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Générer un code de réservation</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerBonManuel()"><svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>Créer un bon cadeau</button>
+      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openLienResa()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/><path d="M10 15l2 2 4-4"/></svg>Créer un lien de réservation</button>
       <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openAllegerPhotos()"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Alléger des photos pour SwissTransfer</button>
     </div>`);
+}
+
+/* ============================================================
+   LIEN DE RESERVATION PREPARE (Mybabyshoot)
+   Pour une cliente qui a du mal avec le site : Matt choisit la seance et
+   la formule, le CRM fabrique un lien vers le site
+   (?seance=naissance&formule=confort, ou ?seance=duo&grossesse=...&naissance=...).
+   Elle arrive sur la formule deja choisie, choisit sa date et paie
+   l'acompte comme d'habitude (js/app.js, lienPrepare). Rien n'est stocke :
+   le lien porte la formule, jamais ses coordonnees, et le prix reste celui
+   du serveur.
+   ============================================================ */
+const SITE_MBS="https://www.mybabyshoot.fr";
+function openLienResa(){
+  const opt=(id,choisi)=>["essentielle","confort","prestige"].map(k=>{
+    const f=formuleParCle(k);
+    return `<option value="${k}"${k===choisi?" selected":""}>${esc(f.nom)} (${f.prix} €)</option>`;
+  }).join("");
+  openModal(`<h2>Lien de réservation</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Tu choisis la séance et la formule ; elle n'a plus qu'à choisir sa date et à régler l'acompte sur le site.</div>
+    <div class="field"><label>Séance</label>
+      <select id="lrSeance" onchange="majLienResa()">
+        <option value="grossesse">Grossesse</option><option value="naissance">Naissance</option>
+        <option value="bebe">Bébé</option><option value="duo">Pack grossesse + naissance</option></select></div>
+    <div class="field" id="lrSimple"><label>Formule</label><select id="lrFormule" onchange="majLienResa()">${opt("lrFormule","confort")}</select></div>
+    <div id="lrDuo" style="display:none">
+      <div class="field"><label>Formule de la séance grossesse</label><select id="lrDuoG" onchange="majLienResa()">${opt("lrDuoG","confort")}</select></div>
+      <div class="field"><label>Formule de la séance naissance</label><select id="lrDuoN" onchange="majLienResa()">${opt("lrDuoN","confort")}</select></div>
+    </div>
+    <div class="card" id="lrResume" style="padding:12px 14px;font-size:13.5px;line-height:1.55;margin-bottom:14px"></div>
+    <div class="field"><label>Son numéro (facultatif)</label>
+      <input id="lrTel" type="tel" inputmode="tel" autocomplete="off" placeholder="06 12 34 56 78" oninput="majLienResa()">
+      <div style="font-size:12px;color:var(--ink-3);margin-top:5px">Pour que le SMS ou WhatsApp s'ouvre directement sur sa conversation.</div></div>
+    <div class="field"><label>Message</label>
+      <textarea id="lrMessage" rows="7" style="font-size:14px;line-height:1.5"></textarea>
+      <div id="lrAvert" style="font-size:12px;color:var(--warn,var(--ink-3));margin-top:5px;display:none">Tu as modifié le message : le lien suit la nouvelle formule, mais relis la phrase qui la décrit.</div>
+      <a onclick="majLienResa(true)" style="cursor:pointer;text-decoration:underline;font-size:12.5px;color:var(--ink-3);display:inline-block;margin-top:5px">Remettre le message par défaut</a></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <a class="btn sm" style="flex:1" id="lrSms" href="#">Envoyer par SMS</a>
+      <a class="btn sm" style="flex:1" id="lrWa" href="#" target="_blank" rel="noopener">WhatsApp</a></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal(document.getElementById('lrMessage').value,'Message copié')">Copier le message</button>
+      <a class="btn ghost sm" style="flex:1" id="lrVoir" href="#" target="_blank" rel="noopener">Voir la page</a></div>`);
+  majLienResa(true);
+}
+/* Le lien, le resume et le message suivent les choix. Le message n'est
+   reecrit que tant que Matt ne l'a pas retouche lui-meme. */
+let lrMessageAuto="";
+function majLienResa(premier){
+  const seance=document.getElementById("lrSeance").value, duo=seance==="duo";
+  document.getElementById("lrSimple").style.display=duo?"none":"";
+  document.getElementById("lrDuo").style.display=duo?"":"none";
+  let lien, prix, quoi, titre, quand="votre date et votre heure";
+  if(duo){
+    const g=document.getElementById("lrDuoG").value, n=document.getElementById("lrDuoN").value;
+    lien=SITE_MBS+"/?seance=duo&grossesse="+g+"&naissance="+n;
+    prix=formuleParCle("duo-"+g+"-"+n).prix;
+    quoi="votre pack grossesse + naissance (grossesse en formule "+formuleParCle(g).nom+", naissance en formule "+formuleParCle(n).nom+")";
+    titre="Pack grossesse + naissance : grossesse en "+formuleParCle(g).nom+", naissance en "+formuleParCle(n).nom;
+    quand="la date et l'heure de votre séance grossesse (la séance naissance se cale plus tard)";
+  } else {
+    const f=document.getElementById("lrFormule").value;
+    lien=SITE_MBS+"/?seance="+seance+"&formule="+f;
+    prix=formuleParCle(f).prix;
+    const mot={grossesse:"grossesse",naissance:"naissance",bebe:"bébé"}[seance];
+    quoi="votre séance "+mot+" (formule "+formuleParCle(f).nom+")";
+    titre="Séance "+mot+", formule "+formuleParCle(f).nom;
+  }
+  /* Meme regle que le site et le serveur (acompteFor) : 190 euros des 590. */
+  const acompte=prix>=590?190:90;
+  document.getElementById("lrResume").innerHTML=`<b>${esc(titre)}</b><br>
+    ${prix} €, acompte en ligne de ${acompte} €, solde le jour de la séance.
+    <div style="font-size:12px;color:var(--ink-3);margin-top:6px;word-break:break-all">${esc(lien)}</div>`;
+  const msg="Bonjour,\n\nVoici le lien pour réserver "+quoi+". Tout est déjà choisi : il ne vous reste qu'à choisir "+quand
+    +", puis à régler l'acompte de "+acompte+" € en ligne.\n\n"+lien+"\n\nÀ très vite,\nMatt, Mybabyshoot";
+  const zone=document.getElementById("lrMessage");
+  const avert=document.getElementById("lrAvert");
+  if(premier || zone.value===lrMessageAuto){ zone.value=msg; lrMessageAuto=msg; if(avert) avert.style.display="none"; }
+  else if(zone.value.indexOf(SITE_MBS)>=0){
+    if(avert) avert.style.display="";
+    /* Message retouche a la main : on remplace seulement le lien. */
+    zone.value=zone.value.replace(/https:\/\/www\.mybabyshoot\.fr\/\?seance=[^\s]*/g,lien);
+  }
+  const tel=document.getElementById("lrTel").value.replace(/[^\d+]/g,"");
+  const intl=tel.replace(/^\+/,"").replace(/^0(\d{9})$/,"33$1");
+  const corps=()=>encodeURIComponent(document.getElementById("lrMessage").value);
+  const sms=document.getElementById("lrSms"), wa=document.getElementById("lrWa");
+  sms.onclick=()=>{ sms.href="sms:"+tel+"?&body="+corps(); };
+  wa.onclick=()=>{ wa.href="https://wa.me/"+intl+"?text="+corps(); };
+  document.getElementById("lrVoir").href=lien;
 }
 
 /* ============================================================
