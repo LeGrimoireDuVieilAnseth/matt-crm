@@ -42,6 +42,57 @@ export const galerieStore = () => getStore({ name: GALERIE_STORE, consistency: "
 export const QUOTA = { essentielle: 5, confort: 15, prestige: 0 };
 export const NOM_FORMULE = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige" };
 
+/* LA GALERIE A DEUX SEANCES (23/10/2026). Une cliente qui vient pour sa
+   grossesse puis pour la naissance a UNE galerie, et UN total de retouches
+   a repartir entre les deux comme elle veut. Formule "duo", une formule par
+   seance dans g.formules. Deux facons de choisir, voulues par Matt :
+     - tout d'un coup, quand les deux seances sont en ligne ;
+     - en deux fois : elle valide ses photos de grossesse, et quand Matt
+       ajoute la naissance (action "ajouter-seance"), elle choisit avec ce
+       qui lui reste. Le premier choix est alors range dans g.passees, avec
+       ses retouches. */
+export const SEANCES_DUO = ["grossesse", "naissance"];
+export const NOM_SEANCE = { grossesse: "Grossesse", naissance: "Naissance", bebe: "Bébé" };
+/* Le total de retouches se regle a la main (Matt offre des photos) :
+   au-dela, c'est une faute de frappe. */
+export const QUOTA_MAX = 300;
+export function quotaSaisi(v) {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= QUOTA_MAX ? n : NaN;
+}
+/* Ce que comprennent les formules, sans geste de Matt. Une seance Prestige
+   (retouches sans limite) rend le total sans limite : Matt peut toujours
+   fixer un nombre. */
+export function quotaDesFormules(formule, formules) {
+  if (formule !== "duo") return QUOTA[formule] || 0;
+  const a = QUOTA[formules.grossesse], b = QUOTA[formules.naissance];
+  return (!a || !b) ? 0 : a + b;
+}
+export function nomFormuleDe(g) {
+  if (g.formule === "duo" && g.formules) {
+    const a = NOM_FORMULE[g.formules.grossesse] || "", b = NOM_FORMULE[g.formules.naissance] || "";
+    return a === b ? a + " (grossesse et naissance)" : "Grossesse " + a + ", naissance " + b;
+  }
+  return NOM_FORMULE[g.formule] || "";
+}
+/* Les retouches comprises deja prises par les choix precedents, et ce qui
+   reste pour le choix en cours. Sans limite (quota 0) : rien ne s'use. */
+export const comprisesDe = (g, t) => t.comprises != null ? t.comprises
+  : (g.quota ? Math.min((t.coeurs || []).length, g.quota) : 0);
+export function quotaRestant(g) {
+  if (!g.quota) return 0;
+  return Math.max(0, g.quota - (g.passees || []).reduce((a, t) => a + comprisesDe(g, t), 0));
+}
+/* Les photos deja choisies (et retouchees, ou en cours) : on ne les
+   rechoisit pas. */
+export const dejaChoisies = (g) => new Set((g.passees || []).flatMap(t => t.coeurs || []));
+/* Les seances d'une liste de photos, dans l'ordre grossesse puis naissance. */
+export function seancesDe(g, ids) {
+  const s = new Set(g.photos.filter(p => ids.includes(p.id)).map(p => p.s).filter(Boolean));
+  return SEANCES_DUO.filter(k => s.has(k));
+}
+
 export const DUREE_MOIS = 3;
 export const PHOTOS_MAX_GALERIE = 800;
 /* Au-dela, un fichier n'est pas un apercu : on refuse plutot que de
@@ -79,12 +130,30 @@ export function estExpiree(g, now = Date.now()) {
   return !!(g && g.expiresAt && now > g.expiresAt);
 }
 
-/* ---------- creation ---------- */
-export async function creerGalerie(store, { clientId, prenom, nom, email, formule, seance,
-                                             transfert, photos, now = Date.now() }) {
-  if (!(formule in QUOTA)) return { erreur: "formule" };
+/* ---------- creation ----------
+   Galerie a deux seances : formule "duo", formules {grossesse, naissance},
+   et chaque photo dit sa seance (photos[i].seance). Une seule seance peut
+   suffire a la creation : l'autre s'ajoute plus tard (ajouterSeance).
+   quota : le total de retouches comprises, s'il differe des formules. */
+export async function creerGalerie(store, { clientId, prenom, nom, email, formule, formules, quota, seance,
+                                             transfert, transferts, photos, now = Date.now() }) {
+  const duo = formule === "duo";
+  let fs = null;
+  if (duo) {
+    fs = { grossesse: String((formules && formules.grossesse) || ""), naissance: String((formules && formules.naissance) || "") };
+    if (!(fs.grossesse in QUOTA) || !(fs.naissance in QUOTA)) return { erreur: "formule" };
+  } else if (!(formule in QUOTA)) return { erreur: "formule" };
+  const saisi = quotaSaisi(quota);
+  if (Number.isNaN(saisi)) return { erreur: "quota" };
+  const base = quotaDesFormules(formule, fs);
   const liste = Array.isArray(photos) ? photos.slice(0, PHOTOS_MAX_GALERIE) : [];
   if (!liste.length) return { erreur: "photos" };
+  /* En duo, chaque photo appartient a une seance, et on les range grossesse
+     d'abord : la galerie les presente dans cet ordre. */
+  if (duo) {
+    if (liste.some(p => !SEANCES_DUO.includes(String((p && p.seance) || "")))) return { erreur: "seance" };
+    liste.sort((a, b) => SEANCES_DUO.indexOf(a.seance) - SEANCES_DUO.indexOf(b.seance));
+  }
 
   let jeton = "";
   for (let i = 0; i < 8; i++) {
@@ -99,14 +168,27 @@ export async function creerGalerie(store, { clientId, prenom, nom, email, formul
   const g = {
     jeton, clientId: propre(clientId, 40),
     prenom: propre(prenom, 40), nom: propre(nom, 80), email: propre(email, 120),
-    formule, quota: QUOTA[formule], seance: propre(seance, 20) || "",
-    transfert: lienValide(transfert), retouches: "",
-    photos: liste.map((p, i) => ({ id: idDe(i), nom: nomDePhoto(p && p.nom) })),
+    formule, quota: saisi == null ? base : saisi, quotaFormule: base,
+    seance: duo ? "duo" : (propre(seance, 20) || ""),
+    transfert: duo ? "" : lienValide(transfert), retouches: "",
+    photos: liste.map((p, i) => duo ? { id: idDe(i), nom: nomDePhoto(p && p.nom), s: p.seance }
+                                    : { id: idDe(i), nom: nomDePhoto(p && p.nom) }),
     recues: [],          // les photos dont la vignette ET l'apercu sont arrives
     statut: "preparation",
     coeurs: [], selection: null,
     createdAt: now, expiresAt: exp.getTime(), vueAt: 0, envoyeeAt: 0,
   };
+  if (duo) {
+    g.formules = fs;
+    /* Les seances deja la. "prete" : visible de la cliente (a la
+       publication). Le lien "tout telecharger" est propre a chaque seance :
+       deux SwissTransfer, a des mois d'ecart. */
+    const presentes = new Set(liste.map(p => p.seance));
+    const liens = (transferts && typeof transferts === "object") ? transferts : {};
+    g.seances = SEANCES_DUO.filter(k => presentes.has(k))
+      .map(cle => ({ cle, transfert: lienValide(liens[cle]), prete: false, at: 0 }));
+    g.passees = [];
+  }
   await store.setJSON("g-" + jeton, g);
   await ajouterIndex(store, g);
   return { galerie: g };
@@ -120,22 +202,38 @@ async function ajouterIndex(store, g) {
     await store.setJSON("galeries", idx.slice(0, 500));
   } catch (e) {}
 }
+/* Les tirages d'une commande : les siens et ceux envoyes a d'autres. */
+const tiragesDe = (s) => Object.values(s.tirages || {}).reduce((a, q) =>
+    a + Object.values(q || {}).reduce((b, n) => b + (parseInt(n, 10) || 0), 0), 0)
+  + (s.envois || []).reduce((a, e) => a + (e.nb || 0), 0);
+/* Les choix arrives chez Matt et pas encore retouches : le choix en cours
+   s'il est valide (et paye), et, dans une galerie a deux seances, un choix
+   precedent que Matt n'a pas encore livre. */
+export function choixARetoucher(g) {
+  const s = g.selection, out = [];
+  (g.passees || []).forEach((t, i) => { if (!t.retouches) out.push({ tour: i, t }); });
+  if (s && !s.enAttente && !g.retouches) out.push({ tour: "", t: s });
+  return out;
+}
 export function ligneIndex(g) {
   const s = g.selection;
-  /* Les tirages de la commande : les siens et ceux envoyes a d'autres. */
-  const nbTirages = s ? Object.values(s.tirages || {}).reduce((a, q) =>
-      a + Object.values(q || {}).reduce((b, n) => b + (parseInt(n, 10) || 0), 0), 0)
-    + (s.envois || []).reduce((a, e) => a + (e.nb || 0), 0) : 0;
+  const aFaire = choixARetoucher(g);
   return {
     jeton: g.jeton, clientId: g.clientId, nom: [g.prenom, g.nom].filter(Boolean).join(" "),
     formule: g.formule, statut: g.statut, nbPhotos: g.photos.length,
     nbCoeurs: (s ? s.coeurs.length : (g.coeurs || []).length),
     createdAt: g.createdAt, expiresAt: g.expiresAt, vueAt: g.vueAt || 0,
     /* L'onglet "A retoucher" du CRM : depuis quand la selection est arrivee
-       chez Matt (payee s'il y avait a payer), et ce qu'il a a faire. */
-    choisieAt: (s && !s.enAttente) ? (s.payeAt || s.at || 0) : 0,
-    enPlus: s ? (s.enPlus || 0) : 0, quota: g.quota || 0, nbTirages,
+       chez Matt (payee s'il y avait a payer), et ce qu'il a a faire. Avec
+       deux choix en attente, le plus ancien donne la date. */
+    aRetoucher: aFaire.length > 0,
+    choisieAt: aFaire.length ? Math.min(...aFaire.map(x => x.t.payeAt || x.t.at || 0)) : 0,
+    nbARetoucher: aFaire.reduce((a, x) => a + (x.t.coeurs || []).length, 0),
+    enPlus: aFaire.reduce((a, x) => a + (x.t.enPlus || 0), 0), quota: g.quota || 0,
+    nbTirages: aFaire.reduce((a, x) => a + tiragesDe(x.t), 0),
     retouchesAt: g.retouchesAt || 0,
+    /* Galerie a deux seances : celles deja en ligne. */
+    seances: g.seances ? g.seances.map(x => x.cle) : null,
   };
 }
 export async function majIndex(store, g) {
@@ -199,16 +297,28 @@ export async function completerFormats(store, g) {
    famille, et se lit par-dessus une epaule. */
 export function vuePublique(g) {
   const s = g.selection;
+  /* Une seance ajoutee apres coup reste cachee tant que Matt n'a pas fini
+     d'en deposer les photos. */
+  const cachees = new Set((g.seances || []).filter(x => !x.prete).map(x => x.cle));
+  const recues = new Set(g.recues || []);
+  /* Les photos offertes par Matt : ce qui depasse les formules. */
+  const offertes = (g.quota && g.quotaFormule > 0) ? Math.max(0, g.quota - g.quotaFormule) : 0;
   return {
-    jeton: g.jeton, prenom: g.prenom, formule: g.formule, nomFormule: NOM_FORMULE[g.formule] || "",
-    quota: g.quota, seance: g.seance,
+    jeton: g.jeton, prenom: g.prenom, formule: g.formule, nomFormule: nomFormuleDe(g),
+    quota: g.quota, quotaRestant: quotaRestant(g), offertes, seance: g.seance,
     transfert: g.transfert, retouches: g.retouches,
-    photos: g.photos.filter(p => (g.recues || []).includes(p.id)),
+    photos: g.photos.filter(p => recues.has(p.id) && !(p.s && cachees.has(p.s))),
     coeurs: g.coeurs || [],
     selection: s ? {
       coeurs: s.coeurs, tirages: s.tirages || {}, at: s.at,
       enAttente: !!s.enAttente, paye: !!s.paye, montant: s.montant || 0,
     } : null,
+    /* Galerie a deux seances : les seances en ligne (et leur lien de
+       telechargement), et les choix deja faits, avec leurs retouches. */
+    duo: g.formule === "duo",
+    seances: g.seances ? g.seances.filter(x => x.prete).map(x => ({ cle: x.cle, transfert: x.transfert || "", at: x.at || 0 })) : null,
+    passees: (g.passees || []).map(t => ({ coeurs: t.coeurs || [], at: t.at, seances: t.seances || [],
+                                           retouches: t.retouches || "" })),
     statut: g.statut, expiresAt: g.expiresAt, couverture: g.couverture || "",
   };
 }
@@ -270,15 +380,49 @@ export function autresEnvois(g, envois, tailles) {
   return { envois: out, erreurs };
 }
 
-/* Les coeurs gardes : seulement des photos de cette galerie, sans doublon. */
+/* Les coeurs gardes : seulement des photos de cette galerie, sans doublon,
+   ni une photo deja choisie la fois d'avant (galerie a deux seances). */
 export function coeursPropres(g, coeurs) {
-  const ids = new Set(g.photos.map(p => p.id));
-  return [...new Set((Array.isArray(coeurs) ? coeurs : []).map(String))].filter(id => ids.has(id));
+  const ids = new Set(g.photos.map(p => p.id)), deja = dejaChoisies(g);
+  return [...new Set((Array.isArray(coeurs) ? coeurs : []).map(String))].filter(id => ids.has(id) && !deja.has(id));
 }
 
-/* Ce qui depasse la formule. Prestige : rien ne depasse. */
+/* Ce qui depasse la formule, une fois retire ce que les choix precedents
+   ont deja pris. Prestige : rien ne depasse. */
 export function photosEnPlus(g, nbCoeurs) {
-  return g.quota ? Math.max(0, nbCoeurs - g.quota) : 0;
+  return g.quota ? Math.max(0, nbCoeurs - quotaRestant(g)) : 0;
+}
+
+/* ---------- la seconde seance ----------
+   Matt ajoute les photos de la naissance a la galerie de la grossesse.
+   Elles restent cachees (prete: false) jusqu'a la publication. */
+export function ajouterSeance(g, { seance, transfert, photos }) {
+  if (g.formule !== "duo" || !g.seances) return { erreur: "pas_duo" };
+  const cle = String(seance || "");
+  if (!SEANCES_DUO.includes(cle)) return { erreur: "seance" };
+  if (g.seances.some(x => x.cle === cle)) return { erreur: "deja" };
+  const liste = Array.isArray(photos) ? photos : [];
+  if (!liste.length) return { erreur: "photos" };
+  if (g.photos.length + liste.length > PHOTOS_MAX_GALERIE) return { erreur: "trop" };
+  const depart = g.photos.length;
+  const nouvelles = liste.map((p, i) => ({ id: idDe(depart + i), nom: nomDePhoto(p && p.nom), s: cle }));
+  g.photos.push(...nouvelles);
+  g.seances.push({ cle, transfert: lienValide(transfert), prete: false, at: 0 });
+  g.seances.sort((a, b) => SEANCES_DUO.indexOf(a.cle) - SEANCES_DUO.indexOf(b.cle));
+  return { photos: nouvelles };
+}
+/* La seance ajoutee passe en ligne. Si la cliente avait deja valide son
+   choix (et paye s'il le fallait), ce choix est range avec ses retouches :
+   elle repart avec ce qui lui reste. Un choix en attente de paiement, lui,
+   reste ouvert : elle peut encore le changer, naissance comprise. */
+export function nouveauChoix(g) {
+  const s = g.selection;
+  if (!s || s.enAttente) return false;
+  (g.passees = g.passees || []).push({ ...s, comprises: comprisesDe(g, s), seances: seancesDe(g, s.coeurs || []),
+    retouches: g.retouches || "", retouchesAt: g.retouchesAt || 0 });
+  g.selection = null; g.coeurs = []; g.retouches = ""; g.retouchesAt = 0;
+  g.statut = "envoyee";
+  return true;
 }
 
 /* ---------- suppression ---------- */
@@ -305,10 +449,20 @@ export function texteSelection(g, { photosSeules = false } = {}) {
   const s = g.selection; if (!s) return "";
   const nom = Object.fromEntries(g.photos.map(p => [p.id, p.nom]));
   const lignes = [];
-  lignes.push(s.coeurs.length + " photo" + (s.coeurs.length > 1 ? "s" : "") + " choisie"
-    + (s.coeurs.length > 1 ? "s" : "") + (g.quota ? " (" + g.quota + " comprises dans la formule "
-    + NOM_FORMULE[g.formule] + ")" : " (formule Prestige)") + " :");
-  if (s.coeurs.length) lignes.push(s.coeurs.map(id => nom[id] || id).join(", "));
+  const n = s.coeurs.length, pl = n > 1 ? "s" : "";
+  /* Ce qui est compris : sur ce qui restait, si un premier choix a deja
+     pris sa part (galerie a deux seances). */
+  const comprises = comprisesDe(g, s), avant = (g.passees || []).length;
+  const detail = !g.quota ? "formule " + (nomFormuleDe(g) || "Prestige") + ", sans limite"
+    : comprises + " comprise" + (comprises > 1 ? "s" : "") + (s.enPlus ? ", " + s.enPlus + " en plus" : "")
+      + (avant ? " ; " + quotaRestant(g) + " restaient sur les " + g.quota : " ; " + g.quota + " au total")
+      + ", formule " + nomFormuleDe(g);
+  lignes.push(n + " photo" + pl + " choisie" + pl + " (" + detail + ") :");
+  /* Les numeros, seance par seance : Matt retouche dans deux dossiers. */
+  if (n && g.formule === "duo") {
+    const parSeance = SEANCES_DUO.map(k => [k, s.coeurs.filter(id => (g.photos.find(p => p.id === id) || {}).s === k)]);
+    parSeance.forEach(([k, ids]) => { if (ids.length) lignes.push(NOM_SEANCE[k] + " (" + ids.length + ") : " + ids.map(id => nom[id] || id).join(", ")); });
+  } else if (n) lignes.push(s.coeurs.map(id => nom[id] || id).join(", "));
   if (!photosSeules) {
     if (s.tiragesTexte) lignes.push("", "Tirages :", s.tiragesTexte);
     if (s.adresseTexte) lignes.push("", "À poster à :", s.adresseTexte);

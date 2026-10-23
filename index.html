@@ -3410,7 +3410,12 @@ const GALC_API="/.netlify/functions/mbs-galerie-cliente";
 /* Doit rester egal a QUOTA dans netlify/mbs-galeries.mjs. Ne sert qu'a
    l'affichage : c'est le serveur qui decide de ce qui est compris. */
 const GAL_FORMULES=[["essentielle","Essentielle",5],["confort","Confort",15],["prestige","Prestige",0]];
-const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"]];
+const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"],["duo","Grossesse + naissance"]];
+/* Une galerie a deux seances (formule "duo") : une formule par seance, un
+   seul total de retouches a repartir entre les deux. La naissance peut
+   s'ajouter plus tard a la galerie de la grossesse. */
+const GAL_DUO=["grossesse","naissance"];
+const GAL_QUOTA_MAX=300;    // QUOTA_MAX dans mbs-galeries.mjs
 const GAL_STATUT={
   preparation:["En préparation","warn"],
   envoyee:["En ligne","info"],
@@ -3427,9 +3432,30 @@ const GAL_APERCU  ={cote:1200,qualite:0.72,plafond:450*1024};
 const GAL_ENVOI_MAX_OCTETS=3.5*1024*1024, GAL_ENVOI_MAX_PHOTOS=10;
 const GAL_PHOTOS_MAX=800;
 
-const nomFormuleGal=k=>{ const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[1]:""; };
+const nomFormuleGal=k=>{ if(k==="duo") return "Grossesse + naissance"; const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[1]:""; };
 const quotaGal=k=>{ const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[2]:0; };
 const nomSeanceGal=k=>{ const s=GAL_SEANCES.find(x=>x[0]===k); return s?s[1]:""; };
+/* Les memes calculs que mbs-galeries.mjs (nomFormuleDe, quotaDesFormules,
+   comprisesDe, quotaRestant), pour l'affichage. */
+function nomFormuleDeGal(g){
+  if(g.formule==="duo" && g.formules){
+    const a=nomFormuleGal(g.formules.grossesse), b=nomFormuleGal(g.formules.naissance);
+    return a===b?a+" (grossesse et naissance)":"Grossesse "+a+", naissance "+b;
+  }
+  return nomFormuleGal(g.formule);
+}
+function quotaFormulesGal(formule,fg,fn){
+  if(formule!=="duo") return quotaGal(formule);
+  const a=quotaGal(fg), b=quotaGal(fn);
+  return (!a||!b)?0:a+b;
+}
+const comprisesGal=(g,t)=>t.comprises!=null?t.comprises:(g.quota?Math.min((t.coeurs||[]).length,g.quota):0);
+const quotaRestantGal=g=>g.quota?Math.max(0,g.quota-(g.passees||[]).reduce((a,t)=>a+comprisesGal(g,t),0)):0;
+/* Ce qui restera pour la seance suivante, une fois le choix en cours range. */
+const resteApresGal=g=>Math.max(0,quotaRestantGal(g)-(g.selection&&!g.selection.enAttente?comprisesGal(g,g.selection):0));
+const seanceDePhotoGal=(g,id)=>(g.photos.find(p=>p.id===id)||{}).s||"";
+const seancesDeGal=(g,ids)=>GAL_DUO.filter(k=>ids.some(id=>seanceDePhotoGal(g,id)===k));
+const seanceManquanteGal=g=>g.formule==="duo"?GAL_DUO.find(k=>!(g.seances||[]).some(x=>(x.cle||x)===k))||"":"";
 const dateGal=t=>t?new Date(t).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}):"";
 const vignetteGal=(jeton,id)=>GALC_API+"?g="+encodeURIComponent(jeton)+"&t="+encodeURIComponent(id);
 const apercuGal=(jeton,id)=>GALC_API+"?g="+encodeURIComponent(jeton)+"&v="+encodeURIComponent(id);
@@ -3460,7 +3486,7 @@ function chargerGaleries(force){
    l'onglet. */
 /* L'onglet Galeries est-il a l'ecran, et pas seulement choisi ? */
 const galeriesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="galeries" && !!document.querySelector("#clients.view.active");
-const galeriesATraiter=()=>(galeriesCache||[]).filter(g=>g.statut==="choisie").length;
+const galeriesATraiter=()=>aRetoucher().length;
 function majOngletGaleries(){
   const b=document.getElementById("ongletRetouches"); if(!b) return;
   const n=galeriesATraiter();
@@ -3476,7 +3502,11 @@ function majOngletGaleries(){
    envoyees (onglet Galeries, "Envoyer les retouches"). */
 const RETOUCHE_ALERTE_J=7, RETOUCHE_RETARD_J=10;
 const joursDepuisGal=t=>t?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
-const aRetoucher=()=>(galeriesCache||[]).filter(g=>g.statut==="choisie");
+/* aRetoucher vient du serveur depuis le 23/10/2026 : une galerie a deux
+   seances peut attendre ses retouches de grossesse alors que la cliente
+   choisit deja la naissance. Une ligne plus ancienne retombe sur le statut. */
+const aRetoucher=()=>(galeriesCache||[]).filter(g=>g.aRetoucher!==undefined?g.aRetoucher:g.statut==="choisie");
+const nbARetoucherGal=g=>g.nbARetoucher!==undefined?g.nbARetoucher:(g.nbCoeurs||0);
 const galeriesEnRetard=()=>aRetoucher().filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
 const retouchesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="retouches" && !!document.querySelector("#clients.view.active");
 function couleurRetouche(j){ return j>=RETOUCHE_RETARD_J?"var(--danger)":j>=RETOUCHE_ALERTE_J?"var(--warn)":"var(--ok)"; }
@@ -3520,7 +3550,7 @@ function dessinerRetouches(){
     return;
   }
   const enRetard=l.filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
-  const photos=l.reduce((t,g)=>t+(g.nbCoeurs||0),0);
+  const photos=l.reduce((t,g)=>t+nbARetoucherGal(g),0);
   let h=`<div class="stat-grid" style="margin-bottom:12px">
       <div class="stat"><div class="lab">À retoucher</div><div class="num">${l.length}</div><div class="foot">cliente${l.length>1?"s":""} · ${photos} photo${photos>1?"s":""}</div></div>
       <div class="stat"><div class="lab">En retard</div><div class="num" style="${enRetard?"color:var(--danger)":""}">${enRetard}</div><div class="foot">${RETOUCHE_RETARD_J} jours et plus</div></div>
@@ -3529,7 +3559,7 @@ function dessinerRetouches(){
     const j=joursDepuisGal(g.choisieAt);
     const etat=j>=RETOUCHE_RETARD_J?`<span class="badge danger">En retard</span>`
               :j>=RETOUCHE_ALERTE_J?`<span class="badge warn">Bientôt ${RETOUCHE_RETARD_J} jours</span>`:"";
-    const n=g.nbCoeurs||0;
+    const n=nbARetoucherGal(g);
     const quoi=g.quota
       ? n+" photo"+(n>1?"s":"")+" à retoucher"+(g.enPlus?" (dont "+g.enPlus+" en plus)":"")
       : "Prestige"+(n?" · "+n+" cœur"+(n>1?"s":""):"")+" · toutes les plus belles";
@@ -3593,6 +3623,8 @@ function dessinerGaleries(list){
   box.innerHTML=aide+l.map(g=>{
     const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
     const bouts=[nomFormuleGal(g.formule),g.nbPhotos+" photos"];
+    const manque=seanceManquanteGal(g);
+    if(manque) bouts.push(manque+" à venir");
     if(g.nbCoeurs) bouts.push(g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""));
     if(g.statut!=="preparation") bouts.push(g.vueAt?"vue":"pas encore ouverte");
     /* La date de fin, seulement quand elle approche : sur un telephone la
@@ -3624,6 +3656,7 @@ function htmlBlocGalerie(clientId,list){
         <b style="font-size:14px">Galerie ${esc(nomFormuleGal(g.formule))}</b>
         <span class="badge ${st[1]}">${esc(st[0])}</span></div>
       <div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">${g.nbPhotos} photos${g.nbCoeurs?" · "+g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""):""} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>
+      ${seanceManquanteGal(g)?`<div style="font-size:12.5px;color:var(--accent,var(--ink-2));margin-top:4px;font-weight:600">Les photos de la ${esc(seanceManquanteGal(g))} sont à ajouter : ouvre la galerie.</div>`:""}
     </div>`;
   });
   h+=`<button class="btn ghost wide sm" style="margin:${siennes.length?"4px":"12px"} 0 4px" onclick="openPreparerGalerie('${esc(clientId)}')">
@@ -3650,15 +3683,20 @@ function devinerGalerie(c){
      photos. Sinon la prochaine. */
   const s=seances.find(x=>(x.date||"")<=auj)||seances[seances.length-1]||null;
   let seance="", formule="";
+  const formules={grossesse:"",naissance:""};
   const t=s?String(s.type||"").toLowerCase():"";
   const notes=s?String(s.notes||""):"";
   const pack=/grossesse\s*\+\s*naissance|duo/.test(t);
   if(pack){
-    /* Dans un pack, la seance passee la plus ancienne est la grossesse. */
-    const passees=seances.filter(x=>(x.date||"")<=auj && /grossesse\s*\+\s*naissance|duo/.test(String(x.type||"").toLowerCase()));
-    seance=passees.length>=2?"naissance":"grossesse";
-    const m=notes.match(new RegExp((seance==="grossesse"?"Grossesse":"naissance")+" en (Essentielle|Confort|Prestige)","i"));
-    if(m) formule=m[1].toLowerCase();
+    /* Un pack : une seule galerie pour les deux seances (23/10/2026). Les
+       formules sont dans les notes de la reservation, "Grossesse en
+       Confort, naissance en Essentielle.", qui peut etre l'une ou l'autre
+       des deux seances du pack. */
+    seance="duo"; formule="duo";
+    const toutes=seances.filter(x=>/grossesse\s*\+\s*naissance|duo/.test(String(x.type||"").toLowerCase())).map(x=>String(x.notes||"")).join("\n");
+    const mg=toutes.match(/Grossesse en (Essentielle|Confort|Prestige)/i), mn=toutes.match(/naissance en (Essentielle|Confort|Prestige)/i);
+    if(mg) formules.grossesse=mg[1].toLowerCase();
+    if(mn) formules.naissance=mn[1].toLowerCase();
   } else {
     if(/naissance|nouveau/.test(t)) seance="naissance";
     else if(/b[ée]b[ée]/.test(t)) seance="bebe";
@@ -3666,49 +3704,155 @@ function devinerGalerie(c){
     const m=notes.match(/Formule (Essentielle|Confort|Prestige)/i);
     if(m) formule=m[1].toLowerCase();
   }
-  return {seance,formule};
+  return {seance,formule,formules};
 }
 
 /* ---------- preparer une galerie ---------- */
 let galPrep=null;   // { clientId, fichiers, jeton, photos, recues:Set, enCours }
 
-function openPreparerGalerie(clientId){
+/* ajout : depuis le detail d'une galerie a deux seances, ajouter la
+   seance qui manque (en general la naissance). La galerie est alors celle
+   ouverte (galOuverte). */
+function openPreparerGalerie(clientId,ajout){
   const c=clientById(clientId); if(!c) return;
   if(!CLOUD){ alert("Disponible seulement en ligne : les galeries sont sur le serveur."); return; }
   if(galPrep && galPrep.enCours){ alert("Une galerie est déjà en cours d'envoi. Attends qu'elle se termine."); return; }
-  const d=devinerGalerie(c);
-  galPrep={clientId,fichiers:[],jeton:"",photos:[],recues:new Set(),enCours:false};
-  const opt=(liste,choisi,vide)=>(vide?`<option value="">${vide}</option>`:"")
-    +liste.map(x=>`<option value="${x[0]}"${x[0]===choisi?" selected":""}>${esc(x[1])}${x.length>2?" ("+(x[2]?x[2]+" retouches":"sans limite")+")":""}</option>`).join("");
-  openModal(`<h2>Préparer la galerie</h2>
-    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
-      Pour <b>${esc(c.name)}</b>. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
-      légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 3 mois.</div>
-    <div class="field"><label>Formule *</label>
-      <select id="gpFormule">${opt(GAL_FORMULES,d.formule,"Choisis la formule")}</select>
-      ${d.formule?`<div style="font-size:12px;color:var(--ink-3);margin-top:5px">D'après sa réservation.</div>`:""}</div>
-    <div class="field"><label>Séance</label>
-      <select id="gpSeance">${opt(GAL_SEANCES,d.seance||"grossesse")}</select></div>
-    <div class="field"><label>Lien pour tout télécharger (WeTransfer, SwissTransfer)</label>
-      <input id="gpTransfert" type="url" inputmode="url" autocomplete="off" placeholder="https://...">
-      <div style="font-size:12px;color:var(--ink-3);margin-top:5px">Facultatif ici : tu peux l'ajouter ou le changer plus tard.</div></div>
-    <div class="field"><label>Les photos *</label>
-      <input type="file" id="gpFichiers" multiple accept="image/jpeg,image/png,image/webp" style="display:none" onchange="galFichiersChoisis(this)">
-      <input type="file" id="gpDossier" webkitdirectory multiple style="display:none" onchange="galFichiersChoisis(this)">
-      <div style="display:flex;gap:8px">
-        <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpFichiers').click()">Choisir les photos</button>
-        <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpDossier').click()">Choisir un dossier</button>
-      </div>
-      <div id="gpResume" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5"></div></div>
-    ${allegementPossible()?`<div class="field">
+  const allege=allegementPossible()?`<div class="field">
       <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:var(--ink)">
         <input type="checkbox" id="gpAllege" onchange="galAllegeCoche(this)" style="margin-top:2px;width:auto">
         <span><b>Créer aussi les photos allégées pour SwissTransfer</b><br>
         <span style="font-weight:400;color:var(--ink-3);font-size:12.5px">Même définition, qualité 92 % : environ 4 fois plus léger, sans différence visible. Tes originaux ne sont pas touchés.</span></span></label>
       <div id="gpAllegeOu" style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.5"></div></div>`
-    :`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">Sur ordinateur avec Chrome ou Edge, le CRM peut aussi alléger tes photos pour SwissTransfer, en même temps.</div>`}
+    :`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">Sur ordinateur avec Chrome ou Edge, le CRM peut aussi alléger tes photos pour SwissTransfer, en même temps.</div>`;
+
+  if(ajout){
+    const g=galOuverte&&galOuverte.g, manque=g?seanceManquanteGal(g):"";
+    if(!manque) return;
+    const autre=GAL_DUO.find(k=>k!==manque);
+    const reste=resteApresGal(g), s=g.selection;
+    galPrep={clientId,blocs:{},jeton:g.jeton,ajout:manque,dejaEnLigne:g.photos.length,photos:[],recues:new Set(),enCours:false,
+             resteApres:g.quota?reste:null};
+    openModal(`<h2>Ajouter la ${esc(manque)}</h2>
+      <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+        Dans la galerie de <b>${esc(c.name)}</b>, à la suite de ses photos de ${esc(autre)}. Même lien, rien à lui renvoyer de nouveau.
+        ${s&&!s.enAttente?"Son choix de "+esc(autre)+" reste tel quel. ":""}
+        ${g.quota?"Elle choisira ses photos de "+esc(manque)+" avec <b>"+reste+" retouche"+(reste>1?"s":"")+" comprise"+(reste>1?"s":"")+"</b>, ce qui reste de ses "+g.quota+".":"Ses retouches restent sans limite."}</div>
+      <div id="gpBlocs"></div>
+      ${allege}
+      <div id="gpProgres"></div>
+      <button class="btn wide" id="gpGo" onclick="lancerGalerie()">Ajouter les photos</button>`);
+    dessinerBlocsGal();
+    return;
+  }
+
+  const d=devinerGalerie(c);
+  galPrep={clientId,blocs:{},jeton:"",ajout:"",dejaEnLigne:0,photos:[],recues:new Set(),enCours:false,devine:d,quotaTouche:false};
+  const opt=(liste,choisi)=>liste.map(x=>`<option value="${x[0]}"${x[0]===choisi?" selected":""}>${esc(x[1])}</option>`).join("");
+  openModal(`<h2>Préparer la galerie</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Pour <b>${esc(c.name)}</b>. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
+      légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 3 mois.</div>
+    <div class="field"><label>Séance</label>
+      <select id="gpSeance" onchange="majFormulesGal()">${opt(GAL_SEANCES,d.seance||"grossesse")}</select>
+      <div id="gpSeanceNote" style="font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5"></div></div>
+    <div id="gpFormules"></div>
+    <div class="field"><label>Photos retouchées comprises *</label>
+      <input id="gpQuota" type="number" inputmode="numeric" min="0" max="${GAL_QUOTA_MAX}" step="1" style="max-width:130px"
+        oninput="galPrep.quotaTouche=true;majQuotaNoteGal()">
+      <div id="gpQuotaNote" style="font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5"></div></div>
+    <div id="gpBlocs"></div>
+    ${allege}
     <div id="gpProgres"></div>
     <button class="btn wide" id="gpGo" onclick="lancerGalerie()">Créer la galerie</button>`);
+  majFormulesGal();
+}
+
+/* La formule (ou les deux formules, pour une galerie a deux seances), et
+   les blocs de photos qui vont avec. Les choix deja faits sont gardes. */
+function majFormulesGal(){
+  const p=galPrep, box=document.getElementById("gpFormules"); if(!p||!box) return;
+  const seance=document.getElementById("gpSeance").value, duo=seance==="duo";
+  const val=id=>{ const e=document.getElementById(id); return e?e.value:null; };
+  const d=p.devine||{formules:{}};
+  const opt=(choisi)=>`<option value="">Choisis la formule</option>`+GAL_FORMULES.map(x=>`<option value="${x[0]}"${x[0]===choisi?" selected":""}>${esc(x[1])} (${x[2]?x[2]+" retouches":"sans limite"})</option>`).join("");
+  const note=`<div style="font-size:12px;color:var(--ink-3);margin-top:5px">D'après sa réservation.</div>`;
+  if(duo){
+    const fg=val("gpFormuleG")??(d.formules.grossesse||""), fn=val("gpFormuleN")??(d.formules.naissance||"");
+    box.innerHTML=`<div class="field"><label>Formule grossesse *</label>
+        <select id="gpFormuleG" onchange="majQuotaGal()">${opt(fg)}</select>${d.formules.grossesse&&fg===d.formules.grossesse?note:""}</div>
+      <div class="field"><label>Formule naissance *</label>
+        <select id="gpFormuleN" onchange="majQuotaGal()">${opt(fn)}</select>${d.formules.naissance&&fn===d.formules.naissance?note:""}</div>`;
+  } else {
+    const f=val("gpFormule")??(d.formule&&d.formule!=="duo"?d.formule:"");
+    box.innerHTML=`<div class="field"><label>Formule *</label>
+      <select id="gpFormule" onchange="majQuotaGal()">${opt(f)}</select>${d.formule&&f===d.formule?note:""}</div>`;
+  }
+  document.getElementById("gpSeanceNote").innerHTML=duo
+    ?"Une seule galerie pour les deux séances, et un seul total de retouches qu'elle répartit comme elle veut. La naissance pas encore faite ? Mets seulement la grossesse : tu ajouteras la naissance plus tard, dans la même galerie."
+    :"";
+  majQuotaGal();
+  dessinerBlocsGal();
+}
+function formuleChoisieGal(){
+  const seance=(document.getElementById("gpSeance")||{}).value;
+  if(seance==="duo"){
+    const fg=(document.getElementById("gpFormuleG")||{}).value||"", fn=(document.getElementById("gpFormuleN")||{}).value||"";
+    return {duo:true,pret:!!(fg&&fn),base:quotaFormulesGal("duo",fg,fn),fg,fn};
+  }
+  const f=(document.getElementById("gpFormule")||{}).value||"";
+  return {duo:false,pret:!!f,base:quotaGal(f),f};
+}
+/* Le nombre se remplit d'apres la formule, tant que Matt n'y a pas touche. */
+function majQuotaGal(){
+  const z=document.getElementById("gpQuota"); if(!z||!galPrep) return;
+  const f=formuleChoisieGal();
+  if(!galPrep.quotaTouche) z.value=f.pret?String(f.base):"";
+  majQuotaNoteGal();
+}
+function majQuotaNoteGal(){
+  const el=document.getElementById("gpQuotaNote"), z=document.getElementById("gpQuota"); if(!el||!z) return;
+  const f=formuleChoisieGal(), v=z.value.trim()===""?null:Number(z.value);
+  const repartir=f.duo?" À répartir entre les deux séances.":"";
+  let t;
+  if(!f.pret) t="Choisis la formule"+(f.duo?" de chaque séance":"")+" : le nombre se remplit tout seul.";
+  else if(v===null||!Number.isInteger(v)||v<0||v>GAL_QUOTA_MAX) t=`<span style="color:var(--danger)">Un nombre entier, de 0 à ${GAL_QUOTA_MAX}.</span>`;
+  else if(v===0) t="0 = sans limite : ses cœurs te guident, rien ne se paie en plus."+(f.base?" (La formule en comprend "+f.base+".)":"");
+  else if(f.base && v>f.base) t=`<b style="color:var(--ok)">${v-f.base} offerte${v-f.base>1?"s":""}</b> en plus de la formule (${f.base}) : elle verra « dont ${v-f.base} offerte${v-f.base>1?"s":""} ».`+repartir;
+  else if(f.base && v<f.base) t="Moins que la formule, qui en comprend "+f.base+"."+repartir;
+  else t=(f.base?"Ce que comprend la formule. Augmente-le pour lui offrir des photos.":"Une formule Prestige : sans limite si tu laisses 0. Tu peux aussi fixer un nombre.")+repartir;
+  el.innerHTML=t;
+}
+
+/* Les photos, un bloc par seance. "seule" : une galerie a une seance. */
+const blocGal=cle=>galPrep.blocs[cle]||(galPrep.blocs[cle]={fichiers:[],resume:""});
+function clesBlocsGal(){
+  if(!galPrep) return [];
+  if(galPrep.ajout) return [galPrep.ajout];
+  return (document.getElementById("gpSeance")||{}).value==="duo"?GAL_DUO:["seule"];
+}
+function dessinerBlocsGal(){
+  const box=document.getElementById("gpBlocs"); if(!box||!galPrep) return;
+  /* Le lien deja tape est garde quand les blocs se redessinent. */
+  box.querySelectorAll("[data-lien]").forEach(e=>{ blocGal(e.dataset.lien).transfert=e.value; });
+  const cles=clesBlocsGal(), plusieurs=cles.length>1||!!galPrep.ajout;
+  box.innerHTML=cles.map(cle=>{
+    const b=blocGal(cle);
+    const photos=`<div class="field"${plusieurs?' style="margin-bottom:10px"':""}><label>${plusieurs?"Photos de la "+esc(cle)+(galPrep.ajout?" *":""):"Les photos *"}</label>
+        <input type="file" id="gpFichiers-${cle}" data-cle="${cle}" multiple accept="image/jpeg,image/png,image/webp" style="display:none" onchange="galFichiersChoisis(this)">
+        <input type="file" id="gpDossier-${cle}" data-cle="${cle}" webkitdirectory multiple style="display:none" onchange="galFichiersChoisis(this)">
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpFichiers-${cle}').click()">Choisir les photos</button>
+          <button class="btn ghost sm" style="flex:1" onclick="document.getElementById('gpDossier-${cle}').click()">Choisir un dossier</button>
+        </div>
+        <div id="gpResume-${cle}" style="font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5">${b.resume||""}</div>
+        ${cle==="naissance"&&!galPrep.ajout?`<div style="font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5">Pas encore faite ? Laisse vide : tu ajouteras ses photos plus tard, dans la même galerie.</div>`:""}</div>`;
+    const lien=`<div class="field"${plusieurs?' style="margin-bottom:0"':""}><label>Lien pour tout télécharger${plusieurs?" (la "+esc(cle)+")":""}</label>
+        <input id="gpTransfert-${cle}" data-lien="${cle}" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(b.transfert||"")}">
+        <div style="font-size:12px;color:var(--ink-3);margin-top:5px">WeTransfer ou SwissTransfer. Facultatif ici : tu peux l'ajouter ou le changer plus tard.</div></div>`;
+    return plusieurs?`<div class="card" style="padding:13px 14px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px">Séance ${esc(cle)}</div>${photos}${lien}</div>`:photos+lien;
+  }).join("");
+  majAllegeOuGal();
 }
 
 /* La case cochee : Matt choisit ou ranger les copies (en general le dossier
@@ -3729,9 +3873,15 @@ async function galAllegeChanger(){
 function majAllegeOuGal(){
   const el=document.getElementById("gpAllegeOu"); if(!el||!galPrep) return;
   if(!galPrep.parent){ el.innerHTML=""; return; }
-  const c=clientById(galPrep.clientId);
-  el.innerHTML=`Dans <b>${esc(galPrep.parent.name)}</b>, un nouveau dossier <b>${esc(nomDossierAllegeAl(galPrep.fichiers,"Photos "+((c&&c.name)||"")))}</b>.
+  const noms=clesBlocsGal().filter(k=>blocGal(k).fichiers.length).map(k=>nomDossierAllegeAl(blocGal(k).fichiers,repliAllegeGal(k)));
+  el.innerHTML=`Dans <b>${esc(galPrep.parent.name)}</b>, ${noms.length>1?"deux nouveaux dossiers":"un nouveau dossier"} ${noms.length?noms.map(n=>"<b>"+esc(n)+"</b>").join(" et "):"(choisis d'abord les photos)"}.
     <a style="cursor:pointer;text-decoration:underline" onclick="galAllegeChanger()">Changer</a>`;
+}
+/* Le nom du dossier des copies, quand les photos ne viennent pas d'un
+   dossier choisi : "Photos Amélie Robe naissance". */
+function repliAllegeGal(cle){
+  const c=galPrep&&clientById(galPrep.clientId);
+  return "Photos "+((c&&c.name)||"")+(cle&&cle!=="seule"?" "+cle:"");
 }
 
 /* Les fichiers retenus : des photos, dans l'ordre des noms (celui de
@@ -3751,16 +3901,19 @@ function trierFichiersGal(liste){
 }
 function galFichiersChoisis(input){
   if(!galPrep) return;
+  const cle=input.dataset.cle||"seule", b=blocGal(cle);
   const {photos,ignores}=trierFichiersGal(input.files||[]);
   input.value="";
-  galPrep.fichiers=photos.slice(0,GAL_PHOTOS_MAX);
+  b.fichiers=photos.slice(0,GAL_PHOTOS_MAX);
+  if(!photos.length) b.resume=`<span style="color:var(--danger)">Aucune photo JPEG dans ce choix.</span>`;
+  else {
+    const mo=photos.reduce((s,f)=>s+f.size,0)/1048576;
+    b.resume=`<b>${b.fichiers.length} photos</b>, de ${esc(nomDeFichierGal(photos[0].name))} à ${esc(nomDeFichierGal(photos[b.fichiers.length-1].name))} (${mo.toFixed(0)} Mo sur ton appareil).`
+      +(photos.length>GAL_PHOTOS_MAX?`<br><span style="color:var(--danger)">Au-delà de ${GAL_PHOTOS_MAX} photos, les suivantes ne sont pas prises.</span>`:"")
+      +(ignores.length?`<br><span style="color:var(--ink-3)">${ignores.length} fichier(s) ignoré(s), ce ne sont pas des photos JPEG : ${esc(ignores.slice(0,3).join(", "))}${ignores.length>3?"...":""}</span>`:"");
+  }
+  const r=document.getElementById("gpResume-"+cle); if(r) r.innerHTML=b.resume;
   majAllegeOuGal();
-  const r=document.getElementById("gpResume"); if(!r) return;
-  if(!photos.length){ r.innerHTML=`<span style="color:var(--danger)">Aucune photo JPEG dans ce choix.</span>`; return; }
-  const mo=photos.reduce((s,f)=>s+f.size,0)/1048576;
-  r.innerHTML=`<b>${galPrep.fichiers.length} photos</b>, de ${esc(nomDeFichierGal(photos[0].name))} à ${esc(nomDeFichierGal(photos[galPrep.fichiers.length-1].name))} (${mo.toFixed(0)} Mo sur ton appareil).`
-    +(photos.length>GAL_PHOTOS_MAX?`<br><span style="color:var(--danger)">Au-delà de ${GAL_PHOTOS_MAX} photos, les suivantes ne sont pas prises.</span>`:"")
-    +(ignores.length?`<br><span style="color:var(--ink-3)">${ignores.length} fichier(s) ignoré(s), ce ne sont pas des photos JPEG : ${esc(ignores.slice(0,3).join(", "))}${ignores.length>3?"...":""}</span>`:"");
 }
 
 /* Lit une photo, et en tire l'apercu puis la vignette (la vignette est
@@ -4056,37 +4209,66 @@ async function appelGal(corps){
 
 async function lancerGalerie(){
   const p=galPrep; if(!p || p.enCours) return;
-  const formule=document.getElementById("gpFormule").value;
-  const seance=document.getElementById("gpSeance").value;
-  const transfert=document.getElementById("gpTransfert").value.trim();
-  if(!formule){ alert("Choisis la formule : c'est elle qui dit combien de retouches sont comprises."); return; }
-  if(!p.fichiers.length){ alert("Choisis les photos de la séance."); return; }
-  if(transfert && !/^https:\/\//i.test(transfert)){ alert("Le lien de téléchargement doit commencer par https://"); return; }
+  const cles=clesBlocsGal();
+  const lienDe=k=>((document.getElementById("gpTransfert-"+k)||{}).value||"").trim();
+  if(cles.some(k=>lienDe(k) && !/^https:\/\//i.test(lienDe(k)))){ alert("Le lien de téléchargement doit commencer par https://"); return; }
+  /* Les photos, bloc par bloc, grossesse d'abord : le serveur les numerote
+     dans cet ordre. */
+  const lots=cles.map(cle=>({cle,fichiers:blocGal(cle).fichiers})).filter(x=>x.fichiers.length);
+  if(!lots.length){ alert(cles.length>1?"Choisis les photos d'au moins une des deux séances.":"Choisis les photos de la séance."); return; }
+  const nb=lots.reduce((t,x)=>t+x.fichiers.length,0);
+  if(nb+(p.dejaEnLigne||0)>GAL_PHOTOS_MAX){ alert("Au plus "+GAL_PHOTOS_MAX+" photos par galerie : il y en aurait "+(nb+(p.dejaEnLigne||0))+"."); return; }
+  let corps;
+  if(p.ajout){
+    corps={action:"ajouter-seance",g:p.jeton,seance:p.ajout,transfert:lienDe(p.ajout),photos:lots[0].fichiers.map(f=>({nom:f.name}))};
+  } else {
+    const f=formuleChoisieGal();
+    if(!f.pret){ alert(f.duo?"Choisis la formule de chaque séance.":"Choisis la formule : c'est elle qui dit combien de retouches sont comprises."); return; }
+    const q=document.getElementById("gpQuota").value.trim(), quota=Number(q);
+    if(q===""||!Number.isInteger(quota)||quota<0||quota>GAL_QUOTA_MAX){ alert("Indique le nombre de photos retouchées comprises (0 = sans limite)."); return; }
+    if(f.duo && lots.length===1 && lots[0].cle==="naissance" && !confirm("Seulement la naissance ? Tu pourras ajouter la grossesse ensuite.\n\nContinuer ?")) return;
+    corps=f.duo
+      ? {action:"creer",clientId:p.clientId,formule:"duo",formules:{grossesse:f.fg,naissance:f.fn},seance:"duo",quota,
+         transferts:Object.fromEntries(GAL_DUO.map(k=>[k,lienDe(k)])),
+         photos:lots.flatMap(x=>x.fichiers.map(fi=>({nom:fi.name,seance:x.cle})))}
+      : {action:"creer",clientId:p.clientId,formule:f.f,seance:document.getElementById("gpSeance").value,quota,
+         transfert:lienDe("seule"),photos:lots[0].fichiers.map(fi=>({nom:fi.name}))};
+  }
+  /* Les fichiers, dans l'ordre des photos que le serveur renverra, et la
+     seance de chacun (pour ranger sa copie allegee). */
+  p.fichiers=lots.flatMap(x=>x.fichiers);
+  p.cles=lots.flatMap(x=>x.fichiers.map(()=>x.cle));
+  p.liens=Object.fromEntries(cles.map(k=>[k,lienDe(k)]));
   const go=document.getElementById("gpGo");
   if(p.parent){
-    const c=clientById(p.clientId);
-    try{ p.sortie=await ouvrirSousDossierAl(p.parent,nomDossierAllegeAl(p.fichiers,"Photos "+((c&&c.name)||""))); }
-    catch(e){ alert("Impossible de créer le dossier des photos allégées : "+e.message); return; }
-    p.allegees=new Set(); p.allege={avant:0,apres:0,nb:0,rates:[]};
+    p.sorties={}; p.allege={}; p.allegees=new Set();
+    try{
+      for(const x of lots){
+        p.sorties[x.cle]=await ouvrirSousDossierAl(p.parent,nomDossierAllegeAl(x.fichiers,repliAllegeGal(x.cle)));
+        p.allege[x.cle]={avant:0,apres:0,nb:0,rates:[]};
+      }
+    }catch(e){ p.sorties=null; alert("Impossible de créer le dossier des photos allégées : "+e.message); return; }
   }
-  p.transfert=transfert;
-  go.disabled=true; go.textContent="Création de la galerie...";
+  const libre=p.ajout?"Ajouter les photos":"Créer la galerie";
+  go.disabled=true; go.textContent=p.ajout?"Ajout des photos...":"Création de la galerie...";
   try{
-    const {statut,j}=await appelGal({action:"creer",clientId:p.clientId,formule,seance,transfert,
-      photos:p.fichiers.map(f=>({nom:f.name}))});
+    const {statut,j}=await appelGal(corps);
     if(!j.ok){
-      go.disabled=false; go.textContent="Créer la galerie";
-      alert(statut===404?"Cette fiche n'est pas encore sur le serveur. Attends la synchronisation, puis réessaie.":"Création impossible ("+(j.error||statut)+").");
+      go.disabled=false; go.textContent=libre;
+      const pourquoi={deja:"Cette séance est déjà dans la galerie.",trop:"Trop de photos pour une seule galerie.",
+                      quota:"Le nombre de retouches comprises est refusé.",pas_duo:"Cette galerie n'est pas une galerie à deux séances."}[j.error];
+      alert(statut===404&&!p.ajout?"Cette fiche n'est pas encore sur le serveur. Attends la synchronisation, puis réessaie."
+        :pourquoi||"Impossible ("+(j.error||statut)+").");
       return;
     }
-    p.jeton=j.jeton; p.photos=j.photos; p.adresse=j.adresse;
+    if(!p.ajout) p.jeton=j.jeton;
+    p.photos=j.photos; p.adresse=j.adresse;
     galeriesLu=0;
     /* On ne revient plus en arriere : les champs se figent. */
-    ["gpFormule","gpSeance","gpTransfert","gpAllege"].forEach(id=>{ const e=document.getElementById(id); if(e) e.disabled=true; });
-    document.querySelectorAll("#gpFichiers,#gpDossier").forEach(e=>e.disabled=true);
+    document.querySelectorAll("#modalContent input, #modalContent select").forEach(e=>{ e.disabled=true; });
     await envoyerPhotosGal(p);
   }catch(e){
-    go.disabled=false; go.textContent="Créer la galerie";
+    go.disabled=false; go.textContent=libre;
     if(e.message!=="cle") alert("Erreur : "+e.message);
   }
 }
@@ -4096,7 +4278,7 @@ async function lancerGalerie(){
    proprement, et "Reprendre" repart de la ou on en etait. */
 async function envoyerPhotosGal(p){
   const go=document.getElementById("gpGo");
-  const aFaire=p.photos.map((ph,i)=>({ph,f:p.fichiers[i]})).filter(x=>x.f && !p.recues.has(x.ph.id));
+  const aFaire=p.photos.map((ph,i)=>({ph,f:p.fichiers[i],cle:p.cles?p.cles[i]:""})).filter(x=>x.f && !p.recues.has(x.ph.id));
   const total=p.photos.length;
   p.enCours=true;
   let verrou=null;
@@ -4124,16 +4306,18 @@ async function envoyerPhotosGal(p){
       }
       throw dernier||new Error("envoi impossible");
     };
-    for(const {ph,f} of aFaire){
-      progresGal(p.recues.size+paquet.length,total,"Photo "+ph.nom+(p.sortie?" · allégée":""));
+    for(const {ph,f,cle} of aFaire){
+      const sortie=p.sorties&&p.sorties[cle];
+      progresGal(p.recues.size+paquet.length,total,"Photo "+ph.nom+(sortie?" · allégée":""));
       let it;
       try{
-        const a=await allegerPhotoGal(f,(p.sortie && !p.allegees.has(ph.id))?p.sortie:null);
+        const a=await allegerPhotoGal(f,(sortie && !p.allegees.has(ph.id))?sortie:null);
         it={id:ph.id,t:a.t,v:a.v,r:a.r};
         if(a.allege){
+          const st=p.allege[cle];
           p.allegees.add(ph.id);
-          if(a.allege.rate) p.allege.rates.push(ph.nom);
-          else { p.allege.avant+=a.allege.avant; p.allege.apres+=a.allege.apres; p.allege.nb++; }
+          if(a.allege.rate) st.rates.push(ph.nom);
+          else { st.avant+=a.allege.avant; st.apres+=a.allege.apres; st.nb++; }
         }
       }
       catch(e){ if(e.ecriture) throw e; refusees.push(ph.id); continue; }
@@ -4170,8 +4354,9 @@ async function envoyerPhotosGal(p){
     const {j}=await appelGal({action:"publier",g:p.jeton});
     if(!j.ok) throw new Error(j.error||"publication refusée");
     galeriesLu=0;
+    p.publie=j;
     if(ouverte()) galeriePrete(p.clientId,j.adresse||p.adresse,total,p);
-    else { galPrep=null; toast("La galerie de "+qui+" est en ligne"); }
+    else { galPrep=null; toast(p.ajout?"Les photos de la "+p.ajout+" de "+qui+" sont en ligne":"La galerie de "+qui+" est en ligne"); }
   }catch(e){
     if(e.message==="cle") return;
     if(!ouverte()){ toast("Galerie de "+qui+" pas encore en ligne : ouvre-la dans Galeries"); return; }
@@ -4201,32 +4386,26 @@ async function preRemplirGalerieMail(clientId){
 function galeriePrete(clientId,adresse,nb,p){
   galPrep=null;
   const c=clientById(clientId);
-  const al=p&&p.allege, jeton=p&&p.jeton;
+  const jeton=p&&p.jeton;
   /* Les photos allegees, et le lien SwissTransfer a coller des qu'il existe :
-     il s'affiche alors dans sa galerie ("Telecharger toutes les photos"). */
-  const blocTransfert=(jeton && !(p.transfert))?`
-    <div class="grouplab" style="margin-top:4px">${al&&al.nb?"Photos allégées pour SwissTransfer":"Lien pour tout télécharger"}</div>
-    ${al&&al.nb?`<div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;margin-bottom:8px">
-      <b>${al.nb} photos</b> : ${goAl(al.avant)} → <b>${goAl(al.apres)}</b> (${al.avant?Math.round((1-al.apres/al.avant)*100):0} % de moins).<br>
-      Dans <b>${esc(p.parent.name)}</b> › <b>${esc(p.sortie.name)}</b>.
-      ${al.rates.length?`<div style="color:var(--danger);margin-top:6px">${al.rates.length} photo(s) non allégée(s), à envoyer telles quelles : ${esc(al.rates.slice(0,5).join(", "))}</div>`:""}
-    </div>`:""}
-    <button class="btn wide" onclick="envoyerSwissFin('${esc(jeton)}')">Envoyer sur SwissTransfer</button>
-    <div id="swissInfo" style="font-size:13px;color:var(--ink-2);line-height:1.6;margin:10px 0 12px">
-      Dans SwissTransfer :<br>
-      1. glisse le dossier <b>${al&&al.nb?esc(p.sortie.name):"de la séance"}</b> ;<br>
-      2. choisis une durée de <b>30 jours</b>, puis lance le transfert ;<br>
-      3. clique sur <b>« Copier le lien »</b>.<br>
-      Reviens ensuite ici : le lien s'enregistre tout seul dans sa galerie.</div>
-    <div style="font-size:12.5px;color:var(--ink-3);margin-bottom:6px">Ou colle le lien toi-même :</div>
-    <div class="field" style="margin-bottom:8px"><input id="gpLienFin" type="url" inputmode="url" autocomplete="off" placeholder="https://www.swisstransfer.com/d/..."></div>
-    <div id="gpLienFinOk" style="margin-bottom:10px">
-      <button class="btn ghost sm wide" onclick="enregistrerLienFinGal('${esc(jeton)}')">Enregistrer le lien</button></div>
-    <div style="font-size:12px;color:var(--ink-3);line-height:1.5;margin-bottom:16px">SwissTransfer t'enverra un mail le 12e jour pour prolonger jusqu'à 30 jours :
-      clique dessus, sinon le lien s'arrête au 15e jour.</div>`:"";
-  openModal(`<h2>La galerie est en ligne</h2>
-    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
-      ${nb} photos${c?" pour <b>"+esc(c.name)+"</b>":""}. Elle reste en ligne 3 mois.</div>
+     il s'affiche alors dans sa galerie ("Telecharger toutes les photos").
+     Une galerie a deux seances a un lien par seance. */
+  const cles=p&&p.cles?[...new Set(p.cles)]:["seule"];
+  const sansLien=jeton?cles.filter(k=>!(p.liens&&p.liens[k])):[];
+  const blocTransfert=sansLien.map(k=>blocSwissFinGal(p,k)).join("")
+    +(sansLien.length?`<div style="font-size:12px;color:var(--ink-3);line-height:1.5;margin-bottom:16px">SwissTransfer t'enverra un mail le 12e jour pour prolonger jusqu'à 30 jours :
+      clique dessus, sinon le lien s'arrête au 15e jour.</div>`:"");
+  const j=(p&&p.publie)||{};
+  const reste=p&&p.resteApres;
+  const titre=p&&p.ajout?"Les photos de la "+esc(p.ajout)+" sont en ligne":"La galerie est en ligne";
+  const sous=p&&p.ajout
+    ? nb+" photos ajoutées à la galerie"+(c?" de <b>"+esc(c.name)+"</b>":"")+", au même lien."
+      +(j.range?" Son premier choix est gardé tel quel.":"")
+      +(reste!=null?" Elle choisit maintenant avec <b>"+reste+" retouche"+(reste>1?"s":"")+" comprise"+(reste>1?"s":"")+"</b>.":"")
+      +" Pense à la prévenir : le lien ne change pas."
+    : nb+" photos"+(c?" pour <b>"+esc(c.name)+"</b>":"")+". Elle reste en ligne 3 mois.";
+  openModal(`<h2>${titre}</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">${sous}</div>
     <div class="card" style="padding:13px 15px;font-size:13px;word-break:break-all;margin-bottom:12px">
       <span style="user-select:all">${esc(adresse)}</span></div>
     <div style="display:flex;gap:8px;margin-bottom:9px">
@@ -4238,18 +4417,44 @@ function galeriePrete(clientId,adresse,nb,p){
     <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">Le lien de la galerie est déjà rempli dans le mail.</div>`:""}`);
   if(galeriesVisibles()) renderGaleriesList();
 }
+/* Un bloc "Envoyer sur SwissTransfer" pour une seance. Les champs portent
+   le nom de la seance ("-naissance") ; une galerie simple garde les noms
+   d'avant. */
+const sufGal=cle=>cle&&cle!=="seule"?"-"+cle:"";
+function blocSwissFinGal(p,cle){
+  const al=p.allege&&p.allege[cle], sortie=p.sorties&&p.sorties[cle], suf=sufGal(cle);
+  const deLa=suf?" · "+esc(cle):"";
+  return `<div class="grouplab" style="margin-top:4px">${al&&al.nb?"Photos allégées pour SwissTransfer":"Lien pour tout télécharger"}${deLa}</div>
+    ${al&&al.nb?`<div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;margin-bottom:8px">
+      <b>${al.nb} photos</b> : ${goAl(al.avant)} → <b>${goAl(al.apres)}</b> (${al.avant?Math.round((1-al.apres/al.avant)*100):0} % de moins).<br>
+      Dans <b>${esc(p.parent.name)}</b> › <b>${esc(sortie.name)}</b>.
+      ${al.rates.length?`<div style="color:var(--danger);margin-top:6px">${al.rates.length} photo(s) non allégée(s), à envoyer telles quelles : ${esc(al.rates.slice(0,5).join(", "))}</div>`:""}
+    </div>`:""}
+    <button class="btn wide" onclick="envoyerSwissFin('${esc(p.jeton)}','${cle}')">Envoyer sur SwissTransfer${suf?" (la "+esc(cle)+")":""}</button>
+    <div id="swissInfo${suf}" style="font-size:13px;color:var(--ink-2);line-height:1.6;margin:10px 0 12px">
+      Dans SwissTransfer :<br>
+      1. glisse le dossier <b>${al&&al.nb?esc(sortie.name):"de la séance"+(suf?" "+esc(cle):"")}</b> ;<br>
+      2. choisis une durée de <b>30 jours</b>, puis lance le transfert ;<br>
+      3. clique sur <b>« Copier le lien »</b>.<br>
+      Reviens ensuite ici : le lien s'enregistre tout seul dans sa galerie.</div>
+    <div style="font-size:12.5px;color:var(--ink-3);margin-bottom:6px">Ou colle le lien toi-même :</div>
+    <div class="field" style="margin-bottom:8px"><input id="gpLienFin${suf}" type="url" inputmode="url" autocomplete="off" placeholder="https://www.swisstransfer.com/d/..."></div>
+    <div id="gpLienFinOk${suf}" style="margin-bottom:14px">
+      <button class="btn ghost sm wide" onclick="enregistrerLienFinGal('${esc(p.jeton)}','${cle}')">Enregistrer le lien</button></div>`;
+}
 
-async function enregistrerLienFinGal(jeton){
-  const champ=document.getElementById("gpLienFin"); if(!champ) return;
+async function enregistrerLienFinGal(jeton,cle){
+  const suf=sufGal(cle);
+  const champ=document.getElementById("gpLienFin"+suf); if(!champ) return;
   const lien=champ.value.trim();
   if(!/^https:\/\//i.test(lien)){ alert("Colle le lien SwissTransfer (il commence par https://)."); return; }
   try{
-    const {j}=await appelGal({action:"transfert",g:jeton,lien});
+    const {j}=await appelGal({action:"transfert",g:jeton,lien,seance:suf?cle:undefined});
     if(!j.ok){ alert("Lien refusé."); return; }
     galeriesLu=0;
-    const ok=document.getElementById("gpLienFinOk");
-    if(ok) ok.innerHTML=`<div style="font-size:13px;color:var(--ok);font-weight:600">Lien enregistré : il apparaît dans sa galerie.</div>`;
-    const info=document.getElementById("swissInfo");
+    const ok=document.getElementById("gpLienFinOk"+suf);
+    if(ok) ok.innerHTML=`<div style="font-size:13px;color:var(--ok);font-weight:600;margin-bottom:14px">Lien enregistré : il apparaît dans sa galerie.</div>`;
+    const info=document.getElementById("swissInfo"+suf);
     if(info) info.innerHTML=`<div class="card" style="padding:12px 14px;border-color:var(--ok)"><b style="color:var(--ok)">Lien SwissTransfer enregistré</b>
       <div style="word-break:break-all;font-size:12.5px;margin-top:4px">${esc(lien)}</div>
       <div style="font-size:12px;color:var(--ink-3);margin-top:4px">Ce n'est pas le bon ? Colle le bon lien dans l'onglet Galeries.</div></div>`;
@@ -4308,14 +4513,17 @@ async function retourSwiss(){
 }
 window.addEventListener("focus",retourSwiss);
 document.addEventListener("visibilitychange",retourSwiss);
-function envoyerSwissFin(jeton){
-  return envoyerSurSwiss({champ:"gpLienFin",info:"swissInfo",enregistrer:()=>enregistrerLienFinGal(jeton)});
+function envoyerSwissFin(jeton,cle){
+  const suf=sufGal(cle);
+  return envoyerSurSwiss({champ:"gpLienFin"+suf,info:"swissInfo"+suf,enregistrer:()=>enregistrerLienFinGal(jeton,cle)});
 }
-function envoyerSwissDetail(){
+function envoyerSwissDetail(cle){
   const g=galOuverte&&galOuverte.g; if(!g) return;
-  const info=document.getElementById("swissInfoDetail");
+  const suf=sufGal(cle);
+  const info=document.getElementById("swissInfoDetail"+suf);
   if(info) info.innerHTML="Glisse le dossier dans SwissTransfer, choisis 30 jours, puis clique sur « Copier le lien ». Reviens ici : le nouveau lien remplace l'ancien tout seul.";
-  return envoyerSurSwiss({champ:"gdTransfert",info:"swissInfoDetail",deja:g.transfert||"",enregistrer:enregistrerTransfertGal});
+  const deja=suf?(((g.seances||[]).find(x=>x.cle===cle)||{}).transfert||""):(g.transfert||"");
+  return envoyerSurSwiss({champ:"gdTransfert"+suf,info:"swissInfoDetail"+suf,deja,enregistrer:()=>enregistrerTransfertGal(cle)});
 }
 
 /* Le lien que Matt ouvre lui-meme : l'apercu (&apercu=1), ou ses essais ne
@@ -4353,86 +4561,147 @@ function vignettesGal(g,ids){
     +`</div>`;
 }
 
+/* Un choix de la cliente : le choix en cours (tour "") ou un choix
+   precedent d'une galerie a deux seances (tour = son rang). */
+const choixGal=(g,tour)=>tour===""||tour===undefined?g.selection:(g.passees||[])[tour];
+/* Les miniatures d'un choix, seance par seance quand il y en a deux. */
+function vignettesChoixGal(g,ids){
+  const seances=g.formule==="duo"?seancesDeGal(g,ids):[];
+  if(seances.length<2) return vignettesGal(g,ids);
+  return seances.map(k=>`<div style="font-size:12px;font-weight:700;color:var(--ink-2);margin-top:10px">${esc(nomSeanceGal(k))} · ${ids.filter(id=>seanceDePhotoGal(g,id)===k).length}</div>`
+    +vignettesGal(g,ids.filter(id=>seanceDePhotoGal(g,id)===k))).join("");
+}
+function htmlChoixGal(g,t,tour){
+  const n=t.coeurs.length, comp=comprisesGal(g,t), plus=t.enPlus!=null?t.enPlus:(g.quota?Math.max(0,n-g.quota):0);
+  const paie=t.montant>0
+    ? (t.paye?`<span class="badge ok">réglé ${t.montant} €</span>`:`<span class="badge warn">${t.montant} € en attente de paiement</span>`)
+    : `<span class="badge neutral">rien à payer</span>`;
+  let h=`<div class="card" style="padding:13px 15px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+        <b style="font-size:14px">${n} photo${n>1?"s":""} à retoucher</b>${paie}</div>
+      <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${g.quota?comp+" comprise(s) dans la formule"+(plus?", "+plus+" en plus":""):"Prestige : ses cœurs te guident"} · envoyée le ${esc(dateGal(t.at))}</div>
+      ${n?vignettesChoixGal(g,t.coeurs):""}
+      ${n?`<button class="btn ghost sm wide" onclick="copierNumerosGal(${tour===""?"''":tour})">Copier les numéros</button>`:""}
+    </div>`;
+  /* Les tirages, colis par colis : le sien, puis ceux qu'elle fait
+     envoyer a d'autres personnes. Chaque colis a son adresse. */
+  const autres=t.envois||[];
+  if(t.tiragesTexte || autres.length){
+    const colis=(titre,tir,adr)=>`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
+        <b style="font-size:14px">${esc(titre)}</b>
+        <div style="white-space:pre-line;margin-top:4px">${esc(tir)}</div>
+        ${adr?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);white-space:pre-line"><b>À poster à</b>\n${esc(adr)}</div>`:""}
+      </div>`;
+    h+=`<div class="grouplab" style="margin-top:16px">Tirages à imprimer${autres.length?" · "+(autres.length+(t.tiragesTexte?1:0))+" colis":""}</div>`;
+    if(t.tiragesTexte) h+=colis(autres.length?"Pour elle":"Ses tirages",t.tiragesTexte,t.adresseTexte);
+    autres.forEach(e=>{ h+=colis("Pour "+((e.adresse&&e.adresse.nom)||"une autre personne"),e.tiragesTexte,e.adresseTexte); });
+  }
+  return h;
+}
+/* Pour l'etiquette ou une question sur la livraison : ses coordonnees,
+   prises dans sa fiche (la galerie ne les redemande pas). */
+function htmlContactGal(g,nom){
+  const fiche=g.clientId?clientById(g.clientId):null;
+  const tel=fiche&&fiche.tel?String(fiche.tel):"", mail=(fiche&&fiche.email)||g.email||"";
+  const telNu=tel.replace(/[^\d+]/g,"");
+  return `<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
+      <b style="font-size:14px">Pour la joindre</b>
+      <div style="margin-top:4px">${esc(nom)}</div>
+      <div>${tel?`<a href="tel:${esc(telNu)}">${esc(tel)}</a>`:`<span style="color:var(--ink-3)">pas de téléphone dans sa fiche</span>`}</div>
+      ${mail?`<div style="word-break:break-all"><a href="mailto:${esc(mail)}">${esc(mail)}</a></div>`:""}
+      ${tel?`<div style="display:flex;gap:8px;margin-top:10px">
+        <a class="btn ghost sm" style="flex:1" href="tel:${esc(telNu)}">Appeler</a>
+        <a class="btn ghost sm" style="flex:1" href="sms:${esc(telNu)}">SMS</a></div>`:""}
+    </div>`;
+}
+/* Le lien des retouches d'un choix. Les champs portent le rang du choix
+   ("-0") ; le choix en cours garde les noms d'avant. */
+function htmlRetouchesGal(g,tour,titre){
+  const r=tour===""?g:(g.passees||[])[tour], suf=tour===""?"":"-"+tour;
+  return `<div class="grouplab" style="margin-top:18px">${esc(titre)}</div>
+    ${r.retouches?`<div style="font-size:13px;color:var(--ok);margin-bottom:8px;line-height:1.5">Envoyées le ${esc(dateGal(r.retouchesAt))}. Le bouton apparaît en haut de sa galerie.</div>`:""}
+    <div class="field" style="margin-bottom:8px"><input id="gdRetouches${suf}" type="url" inputmode="url" autocomplete="off" placeholder="Lien WeTransfer ou SwissTransfer des retouches" value="${esc(r.retouches||"")}"></div>
+    ${g.email?`<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin:0 0 10px;cursor:pointer">
+      <input type="checkbox" id="gdPrevenir${suf}" ${r.retouches?"":"checked"}> Lui envoyer un mail (${esc(g.email)})</label>`:""}
+    <button class="btn sm wide" onclick="envoyerRetouchesGal(${tour===""?"''":tour})">${r.retouches?"Remplacer le lien des retouches":"Envoyer les retouches"}</button>`;
+}
+const motsSeancesGal=l=>l.join(" et ");
+
 function dessinerGalerie(){
   const {g,adresse}=galOuverte;
   const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
   const s=g.selection;
   const nom=[g.prenom,g.nom].filter(Boolean).join(" ")||"Cliente";
-  const quota=g.quota;
+  const quota=g.quota, duo=g.formule==="duo", passees=g.passees||[];
+  const recues=new Set(g.recues||[]);
+  const pasPretes=(g.seances||[]).filter(x=>!x.prete).map(x=>x.cle);
+  const manque=seanceManquanteGal(g);
+  const offertes=(quota&&g.quotaFormule>0)?Math.max(0,quota-g.quotaFormule):0;
   /* Ce que Matt vient chercher ici, c'est la selection : elle passe en
      premier, le reste tient en deux lignes. */
   const court=t=>t?new Date(t).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}):"";
+  const photosTxt=duo&&(g.seances||[]).length
+    ? (g.seances||[]).map((x,i)=>g.photos.filter(p=>p.s===x.cle).length+(i?" de ":" photos de ")+x.cle).join(", ")
+    : g.photos.length+" photos";
+  const totalTxt=quota
+    ? `<b>${quota} retouches comprises</b>${offertes?", dont "+offertes+" offerte"+(offertes>1?"s":""):""}${duo?", pour les deux séances":""}${passees.length?" · il en reste "+quotaRestantGal(g):""}`
+    : "<b>Retouches sans limite</b>";
   let h=`<h2>Galerie de ${esc(nom)}</h2>
     <div class="meta" style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("mybabyshoot")}<span class="badge ${st[1]}">${esc(st[0])}</span></div>
-    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px"><b>${esc(nomFormuleGal(g.formule))}</b> (${quota?quota+" retouches comprises":"retouches sans limite"})${g.seance?" · "+esc(nomSeanceGal(g.seance)):""} · ${g.photos.length} photos${g.statut==="preparation"?" ("+(g.recues||[]).length+" reçues)":""}</div>
+    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px"><b>${esc(nomFormuleDeGal(g))}</b>${!duo&&g.seance?" · "+esc(nomSeanceGal(g.seance)):""} · ${esc(photosTxt)}${g.statut==="preparation"?" ("+recues.size+" reçues)":""}</div>
+    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px">${totalTxt} · <a onclick="modifierQuotaGal()" style="cursor:pointer;text-decoration:underline">Modifier</a></div>
     <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5">Créée le ${esc(court(g.createdAt))}${g.statut==="preparation"?"":" · "+(g.vueAt?"ouverte le "+esc(court(g.vueAt)):"pas encore ouverte")} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>`;
 
   let lienHtml="";
-  if(g.statut==="preparation"){
-    const manquent=g.photos.length-(g.recues||[]).length;
+  if(g.statut==="preparation" || pasPretes.length){
+    const manquent=g.photos.length-recues.size;
+    const quoi=g.statut==="preparation"?"Pas encore en ligne.":"Les photos de la "+esc(motsSeancesGal(pasPretes))+" ne sont pas encore en ligne.";
     h+=`<div class="card" style="margin-top:12px;padding:13px 15px;font-size:13.5px;line-height:1.55">
-        <b>Pas encore en ligne.</b> ${manquent} photo(s) n'ont pas été envoyées. Choisis à nouveau les photos de la séance :
+        <b>${quoi}</b> ${manquent} photo(s) n'ont pas été envoyées. Choisis à nouveau les photos de la séance :
         celles déjà en ligne sont reconnues à leur nom et ne repartent pas.</div>
       <input type="file" id="grFichiers" multiple accept="image/jpeg,image/png,image/webp" style="display:none" onchange="reprendreGalerie(this)">
       <div id="gpProgres" style="margin-top:12px"></div>
       <button class="btn wide" id="gpGo" style="margin-top:4px" onclick="document.getElementById('grFichiers').click()">Reprendre l'envoi des photos</button>`;
-  } else {
+  }
+  if(g.statut!=="preparation"){
     lienHtml=`<div class="grouplab" style="margin-top:18px">Lien de la galerie</div>
       <div class="card" style="padding:12px 15px;font-size:13px;word-break:break-all"><span style="user-select:all">${esc(adresse)}</span></div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
         <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a></div>`;
   }
+  /* La seance qui manque (en general la naissance, pas encore faite). */
+  if(manque && g.statut!=="preparation" && !pasPretes.length){
+    const autre=GAL_DUO.find(k=>k!==manque), reste=resteApresGal(g);
+    h+=`<div class="card" style="margin-top:12px;padding:13px 15px;font-size:13.5px;line-height:1.55">
+        <b>La ${esc(manque)} n'est pas encore dans sa galerie.</b> Une fois la séance faite, ajoute ses photos ici : même lien,
+        ${s&&!s.enAttente?"son choix de "+esc(autre)+" reste tel quel, et ":""}elle choisira ${quota?"avec les <b>"+reste+"</b> retouches qui lui resteront":"ses préférées"}.</div>
+      <button class="btn wide" style="margin-top:8px" onclick="openPreparerGalerie('${esc(g.clientId)}',true)">Ajouter les photos de la ${esc(manque)}</button>`;
+  }
 
-  /* la selection */
-  h+=`<div class="grouplab" style="margin-top:16px">Sa sélection</div>`;
+  /* les choix precedents (galerie a deux seances), chacun avec ses retouches */
+  let colis=!!(s&&(s.tiragesTexte||(s.envois||[]).length));
+  passees.forEach((t,i)=>{
+    const qui=motsSeancesGal(t.seances&&t.seances.length?t.seances:seancesDeGal(g,t.coeurs));
+    h+=`<div class="grouplab" style="margin-top:16px">${i===0?"Son premier choix":"Son choix n° "+(i+1)}${qui?" · "+esc(qui):""}</div>`+htmlChoixGal(g,t,i)
+      +htmlRetouchesGal(g,i,"Ses retouches"+(qui?" · "+qui:""));
+    if(t.tiragesTexte||(t.envois||[]).length) colis=true;
+  });
+
+  /* la selection en cours */
+  const quiEnCours=duo&&s?motsSeancesGal(seancesDeGal(g,s.coeurs)):"";
+  h+=`<div class="grouplab" style="margin-top:16px">${passees.length?"Son choix en cours":"Sa sélection"}${quiEnCours?" · "+esc(quiEnCours):""}</div>`;
   if(s){
-    const n=s.coeurs.length, plus=quota?Math.max(0,n-quota):0;
-    const paie=s.montant>0
-      ? (s.paye?`<span class="badge ok">réglé ${s.montant} €</span>`:`<span class="badge warn">${s.montant} € en attente de paiement</span>`)
-      : `<span class="badge neutral">rien à payer</span>`;
-    h+=`<div class="card" style="padding:13px 15px">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
-          <b style="font-size:14px">${n} photo${n>1?"s":""} à retoucher</b>${paie}</div>
-        <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${quota?Math.min(n,quota)+" comprise(s) dans la formule"+(plus?", "+plus+" en plus":""):"Prestige : ses cœurs te guident"} · envoyée le ${esc(dateGal(s.at))}</div>
-        ${n?vignettesGal(g,s.coeurs):""}
-        ${n?`<button class="btn ghost sm wide" onclick="copierNumerosGal()">Copier les numéros</button>`:""}
-      </div>`;
-    /* Les tirages, colis par colis : le sien, puis ceux qu'elle fait
-       envoyer a d'autres personnes. Chaque colis a son adresse. */
-    const autres=s.envois||[];
-    if(s.tiragesTexte || autres.length){
-      const colis=(titre,tir,adr)=>`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
-          <b style="font-size:14px">${esc(titre)}</b>
-          <div style="white-space:pre-line;margin-top:4px">${esc(tir)}</div>
-          ${adr?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);white-space:pre-line"><b>À poster à</b>\n${esc(adr)}</div>`:""}
-        </div>`;
-      h+=`<div class="grouplab" style="margin-top:16px">Tirages à imprimer${autres.length?" · "+(autres.length+(s.tiragesTexte?1:0))+" colis":""}</div>`;
-      if(s.tiragesTexte) h+=colis(autres.length?"Pour elle":"Ses tirages",s.tiragesTexte,s.adresseTexte);
-      autres.forEach(e=>{ h+=colis("Pour "+((e.adresse&&e.adresse.nom)||"une autre personne"),e.tiragesTexte,e.adresseTexte); });
-      /* Pour l'etiquette ou une question sur la livraison : ses coordonnees,
-         prises dans sa fiche (la galerie ne les redemande pas). */
-      const fiche=g.clientId?clientById(g.clientId):null;
-      const tel=fiche&&fiche.tel?String(fiche.tel):"", mail=(fiche&&fiche.email)||g.email||"";
-      const telNu=tel.replace(/[^\d+]/g,"");
-      h+=`<div class="card" style="margin-top:8px;padding:13px 15px;font-size:13.5px;line-height:1.6">
-          <b style="font-size:14px">Pour la joindre</b>
-          <div style="margin-top:4px">${esc(nom)}</div>
-          <div>${tel?`<a href="tel:${esc(telNu)}">${esc(tel)}</a>`:`<span style="color:var(--ink-3)">pas de téléphone dans sa fiche</span>`}</div>
-          ${mail?`<div style="word-break:break-all"><a href="mailto:${esc(mail)}">${esc(mail)}</a></div>`:""}
-          ${tel?`<div style="display:flex;gap:8px;margin-top:10px">
-            <a class="btn ghost sm" style="flex:1" href="tel:${esc(telNu)}">Appeler</a>
-            <a class="btn ghost sm" style="flex:1" href="sms:${esc(telNu)}">SMS</a></div>`:""}
-        </div>`;
-    }
+    h+=htmlChoixGal(g,s,"");
   } else if((g.coeurs||[]).length){
     h+=`<div class="card" style="padding:13px 15px">
         <b style="font-size:14px">Pas encore validée</b>
         <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${g.coeurs.length} cœur(s) pour l'instant. Tu seras prévenu quand elle validera.</div>
-        ${vignettesGal(g,g.coeurs)}</div>`;
+        ${vignettesChoixGal(g,g.coeurs)}</div>`;
   } else {
     h+=`<div class="card" style="padding:13px 15px;font-size:13.5px;color:var(--ink-3)">Aucun cœur pour l'instant. Tu seras prévenu quand elle validera.</div>`;
   }
+  if(colis) h+=htmlContactGal(g,nom);
 
   h+=lienHtml;
   /* La photo de couverture : celle que Matt a choisie, sinon la premiere en
@@ -4449,22 +4718,22 @@ function dessinerGalerie(){
       <button class="btn ghost sm wide" style="margin-top:8px" onclick="choisirCouvertureGal()">Changer la photo de couverture</button>`;
   }
   if(g.statut!=="preparation"){
-    /* le lien "tout telecharger" */
-    h+=`<div class="grouplab" style="margin-top:18px">Toutes les photos en pleine qualité</div>
-      <div class="field" style="margin-bottom:8px"><input id="gdTransfert" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(g.transfert||"")}"></div>
-      <div style="font-size:12px;color:var(--ink-3);margin:-2px 0 8px;line-height:1.5">${g.transfert?"Un WeTransfer expire vite : colle ici le nouveau lien si elle te le demande.":"Sans ce lien, la cliente lit « le lien pour tout télécharger arrive très vite »."}</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn ghost sm" style="flex:1" onclick="envoyerSwissDetail()">Envoyer sur SwissTransfer</button>
-        <button class="btn ghost sm" style="flex:1" onclick="enregistrerTransfertGal()">Enregistrer le lien</button></div>
-      <div id="swissInfoDetail" style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:6px"></div>`;
+    /* le lien "tout telecharger" : un par seance dans une galerie a deux seances */
+    const liens=g.seances?g.seances.filter(x=>x.prete).map(x=>({cle:x.cle,lien:x.transfert||""})):[{cle:"",lien:g.transfert||""}];
+    h+=`<div class="grouplab" style="margin-top:18px">Toutes les photos en pleine qualité</div>`;
+    liens.forEach(({cle,lien})=>{
+      const suf=sufGal(cle);
+      h+=`${cle?`<div style="font-size:12.5px;font-weight:700;margin:10px 0 6px">La ${esc(cle)}</div>`:""}
+        <div class="field" style="margin-bottom:8px"><input id="gdTransfert${suf}" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(lien)}"></div>
+        <div style="font-size:12px;color:var(--ink-3);margin:-2px 0 8px;line-height:1.5">${lien?"Un WeTransfer expire vite : colle ici le nouveau lien si elle te le demande.":"Sans ce lien, la cliente lit « le lien pour tout télécharger arrive très vite »."}</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost sm" style="flex:1" onclick="envoyerSwissDetail('${cle}')">Envoyer sur SwissTransfer</button>
+          <button class="btn ghost sm" style="flex:1" onclick="enregistrerTransfertGal('${cle}')">Enregistrer le lien</button></div>
+        <div id="swissInfoDetail${suf}" style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:6px"></div>`;
+    });
 
-    /* les retouches */
-    h+=`<div class="grouplab" style="margin-top:18px">Ses photos retouchées</div>`;
-    if(g.retouches) h+=`<div style="font-size:13px;color:var(--ok);margin-bottom:8px;line-height:1.5">Envoyées le ${esc(dateGal(g.retouchesAt))}. Le bouton apparaît en haut de sa galerie.</div>`;
-    h+=`<div class="field" style="margin-bottom:8px"><input id="gdRetouches" type="url" inputmode="url" autocomplete="off" placeholder="Lien WeTransfer ou SwissTransfer des retouches" value="${esc(g.retouches||"")}"></div>
-      ${g.email?`<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin:0 0 10px;cursor:pointer">
-        <input type="checkbox" id="gdPrevenir" ${g.retouches?"":"checked"}> Lui envoyer un mail (${esc(g.email)})</label>`:""}
-      <button class="btn sm wide" onclick="envoyerRetouchesGal()">${g.retouches?"Remplacer le lien des retouches":"Envoyer les retouches"}</button>`;
+    /* les retouches du choix en cours */
+    h+=htmlRetouchesGal(g,"",passees.length?"Ses retouches"+(quiEnCours?" · "+quiEnCours:" · choix en cours"):"Ses photos retouchées");
   }
 
   if(g.clientId && clientById(g.clientId)) h+=`<button class="btn ghost wide" style="margin-top:18px" onclick="closeModal();openFiche('${esc(g.clientId)}')">Ouvrir la fiche client</button>`;
@@ -4472,42 +4741,89 @@ function dessinerGalerie(){
   openModal(h);
 }
 
-function copierNumerosGal(){
-  const {g}=galOuverte, s=g.selection; if(!s) return;
+/* Les numeros a coller dans Lightroom. Un choix sur les deux seances :
+   une ligne par seance, chacune dans son dossier. */
+function copierNumerosGal(tour){
+  const {g}=galOuverte, t=choixGal(g,tour); if(!t) return;
   const nom=Object.fromEntries(g.photos.map(p=>[p.id,p.nom]));
-  copierTexteGal(s.coeurs.map(id=>nom[id]||id).join(", "),s.coeurs.length+" numéros copiés");
+  const seances=g.formule==="duo"?seancesDeGal(g,t.coeurs):[];
+  const txt=seances.length>1
+    ? seances.map(k=>nomSeanceGal(k)+" : "+t.coeurs.filter(id=>seanceDePhotoGal(g,id)===k).map(id=>nom[id]||id).join(", ")).join("\n")
+    : t.coeurs.map(id=>nom[id]||id).join(", ");
+  copierTexteGal(txt,t.coeurs.length+" numéros copiés");
 }
 
-async function enregistrerTransfertGal(){
-  const {g}=galOuverte;
-  const lien=document.getElementById("gdTransfert").value.trim();
+async function enregistrerTransfertGal(cle){
+  const {g}=galOuverte, suf=sufGal(cle);
+  const lien=document.getElementById("gdTransfert"+suf).value.trim();
   if(lien && !/^https:\/\//i.test(lien)){ alert("Le lien doit commencer par https://"); return; }
   try{
-    const {j}=await appelGal({action:"transfert",g:g.jeton,lien});
+    const {j}=await appelGal({action:"transfert",g:g.jeton,lien,seance:suf?cle:undefined});
     if(!j.ok){ alert("Lien refusé."); return; }
-    g.transfert=lien; toast(lien?"Lien enregistré":"Lien retiré"); dessinerGalerie();
+    if(suf){ const x=(g.seances||[]).find(y=>y.cle===cle); if(x) x.transfert=lien; }
+    else g.transfert=lien;
+    toast(lien?"Lien enregistré":"Lien retiré"); dessinerGalerie();
+  }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
+}
+
+/* Le total de retouches comprises, a la main : Matt offre des photos. */
+async function modifierQuotaGal(){
+  const {g}=galOuverte;
+  const pris=(g.passees||[]).reduce((a,t)=>a+comprisesGal(g,t),0);
+  const v=prompt("Nombre de photos retouchées comprises"+(g.formule==="duo"?", pour les deux séances":"")+" (0 = sans limite)."
+    +(g.quotaFormule>0?"\nSa formule en comprend "+g.quotaFormule+" : au-delà, elle verra « dont … offertes ».":"")
+    +(pris?"\nElle en a déjà pris "+pris+" à son premier choix.":""), String(g.quota||0));
+  if(v===null) return;
+  const q=Number(String(v).trim());
+  if(String(v).trim()===""||!Number.isInteger(q)||q<0||q>GAL_QUOTA_MAX){ alert("Indique un nombre entier, de 0 à "+GAL_QUOTA_MAX+"."); return; }
+  if(q===g.quota) return;
+  if(q && q<pris){ alert("Elle en a déjà pris "+pris+" à son premier choix : le total ne peut pas descendre en dessous."); return; }
+  const s=g.selection;
+  if(s && !s.enAttente && !confirm("Sa sélection en cours est déjà validée : le nouveau total ne change rien à ce qu'elle a choisi ou réglé"
+    +(seanceManquanteGal(g)?" ; il comptera pour la "+seanceManquanteGal(g)+".":".")+"\n\nContinuer ?")) return;
+  try{
+    const {j}=await appelGal({action:"quota",g:g.jeton,quota:q});
+    if(!j.ok){ alert(j.error==="deja_pris"?"Le total ne peut pas descendre sous ce qu'elle a déjà pris ("+j.pris+").":"Nombre refusé."); return; }
+    g.quota=q;
+    const ligne=(galeriesCache||[]).find(x=>x.jeton===g.jeton); if(ligne) ligne.quota=q;
+    galeriesLu=0;
+    toast(q?q+" retouches comprises":"Retouches sans limite"); dessinerGalerie();
   }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
 }
 
 /* Les retouches : le lien est enregistre ; si la case "Lui envoyer un
    mail" est cochee, le mail s'ouvre d'abord pour etre relu et modifie,
-   comme le mail final. */
-async function envoyerRetouchesGal(){
-  const {g}=galOuverte;
-  const lien=document.getElementById("gdRetouches").value.trim();
+   comme le mail final. tour : le choix concerne ("" = celui en cours). */
+async function envoyerRetouchesGal(tour){
+  if(tour===undefined) tour="";
+  const suf=tour===""?"":"-"+tour;
+  const lien=document.getElementById("gdRetouches"+suf).value.trim();
   if(!/^https:\/\//i.test(lien)){ alert("Colle le lien des photos retouchées (il commence par https://)."); return; }
-  const ch=document.getElementById("gdPrevenir"), prevenir=!!(ch&&ch.checked);
-  if(prevenir){ ouvrirMailRetouches(lien); return; }
-  await enregistrerRetouchesGal(lien,false,"");
+  const ch=document.getElementById("gdPrevenir"+suf), prevenir=!!(ch&&ch.checked);
+  if(prevenir){ ouvrirMailRetouches(lien,tour); return; }
+  await enregistrerRetouchesGal(lien,false,"",tour);
 }
-async function enregistrerRetouchesGal(lien,prevenir,texte){
+/* La ligne de la liste, recalculee comme ligneIndex : la cliente quitte
+   "A retoucher" quand plus aucun choix n'attend ses retouches. */
+function majLigneGal(g){
+  const ligne=(galeriesCache||[]).find(x=>x.jeton===g.jeton); if(!ligne) return;
+  const s=g.selection;
+  const aFaire=[...(g.passees||[]).filter(t=>!t.retouches), ...(s&&!s.enAttente&&!g.retouches?[s]:[])];
+  Object.assign(ligne,{statut:g.statut,retouchesAt:g.retouchesAt||0,aRetoucher:aFaire.length>0,
+    nbARetoucher:aFaire.reduce((a,t)=>a+(t.coeurs||[]).length,0),
+    choisieAt:aFaire.length?Math.min(...aFaire.map(t=>t.payeAt||t.at||0)):0});
+}
+async function enregistrerRetouchesGal(lien,prevenir,texte,tour){
+  if(tour===undefined) tour="";
   const {g}=galOuverte;
   try{
-    const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir,texte});
+    const {j}=await appelGal({action:"retouches",g:g.jeton,lien,prevenir,texte,tour});
     if(!j.ok){ alert("Lien refusé."); return false; }
-    g.retouches=lien; g.statut="retouchee"; g.retouchesAt=Date.now(); galeriesLu=0;
-    const ligne=(galeriesCache||[]).find(x=>x.jeton===g.jeton);
-    if(ligne){ ligne.statut="retouchee"; ligne.retouchesAt=g.retouchesAt; }
+    const now=Date.now();
+    if(tour===""){ g.retouches=lien; g.statut="retouchee"; g.retouchesAt=now; }
+    else { g.passees[tour].retouches=lien; g.passees[tour].retouchesAt=now; }
+    galeriesLu=0;
+    majLigneGal(g);
     majOngletGaleries();
     if(retouchesVisibles()) dessinerRetouches();
     toast(prevenir?(j.envoye?"Retouches envoyées, mail parti":"Lien enregistré, mais le mail n'est pas parti"):"Lien enregistré");
@@ -4517,27 +4833,46 @@ async function enregistrerRetouchesGal(lien,prevenir,texte){
 }
 
 /* Le texte propose. Matt le modifie a chaque envoi s'il veut ; les trois
-   reperes deviennent les boutons du mail (mbs-galerie-admin.js). */
-function texteRetouchesParDefaut(g){
+   reperes deviennent les boutons du mail (mbs-galerie-admin.js). Galerie a
+   deux seances : il dit de quelle seance sont ces retouches, et, si la
+   naissance n'est pas encore faite, qu'elle arrivera dans la meme galerie. */
+function texteRetouchesParDefaut(g,tour){
   const moment=(new Date().getHours()>=18)?"soirée":"journée";
   const fin=g.expiresAt?new Date(g.expiresAt).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):"";
+  const duo=g.formule==="duo", t=choixGal(g,tour===undefined?"":tour);
+  const quelles=duo&&t?seancesDeGal(g,t.coeurs||[]):[];
+  const de=quelles.length?" de "+quelles.join(" et de "):"";
+  const deux=duo&&(g.seances||[]).length>1;
+  const manque=seanceManquanteGal(g), reste=resteApresGal(g);
+  /* Un choix precedent, alors que la suite est deja en ligne : les autres
+     photos l'attendent. Et tant que le pack n'est pas fini, on ne lui
+     propose pas deja d'autres seances. */
+  const precedent=tour!==""&&tour!==undefined;
+  const attendent=precedent&&!(g.selection&&!g.selection.enAttente)
+    ?(g.seances||[]).map(x=>x.cle).filter(k=>!quelles.includes(k)):[];
+  const suite=!!manque||attendent.length>0;
   return [
     "Bonjour "+(g.prenom||"")+" !",
-    "Vos photos retouchées sont prêtes. Je les ai reprises une à une, avec soin.",
+    "Vos photos"+de+" retouchées sont prêtes. Je les ai reprises une à une, avec soin.",
     "[bouton retouches]",
     "Pensez à les enregistrer dès aujourd'hui sur votre ordinateur ou votre téléphone : le lien de téléchargement n'est valable que pour une durée limitée.",
-    "Toutes les photos de votre séance restent aussi dans votre galerie"+(fin?", jusqu'au "+fin:"")+".",
+    "Toutes les photos de "+(deux?"vos séances":"votre séance")+" restent aussi dans votre galerie"+(fin?", jusqu'au "+fin:"")+".",
+    ...(manque?["Et pour votre séance "+manque+" : ses photos arriveront dans cette même galerie, au même lien. Vous y choisirez "
+      +(g.quota?(reste?"les "+reste+" photos retouchées qui vous restent.":"vos photos à retoucher."):"vos préférées.")]:[]),
+    ...(attendent.length?["Les photos de votre séance "+attendent.join(" et ")+" vous attendent aussi dans votre galerie : choisissez-y "
+      +(g.quota?"les "+quotaRestantGal(g)+" photos retouchées qui vous restent.":"vos préférées.")]:[]),
     "[bouton galerie]",
     "Merci encore pour votre confiance. Ce fut un vrai plaisir de partager ce moment avec vous, et j'espère que ces images vous accompagneront longtemps.",
     "Si vous avez aimé votre expérience, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres familles de me trouver, et cela ne prend qu'une minute.",
     "[bouton avis]",
-    "Et pour la suite, je serai heureux de vous retrouver pour d'autres moments à immortaliser : un anniversaire, un baptême, une séance en extérieur ou tout autre événement qui compte pour vous. Le jour où vous y penserez, je reste joignable au 06 47 76 54 17 ou sur Instagram (@mybabyshoot).",
+    ...(suite?[]:["Et pour la suite, je serai heureux de vous retrouver pour d'autres moments à immortaliser : un anniversaire, un baptême, une séance en extérieur ou tout autre événement qui compte pour vous. Le jour où vous y penserez, je reste joignable au 06 47 76 54 17 ou sur Instagram (@mybabyshoot)."]),
     "Très belle "+moment+" à vous\nMatt"
   ].join("\n\n");
 }
-function ouvrirMailRetouches(lien){
+function ouvrirMailRetouches(lien,tour){
   const {g}=galOuverte;
   galOuverte.lienRetouches=lien;
+  galOuverte.tourRetouches=tour===undefined?"":tour;
   openModal(`<h2>Envoyer les retouches</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       À <b>${esc(g.email)}</b>, au nom de Mybabyshoot.<br>Objet : « Vos photos retouchées sont prêtes ».</div>
@@ -4550,11 +4885,11 @@ function ouvrirMailRetouches(lien){
       <a onclick="remettreTexteRetouches()" style="cursor:pointer;text-decoration:underline">Remettre le texte par défaut</a></div>
     <button class="btn wide" id="mrGo" onclick="envoyerMailRetouches()">Envoyer</button>
     <button class="btn ghost wide" style="margin-top:8px" onclick="dessinerGalerie()">Retour</button>`);
-  document.getElementById("mrTexte").value=texteRetouchesParDefaut(g);
+  document.getElementById("mrTexte").value=texteRetouchesParDefaut(g,galOuverte.tourRetouches);
 }
 function remettreTexteRetouches(){
   const z=document.getElementById("mrTexte");
-  if(z && galOuverte){ z.value=texteRetouchesParDefaut(galOuverte.g); toast("Texte par défaut rétabli"); }
+  if(z && galOuverte){ z.value=texteRetouchesParDefaut(galOuverte.g,galOuverte.tourRetouches); toast("Texte par défaut rétabli"); }
 }
 async function envoyerMailRetouches(){
   const z=document.getElementById("mrTexte"), texte=z?z.value.trim():"";
@@ -4563,7 +4898,7 @@ async function envoyerMailRetouches(){
      && !confirm("Le repère [bouton retouches] a disparu : le bouton de téléchargement sera remis après le premier paragraphe, sinon elle n'aurait pas son lien.\n\nEnvoyer quand même ?")) return;
   const go=document.getElementById("mrGo");
   go.disabled=true; go.textContent="Envoi en cours...";
-  const ok=await enregistrerRetouchesGal(galOuverte.lienRetouches,true,texte);
+  const ok=await enregistrerRetouchesGal(galOuverte.lienRetouches,true,texte,galOuverte.tourRetouches);
   if(!ok && document.getElementById("mrGo")){ go.disabled=false; go.textContent="Envoyer"; }
 }
 
@@ -4634,7 +4969,14 @@ async function reprendreGalerie(input){
       +"\n\nChoisis le même dossier que la première fois.");
     return;
   }
-  galPrep={clientId:g.clientId,fichiers,jeton:g.jeton,photos:g.photos,recues,enCours:false,adresse:galOuverte.adresse};
+  /* cles et liens : l'ecran de fin propose SwissTransfer pour chaque seance
+     qui n'a pas encore son lien. ajout : une seance ajoutee apres coup. */
+  const pasPretes=(g.seances||[]).filter(x=>!x.prete).map(x=>x.cle);
+  galPrep={clientId:g.clientId,fichiers,jeton:g.jeton,photos:g.photos,recues,enCours:false,adresse:galOuverte.adresse,
+           cles:g.photos.map(ph=>ph.s||"seule"),
+           liens:g.seances?Object.fromEntries(g.seances.map(x=>[x.cle,x.transfert||""])):{seule:g.transfert||""},
+           ajout:g.statut!=="preparation"&&pasPretes.length?pasPretes[0]:"",
+           resteApres:g.quota&&g.statut!=="preparation"&&pasPretes.length?resteApresGal(g):null};
   await envoyerPhotosGal(galPrep);
 }
 

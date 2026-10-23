@@ -3,11 +3,15 @@
 //
 //   GET  ?liste=1                                  : les galeries
 //   GET  ?g=JETON                                  : une galerie, selection comprise
-//   POST {action:"creer", clientId, formule, seance, transfert, photos:[{nom}]}
+//   POST {action:"creer", clientId, formule, seance, transfert, photos:[{nom}], quota}
+//        deux seances : formule "duo", formules {grossesse, naissance},
+//        photos:[{nom, seance}], transferts {grossesse, naissance}
+//   POST {action:"ajouter-seance", g, seance, transfert, photos:[{nom}]} : la naissance, plus tard
 //   POST {action:"images", g, items:[{id, t, v}]}  : vignettes et apercus, en base64
-//   POST {action:"publier", g}                     : la galerie devient visible
-//   POST {action:"transfert", g, lien}             : remplacer le lien "tout telecharger"
-//   POST {action:"retouches", g, lien, prevenir}   : le lien des photos retouchees
+//   POST {action:"publier", g}                     : la galerie (ou la seance ajoutee) devient visible
+//   POST {action:"quota", g, quota}                : le total de retouches comprises
+//   POST {action:"transfert", g, lien, seance}     : remplacer le lien "tout telecharger"
+//   POST {action:"retouches", g, lien, prevenir, tour} : le lien des photos retouchees
 //   POST {action:"supprimer", g}
 //
 // Les images arrivent DEJA allegees par le navigateur de Matt. Ici on ne
@@ -15,7 +19,8 @@
 // apercu : une photo en pleine qualite deposee par erreur couterait de la
 // bande passante a chaque ouverture.
 import { galerieStore, creerGalerie, lireGalerie, enregistrer, supprimerGalerie, lienValide, ligneIndex,
-         normaliserJeton, idPhotoValide, POIDS_MAX_VIGNETTE, POIDS_MAX_APERCU, IMAGES_PAR_ENVOI } from "../mbs-galeries.mjs";
+         normaliserJeton, idPhotoValide, ajouterSeance, nouveauChoix, quotaSaisi, comprisesDe,
+         POIDS_MAX_VIGNETTE, POIDS_MAX_APERCU, IMAGES_PAR_ENVOI } from "../mbs-galeries.mjs";
 import { crmStore, loadData } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
@@ -132,7 +137,8 @@ export default async (request) => {
     const r = await creerGalerie(store, {
       clientId: client.id, prenom: mots[0] || "", nom: mots.slice(1).join(" "),
       email: client.email || "", formule: String(corps.formule || ""), seance: corps.seance,
-      transfert: corps.transfert, photos: corps.photos
+      formules: corps.formules, quota: corps.quota,
+      transfert: corps.transfert, transferts: corps.transferts, photos: corps.photos
     });
     if (r.erreur) return json({ ok: false, error: r.erreur }, 400);
     return json({ ok: true, jeton: r.galerie.jeton, photos: r.galerie.photos,
@@ -168,14 +174,45 @@ export default async (request) => {
     return json({ ok: true, recues: g.recues.length, total: g.photos.length, refusees });
   }
 
-  /* ---------- publier ---------- */
+  /* ---------- la seconde seance ----------
+     Les photos de la naissance, ajoutees a la galerie de la grossesse.
+     Cachees a la cliente jusqu'a "publier". */
+  if (corps.action === "ajouter-seance") {
+    const r = ajouterSeance(g, { seance: corps.seance, transfert: corps.transfert, photos: corps.photos });
+    if (r.erreur) return json({ ok: false, error: r.erreur }, 400);
+    await enregistrer(store, g);
+    return json({ ok: true, photos: r.photos, adresse: adresseGalerie(g.jeton) });
+  }
+
+  /* ---------- publier ----------
+     La galerie entiere la premiere fois ; ensuite, une seance ajoutee. Si
+     la cliente avait deja valide son choix, il est range avec ses
+     retouches, et elle choisit la suite avec ce qui lui reste. */
   if (corps.action === "publier") {
     const manquent = g.photos.filter(p => !(g.recues || []).includes(p.id)).map(p => p.nom);
     if (manquent.length) return json({ ok: false, error: "incomplete", manquent: manquent.slice(0, 20),
                                         nbManquent: manquent.length }, 409);
-    if (g.statut === "preparation") { g.statut = "envoyee"; g.envoyeeAt = Date.now(); }
+    const now = Date.now();
+    const etaitEnLigne = g.statut !== "preparation";
+    if (!etaitEnLigne) { g.statut = "envoyee"; g.envoyeeAt = now; }
+    const nouvelles = (g.seances || []).filter(x => !x.prete);
+    nouvelles.forEach(x => { x.prete = true; x.at = now; });
+    const range = etaitEnLigne && nouvelles.length ? nouveauChoix(g) : false;
     await enregistrer(store, g);
-    return json({ ok: true, adresse: adresseGalerie(g.jeton) });
+    return json({ ok: true, adresse: adresseGalerie(g.jeton), seances: nouvelles.map(x => x.cle), range });
+  }
+
+  /* ---------- le total de retouches comprises ----------
+     Matt offre des photos : 15 + 5 offertes = 20. Jamais moins que ce que
+     les choix precedents ont deja pris. */
+  if (corps.action === "quota") {
+    const q = quotaSaisi(corps.quota);
+    if (q == null || Number.isNaN(q)) return json({ ok: false, error: "quota" }, 400);
+    const pris = (g.passees || []).reduce((a, t) => a + comprisesDe(g, t), 0);
+    if (q && q < pris) return json({ ok: false, error: "deja_pris", pris }, 400);
+    g.quota = q;
+    await enregistrer(store, g);
+    return json({ ok: true, quota: q });
   }
 
   /* ---------- le lien "tout telecharger" ----------
@@ -184,7 +221,12 @@ export default async (request) => {
   if (corps.action === "transfert") {
     const l = lienValide(corps.lien);
     if (corps.lien && !l) return json({ ok: false, error: "lien" }, 400);
-    g.transfert = l;
+    /* Galerie a deux seances : un lien par seance. */
+    if (g.seances) {
+      const x = g.seances.find(y => y.cle === String(corps.seance || ""));
+      if (!x) return json({ ok: false, error: "seance" }, 400);
+      x.transfert = l;
+    } else g.transfert = l;
     await enregistrer(store, g);
     return json({ ok: true });
   }
@@ -193,9 +235,18 @@ export default async (request) => {
   if (corps.action === "retouches") {
     const l = lienValide(corps.lien);
     if (!l) return json({ ok: false, error: "lien" }, 400);
-    g.retouches = l;
-    g.statut = "retouchee";
-    g.retouchesAt = Date.now();
+    /* tour : un choix precedent (galerie a deux seances), par son rang dans
+       g.passees. Sans tour : le choix en cours. */
+    const tour = corps.tour === undefined || corps.tour === null || corps.tour === "" ? null : Number(corps.tour);
+    if (tour !== null) {
+      const t = Number.isInteger(tour) ? (g.passees || [])[tour] : null;
+      if (!t) return json({ ok: false, error: "tour" }, 400);
+      t.retouches = l; t.retouchesAt = Date.now();
+    } else {
+      g.retouches = l;
+      g.statut = "retouchee";
+      g.retouchesAt = Date.now();
+    }
     await enregistrer(store, g);
     let envoye = false;
     if (corps.prevenir && g.email && String(corps.texte || "").trim()) {

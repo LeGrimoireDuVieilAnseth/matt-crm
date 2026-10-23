@@ -20,7 +20,7 @@
 import Stripe from "stripe";
 import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton, completerFormats,
          idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection, autresEnvois,
-         NOM_FORMULE, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
+         quotaRestant, nomFormuleDe, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
 import { calculerPanier, lignesAutresEnvois, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
 import { lienStore, creerLien, memoriserPanier, LIEN_MIN, LIEN_MAX, LIEN_SEUIL_3X } from "../mbs-liens.mjs";
 import { ouvrirSessionPanier } from "../mbs-paiement-panier.mjs";
@@ -96,7 +96,10 @@ export default async (request) => {
      plus en ligne : Matt a peut-etre deja commence les retouches. Une
      selection en attente de paiement, elle, peut encore changer. */
   const verrouillee = g.selection && !g.selection.enAttente;
-  const plafond = (g.quota || 0) + PHOTOS_MAX;
+  /* Ce qui reste compris : tout le total, sauf dans une galerie a deux
+     seances ou un premier choix en a deja pris une part. */
+  const restant = quotaRestant(g);
+  const plafond = restant + PHOTOS_MAX;
 
   /* ---------- les coeurs en cours ----------
      Gardes cote serveur au fil du choix : la cliente retrouve sa selection
@@ -116,7 +119,7 @@ export default async (request) => {
   const enPlus = photosEnPlus(g, coeurs.length);
   if (g.quota && enPlus > PHOTOS_MAX) {
     return json({ ok: false, erreur: "trop_de_photos", messages: ["Vous pouvez choisir jusqu'à "
-      + plafond + " photos : " + g.quota + " comprises dans votre formule, et " + PHOTOS_MAX + " en plus."] }, 400);
+      + plafond + " photos : " + restant + " comprises dans votre formule, et " + PHOTOS_MAX + " en plus."] }, 400);
   }
   const tir = tiragesParTaille(g, corps.tirages, TAILLES);
   const aSonPapier = Object.keys(tir.totaux).length > 0;
@@ -178,7 +181,7 @@ export default async (request) => {
     tiragesTexte, adresse: panier.adresse, adresseTexte,
     envois: autres.envois.map(e => ({ adresse: e.adresse, adresseTexte: e.adresseTexte,
                                       tirages: e.tirages, tiragesTexte: e.tiragesTexte, nb: e.nb })),
-    enPlus, montant: panier.total, at: now,
+    enPlus, comprises: g.quota ? Math.min(coeurs.length, restant) : 0, montant: panier.total, at: now,
     enAttente: panier.total > 0, paye: false, lienCode: "",
   };
 
@@ -248,10 +251,11 @@ async function prevenirMatt(g, now) {
     await store.setJSON("data", data);
   } catch (e) {}
   try {
-    const n = g.selection.coeurs.length;
+    const s = g.selection, n = s.coeurs.length;
     await notifyAll("Sélection reçue · " + nom,
       n + " photo" + (n > 1 ? "s" : "") + " choisie" + (n > 1 ? "s" : "")
-      + (g.quota ? " sur " + g.quota + " comprises (" + NOM_FORMULE[g.formule] + ")" : "") + ".", "/");
+      + (g.quota ? " (" + s.comprises + " comprise" + (s.comprises > 1 ? "s" : "") + (s.enPlus ? ", " + s.enPlus + " en plus" : "")
+                   + ", " + nomFormuleDe(g) + ")" : "") + ".", "/");
   } catch (e) {}
 }
 
