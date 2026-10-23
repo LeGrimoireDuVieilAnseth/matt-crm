@@ -837,7 +837,7 @@
 </button>
 
 <!-- MODAL -->
-<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+<div class="modal-bg" id="modalBg" onpointerdown="fondTouche=event.target===this" onclick="if(event.target===this&&fondTouche)closeModal();fondTouche=false">
   <div class="modal" id="modal"><div class="modal-grip"></div><div id="modalContent"></div></div>
 </div>
 
@@ -2669,6 +2669,11 @@ function openModal(html){
   // puis formulaire) passe par un instant ou plus rien n'est affiche.
   if(!(history.state&&history.state.modale)) empiler({vue:vueCourante,modale:true});
 }
+/* Toucher le fond ferme la fenetre, mais seulement si le geste a commence
+   sur le fond. Sinon une selection de texte commencee dans un champ et
+   relachee un peu en dehors comptait comme un clic sur le fond : la
+   fenetre se fermait et tout ce qui etait tape etait perdu. */
+let fondTouche=false;
 function closeModal(){
   document.getElementById("modalBg").classList.remove("on");
   document.body.style.overflow="";
@@ -3983,8 +3988,8 @@ function dessinerBlocsGal(){
     const allege=allegementPossible()?`<div class="field"${plusieurs?' style="margin:12px 0 0"':""}>
         <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:var(--ink);font-weight:400;letter-spacing:0">
           <input type="checkbox" id="gpAllege-${cle}" data-cle="${cle}" onchange="galAllegeCoche(this)" style="margin-top:2px;width:auto"${b.parent?" checked":""}>
-          <span><b>Créer aussi les photos allégées pour SwissTransfer${plusieurs?" (la "+esc(cle)+")":""}</b><br>
-          <span style="color:var(--ink-3);font-size:12.5px">Même définition, qualité 92 % : environ 4 fois plus léger, sans différence visible. Tes originaux ne sont pas touchés.</span></span></label>
+          <span><b>Faire aussi une copie plus légère de mes originaux pour SwissTransfer${plusieurs?" (la "+esc(cle)+")":""}</b><br>
+          <span style="color:var(--ink-3);font-size:12.5px">Même définition, environ 4 fois moins lourde (qualité 92 %), sans différence visible. Tes originaux ne sont pas touchés. Les aperçus de la galerie, eux, se font toujours tout seuls.</span></span></label>
         <div id="gpAllegeOu-${cle}" style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.5"></div></div>`:"";
     return plusieurs?`<div class="card" style="padding:13px 14px;margin-bottom:14px">
         <div style="font-weight:700;font-size:14px;margin-bottom:10px">Séance ${esc(cle)}</div>${photos}${lien}${allege}</div>`:photos+lien+allege;
@@ -4556,10 +4561,27 @@ function galeriePrete(clientId,adresse,nb,p){
       <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a>
     </div>
     ${blocTransfert}
-    ${c&&c.email?`<button class="btn wide" onclick="closeModal();openMailFinal('${esc(clientId)}')">Envoyer galerie + facture</button>
-    <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">Le lien de la galerie est déjà rempli dans le mail.</div>`:""}`);
+    ${c&&c.email?boutonsEnvoiGalerie(c):""}`);
   if(galeriesVisibles()) renderGaleriesList();
 }
+/* Les deux facons de lui envoyer sa galerie : avec la facture de solde, ou
+   seule (pack deja regle en entier, facture deja partie au studio). Si sa
+   facture est deja partie, c'est la galerie seule qui passe devant. */
+function boutonsEnvoiGalerie(c){
+  const id=esc(c.id);
+  const note=t=>`<div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">${t}</div>`;
+  if(c.brand!=="mybabyshoot" || venuAvecBonCadeau(c))
+    return `<button class="btn wide" onclick="closeModal();openMailFinal('${id}')">Envoyer la galerie</button>`
+      +note("Le lien de la galerie est déjà rempli dans le mail.");
+  const f=factureDejaEnvoyee(c);
+  const seule=`<button class="btn ${f?"":"ghost "}wide" style="margin-top:8px" onclick="closeModal();openMailFinal('${id}',{sansFacture:true})">Envoyer la galerie (sans facture)</button>`;
+  const avec=`<button class="btn ${f?"ghost ":""}wide" style="margin-top:8px" onclick="closeModal();openMailFinal('${id}')">Envoyer galerie + facture</button>`;
+  return (f?seule+avec:avec+seule)
+    +note((f?"Sa facture est déjà partie le "+fmtDate(String(f.date).slice(0,10))+(f.numero?" (n° "+esc(f.numero)+")":"")+" : envoie la galerie seule. "
+            :"Déjà tout réglé et facturé, par exemple un pack ? Envoie la galerie seule. ")
+      +"Le lien de la galerie est déjà rempli dans le mail.");
+}
+
 /* Un bloc "Envoyer sur SwissTransfer" pour une seance. Les champs portent
    le nom de la seance ("-naissance") ; une galerie simple garde les noms
    d'avant. */
@@ -4567,7 +4589,7 @@ const sufGal=cle=>cle&&cle!=="seule"?"-"+cle:"";
 function blocSwissFinGal(p,cle){
   const al=p.allege&&p.allege[cle], sortie=p.sorties&&p.sorties[cle], suf=sufGal(cle);
   const deLa=suf?" · "+esc(cle):"";
-  return `<div class="grouplab" style="margin-top:4px">${al&&al.nb?"Photos allégées pour SwissTransfer":"Lien pour tout télécharger"}${deLa}</div>
+  return `<div class="grouplab" style="margin-top:4px">${al&&al.nb?"Copie légère pour SwissTransfer":"Lien pour tout télécharger"}${deLa}</div>
     ${al&&al.nb?`<div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;margin-bottom:8px">
       <b>${al.nb} photos</b> : ${goAl(al.avant)} → <b>${goAl(al.apres)}</b> (${al.avant?Math.round((1-al.apres/al.avant)*100):0} % de moins).<br>
       Dans <b>${esc(p.parents[cle].name)}</b> › <b>${esc(sortie.name)}</b>.
@@ -9492,7 +9514,7 @@ function blocMailFinal(c){
     h+=`<div class="card" style="margin:12px 0;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:9px;color:var(--ok);font-size:13.5px;font-weight:600">
         <svg viewBox="0 0 24 24" style="width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6L9 17l-5-5"/></svg>
-        Envoyé le ${fmtDate(m.date.slice(0,10))}${m.facture?" · facture "+esc(m.facture):""}</div>
+        Envoyé le ${fmtDate(m.date.slice(0,10))}${m.facture?" · facture "+esc(m.facture):m.sansFacture?" · sans facture":""}</div>
       ${m.galerie?`<div style="margin-top:7px;font-size:13px;word-break:break-all"><a href="${esc(m.galerie)}" target="_blank" rel="noopener">${esc(m.galerie)}</a></div>`:""}
     </div>`;
   }
@@ -9504,23 +9526,47 @@ function blocMailFinal(c){
   h+=`<button class="btn ${m&&m.date?"ghost":""} wide sm" style="margin-bottom:4px" onclick="openMailFinal('${c.id}')">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
     ${m&&m.date?"Renvoyer":"Envoyer"} ${nomBouton}</button>`;
+  /* La galerie seule : pack deja regle en entier, facture deja partie. */
+  if(nomBouton==="galerie + facture")
+    h+=`<button class="btn ghost wide sm" style="margin-bottom:4px" onclick="openMailFinal('${c.id}',{sansFacture:true})">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      ${m&&m.date?"Renvoyer":"Envoyer"} la galerie seule (sans facture)</button>`;
   return h;
 }
+/* La facture de solde est-elle deja partie ? Au studio (bouton facture de
+   la seance), ou avec un premier mail galerie. */
+function factureDejaEnvoyee(c){
+  const s=(DB.seances||[]).filter(x=>x.clientId===c.id && x.factureEnvoyee && x.factureEnvoyee.date)
+    .sort((a,b)=>String(b.factureEnvoyee.date).localeCompare(String(a.factureEnvoyee.date)))[0];
+  if(s) return {date:s.factureEnvoyee.date, numero:s.factureEnvoyee.numero||""};
+  if(c.mailFinal && c.mailFinal.date && c.mailFinal.facture) return {date:c.mailFinal.date, numero:c.mailFinal.facture};
+  return null;
+}
 
-function openMailFinal(id){
+/* opts.sansFacture : la galerie seule, rien en piece jointe. */
+let mailFinalSansFacture=false;
+function openMailFinal(id,opts){
   const c=clientById(id); if(!c||!c.email) return;
+  const sansFacture=!!(opts&&opts.sansFacture) && c.brand==="mybabyshoot";
+  mailFinalSansFacture=sansFacture;
   const r=DB.reglages||{};
   const avis=c.brand==="maison-lumiere"?r.avisLumiere:r.avisMybabyshoot;
   const marque=c.brand==="maison-lumiere"?"Maison Lumière":"Mybabyshoot";
   const dejaFait=c.mailFinal&&c.mailFinal.date;
 
   const cadeau=venuAvecBonCadeau(c);
-  const mbs=c.brand!=="maison-lumiere" && !cadeau;
+  const mbs=c.brand!=="maison-lumiere" && !cadeau && !sansFacture;
   let h=`<h2>${dejaFait?"Renvoyer":"Envoyer"} ${mbs?"galerie + facture":"la galerie"}</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       À <b>${esc(c.email)}</b>, au nom de ${esc(marque)}.
     </div>`;
 
+  if(sansFacture && !cadeau){
+    const f=factureDejaEnvoyee(c);
+    h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
+      <b>Sans facture</b> : rien ne part en pièce jointe${f?". Sa facture est déjà partie le "+fmtDate(String(f.date).slice(0,10))+".":", et aucune facture n'est créée."}
+      Pour la joindre, utilise plutôt « Envoyer galerie + facture ».</div>`;
+  }
   if(cadeau){
     h+=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
       Séance offerte : <b>aucune facture ne part avec ce mail</b>. Elle a déjà été envoyée
@@ -9566,14 +9612,14 @@ function openMailFinal(id){
       Déplace-les, supprime ceux qui ne servent pas, ou ajoute tes propres paragraphes autour.
       <a onclick="remettreTexteParDefaut('${c.id}')" style="cursor:pointer;text-decoration:underline">Remettre le texte par défaut</a>
     </div>
-    <button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}')">Envoyer</button>`;
+    <button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}',${sansFacture})">Envoyer</button>`;
   openModal(h);
   if(c.brand==="mybabyshoot") preRemplirGalerieMail(c.id);
   const zone=document.getElementById("mfTexte");
-  if(zone) zone.value=texteMailParDefaut(c);
+  if(zone) zone.value=texteMailParDefaut(c,sansFacture);
 }
 
-async function envoyerMailFinal(id){
+async function envoyerMailFinal(id,sansFacture){
   const c=clientById(id); if(!c) return;
   const champ=document.getElementById("mfGalerie");
   const galerie=lienPropre(champ?champ.value:"");
@@ -9589,7 +9635,7 @@ async function envoyerMailFinal(id){
     const res=await fetch(MAIL_FINAL_ENDPOINT,{
       method:"POST",
       headers:apiHeaders(true),
-      body:JSON.stringify({ clientId:id, galerie, texte })
+      body:JSON.stringify({ clientId:id, galerie, texte, sansFacture:!!sansFacture })
     });
     if(res.status===401){ handleUnauthorized(); return; }
     const j=await res.json().catch(()=>({}));
@@ -9607,7 +9653,7 @@ async function envoyerMailFinal(id){
       return;
     }
     // c'est le CRM qui note l'envoi : le serveur ne touche jamais aux donnees
-    c.mailFinal={ date:new Date().toISOString(), galerie, facture:j.facture||"" };
+    c.mailFinal={ date:new Date().toISOString(), galerie, facture:j.facture||"", ...(sansFacture?{sansFacture:true}:{}) };
     // Facture de solde emise a l'instant : le paiement passe a "Solde", comme
     // le fait le bouton facture de la fiche seance.
     if(j.factureCreee){
@@ -9617,7 +9663,7 @@ async function envoyerMailFinal(id){
     saveDB();
     closeModal();
     openFiche(id);
-    toast(j.facture?("Mail envoyé, facture "+j.facture+" jointe"):(j.bonCadeau?"Galerie envoyée, sans facture (séance offerte)":"Mail envoyé"));
+    toast(j.facture?("Mail envoyé, facture "+j.facture+" jointe"):(j.bonCadeau?"Galerie envoyée, sans facture (séance offerte)":sansFacture?"Galerie envoyée, sans facture":"Mail envoyé"));
   }catch(e){
     toast("Pas de réseau, réessaie");
     if(bouton){ bouton.disabled=false; bouton.textContent="Envoyer"; }
@@ -9631,7 +9677,7 @@ async function envoyerMailFinal(id){
    Les trois reperes entre crochets deviennent des boutons. Tout le reste
    est du texte, echappe a l'arrivee : rien de ce qui est tape ici ne peut
    se transformer en HTML dans la boite du client. */
-function texteMailParDefaut(c){
+function texteMailParDefaut(c,sansFacture){
   const prenom=(String(c.name||"").trim().split(/\s+/)[0])||"";
   const moment=(new Date().getHours()>=18)?"soirée":"journée";
   const r=DB.reglages||{};
@@ -9660,7 +9706,8 @@ function texteMailParDefaut(c){
     (r.codeFairePart?"[code faire-part]":""),
     "Si la séance et ce premier résultat vous ont plu, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres familles de me trouver plus facilement, et ça ne prend qu'une minute.",
     "[bouton avis]",
-    "Votre facture, solde réglé, est en pièce jointe.",
+    /* Seulement si une facture part avec : ni galerie seule, ni seance offerte. */
+    (sansFacture||venuAvecBonCadeau(c)?"":"Votre facture, solde réglé, est en pièce jointe."),
     "Très belle "+moment+" à vous\nMatt"
   ].filter(Boolean).join("\n\n");
 }
@@ -9668,7 +9715,7 @@ function texteMailParDefaut(c){
 function remettreTexteParDefaut(id){
   const c=clientById(id); if(!c) return;
   const zone=document.getElementById("mfTexte");
-  if(zone){ zone.value=texteMailParDefaut(c); toast("Texte par défaut rétabli"); }
+  if(zone){ zone.value=texteMailParDefaut(c,mailFinalSansFacture); toast("Texte par défaut rétabli"); }
 }
 
 /* Choix de l'accueil. Reversible a tout moment, aucune donnee touchee :

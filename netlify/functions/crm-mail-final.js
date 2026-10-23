@@ -3,7 +3,8 @@
 // la galerie, le code faire-part, la demande d'avis, et la facture de solde
 // en piece jointe.
 //
-// POST (protege par CRM_KEY) : { clientId, galerie } -> envoie le mail
+// POST (protege par CRM_KEY) : { clientId, galerie, texte } -> envoie le mail
+//      sansFacture : la galerie seule (pack deja regle, facture deja partie)
 //
 // Le destinataire n'est jamais fourni par l'appelant : on le lit dans la
 // fiche a partir de son identifiant. Meme avec la cle, cette fonction ne
@@ -197,6 +198,11 @@ export default async (request) => {
      l'interet : celle envoyee au studio sera retrouvee et rattachee au mail
      galerie, au lieu qu'un second numero soit emis pour la meme seance. */
   const factureSeule = !!body.factureSeule;
+  /* sansFacture : la galerie, sans piece jointe. Matt l'a demande le
+     23/10/2026 : un pack grossesse + naissance deja regle en entier, ou une
+     facture deja envoyee au studio. Aucune facture n'est cherchee ni emise :
+     pas de numero consomme pour rien. */
+  const sansFacture = !factureSeule && !!body.sansFacture;
   const galerie = factureSeule ? "" : lienValide(body.galerie);
   const texte = factureSeule ? "" : String(body.texte || "").trim();
 
@@ -233,7 +239,7 @@ export default async (request) => {
   }
 
   let facture = null;
-  if (!mariage && !parBonCadeau) {
+  if (!mariage && !parBonCadeau && !sansFacture) {
     try { facture = await factureDeSolde(client, data); } catch (e) { facture = null; }
     if (!facture) return json({ ok: false, error: "sans_facture" }, 400);
   }
@@ -285,7 +291,8 @@ export default async (request) => {
     destinataire: client.email,
     facture: facture ? facture.number : "",
     factureCreee: !!(facture && facture.nouvelle),
-    bonCadeau: parBonCadeau   /* pour que le CRM annonce le bon resultat */
+    bonCadeau: parBonCadeau,  /* pour que le CRM annonce le bon resultat */
+    sansFacture
   });
 };
 
