@@ -683,6 +683,19 @@
   <div id="clientsList"></div>
 </section>
 
+<!-- ===================== GALERIES (Mybabyshoot) ===================== -->
+<section id="galeries" class="view">
+  <div class="subtabs" id="galSubtabs"></div>
+  <button class="btn wide" style="margin:12px 0 2px" onclick="choisirClienteGalerie()">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Créer une galerie</button>
+  <div class="search">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="galSearch" type="text" placeholder="Chercher une cliente..." oninput="redessinerGaleriesVue()">
+  </div>
+  <div class="section-title"><h2 id="galTitre">Galeries</h2><span class="count" id="galCount"></span></div>
+  <div id="galList"></div>
+</section>
+
 <!-- ===================== AGENDA ===================== -->
 <section id="agenda" class="view">
   <div class="pill-row" id="agendaPills"></div>
@@ -753,6 +766,7 @@
 </section>
 
 <section id="demandes" class="view">
+  <button class="backlink" onclick="goHome()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Accueil</button>
   <div class="brandbar" id="demandesBrandbar"></div>
   <div class="section-title"><h2>Demandes</h2><span class="count" id="demandeCount"></span></div>
   <div id="demandesBody"></div>
@@ -807,8 +821,9 @@
   <button class="tab" data-view="paiements" onclick="openPaiements()">
     <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span>Paiements</span>
   </button>
-  <button class="tab" data-view="demandes" onclick="openDemandes()">
-    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><span>Demandes</span>
+  <button class="tab" data-view="galeries" onclick="openGaleriesVue()">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg><span>Galeries</span>
+    <span class="tab-dot" id="tabGalDot" style="display:none"></span>
   </button>
 </nav>
 
@@ -1023,7 +1038,7 @@ function passFilter(b){ return FILTER==="all"||b===FILTER; }
 function nomMarqueActive(){ return FILTER==="all"?"Toutes les marques":(BRANDS[FILTER]||{}).name||FILTER; }
 
 /* ---------- navigation ---------- */
-const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",chiffres:"Chiffres",visites:"Visites du site",rappels:"Rappels",demandes:"Demandes",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
+const TITLES={home:"Aujourd'hui",clients:"Clients",agenda:"Agenda",paiements:"Paiements",chiffres:"Chiffres",visites:"Visites du site",rappels:"Rappels",demandes:"Demandes",galeries:"Galeries",chat:"Chat du site",fiche:"Fiche client",reglages:"Réglages"};
 /* ============================================================
    BOUTON RETOUR DU TELEPHONE
    Sans entree d'historique, le retour d'Android quittait l'application
@@ -1056,7 +1071,7 @@ window.addEventListener("popstate",(e)=>{
    client et "chat" d'une conversation, les rouvrir a vide n'aurait pas de
    sens. */
 const VUE_STORE="studio_matt_vue";
-const VUES_MEMORISEES=["home","clients","agenda","paiements","rappels","demandes","chiffres","visites","reglages"];
+const VUES_MEMORISEES=["home","clients","agenda","paiements","rappels","demandes","galeries","chiffres","visites","reglages"];
 
 function ouvrirVue(id){
   switch(id){
@@ -1065,6 +1080,7 @@ function ouvrirVue(id){
     case "paiements": return openPaiements();
     case "rappels":   return openRappels();
     case "demandes":  return openDemandes();
+    case "galeries":  return openGaleriesVue();
     case "chiffres":  return openChiffres();
     case "visites":   return openVisites();
     case "reglages":  return openReglages();
@@ -1086,7 +1102,7 @@ function setView(id){
   try{ majBandeauMarque(); }catch(e){}
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.view===id));
   if(id!=="chat"){ try{ stopChatPoll(); }catch(e){} }
-  const showFab=["home","clients","agenda","paiements","rappels","demandes"].includes(id);
+  const showFab=["home","clients","agenda","paiements","rappels","demandes","galeries"].includes(id);
   document.getElementById("fab").style.display=showFab?"grid":"none";
   // La bulle suit les memes ecrans, sauf le chat lui-meme : y proposer d'y
   // aller n'aurait pas de sens.
@@ -1754,6 +1770,14 @@ function renderChiffres(){
 }
 function openRappels(){ renderRappels(); setView("rappels"); }
 function openDemandes(){ renderDemandes(); setView("demandes"); }
+/* Le bouton de l'accueil : le nombre de demandes, et celles de la semaine. */
+function boutonDemandesAccueil(){
+  const l=DB.clients.filter(c=>estDemande(c)&&passFilter(c.brand));
+  const neuves=l.filter(c=>c.createdAt&&Date.now()-c.createdAt<7*86400000).length;
+  return `<button class="btn ghost wide sm" style="margin-top:8px" onclick="openDemandes()">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg>Demandes du site${l.length?" ("+l.length+")":""}${neuves?` · <b style="color:var(--danger)">${neuves} nouvelle${neuves>1?"s":""}</b>`:""}
+  </button>`;
+}
 /* Une demande = quelqu'un qui attend une reponse de Matt (formulaire de
    contact, demande de rappel). Une reservation payee, une reservation
    abandonnee et une vente de bon cadeau ne sont PAS des demandes : elles
@@ -2762,6 +2786,9 @@ function buildHome(){
     <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>Chat du site
     <span class="tab-dot" id="chatDot" style="display:none;position:absolute;right:14px;top:50%;transform:translateY(-50%)"></span>
   </button>`;
+  /* Les demandes n'ont plus d'onglet en bas (il est devenu Galeries) :
+     elles vivent ici, a cote du chat. */
+  h+=boutonDemandesAccueil();
 
   // rappels chauds
   if(rappelsChauds.length){
@@ -3024,6 +3051,7 @@ function buildFil(){
     +'<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H5l-2 2V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>Chat du site'
     +'<span class="tab-dot" id="chatDot" style="display:none;position:absolute;right:14px;top:50%;transform:translateY(-50%)"></span>'
     +'</button>';
+  out+=boutonDemandesAccueil();
 
   body.innerHTML=out;
 }
@@ -3072,7 +3100,7 @@ let clientStatusFilter="all";
    commune (FILTER), pour qu'on ne puisse plus etre sur deux marques a la fois. */
 let contactsBrand="all"; // filtre marque de la carte Contacts & campagnes
 let mlView="clients";    // sous-vue Maison Lumiere : clients | rdv
-let mbsView="clients";   // sous-vue Mybabyshoot : clients | resa | cadeaux | galeries
+let mbsView="clients";   // sous-vue Mybabyshoot : clients | resa | cadeaux (les galeries ont leur onglet)
 
 /* libelle de la date d'evenement selon la marque */
 function eventLabel(brand){
@@ -3175,11 +3203,7 @@ function renderClients(){
     subWrap.innerHTML=`
       <button class="${mbsView==='clients'?'on':''}" onclick="setMbsView('clients')">Fiches clients</button>
       <button class="${mbsView==='resa'?'on':''}" onclick="setMbsView('resa')">Réservations${nbResa?" ("+nbResa+")":""}</button>
-      <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>
-      <button id="ongletGaleries" class="${mbsView==='galeries'?'on':''}" onclick="setMbsView('galeries')">Galeries</button>
-      <button id="ongletRetouches" class="${mbsView==='retouches'?'on':''}${galeriesEnRetard()?" retard":""}" onclick="setMbsView('retouches')">À retoucher${galeriesATraiter()?" ("+galeriesATraiter()+")":""}</button>`;
-    /* Le chiffre de l'onglet : les selections recues, pas encore traitees. */
-    if(CLOUD && !galeriesLu) chargerGaleries().then(majOngletGaleries);
+      <button class="${mbsView==='cadeaux'?'on':''}" onclick="setMbsView('cadeaux')">Bons cadeaux</button>`;
   } else if(FILTER==="maison-lumiere"){
     const nbRdv=DB.seances.filter(s=>s.type==="RDV telephonique").length;
     subWrap.style.display="flex";
@@ -3197,8 +3221,6 @@ function renderClients(){
   }
   if(FILTER==="mybabyshoot" && mbsView==="resa"){ renderResaList(); return; }
   if(FILTER==="mybabyshoot" && mbsView==="cadeaux"){ renderCadeauxList(); return; }
-  if(FILTER==="mybabyshoot" && mbsView==="galeries"){ renderGaleriesList(); return; }
-  if(FILTER==="mybabyshoot" && mbsView==="retouches"){ renderRetouchesList(); return; }
 
   // pills statut
   const pills=document.getElementById("clientStatusPills");
@@ -3484,14 +3506,45 @@ function chargerGaleries(force){
 }
 /* Les selections arrivees et pas encore traitees : c'est le chiffre de
    l'onglet. */
-/* L'onglet Galeries est-il a l'ecran, et pas seulement choisi ? */
-const galeriesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="galeries" && !!document.querySelector("#clients.view.active");
+/* ---------- l'onglet Galeries (en bas, depuis le 23/10/2026) ----------
+   Deux listes : toutes les galeries, et celles a retoucher. Le bouton
+   "Creer une galerie" fait choisir la cliente : plus besoin de passer par
+   sa fiche (qui garde son bouton "Preparer la galerie"). */
+const GALVUE_STORE="studio_matt_galvue";
+let galVue="galeries";   // galeries | retouches
+try{ galVue=localStorage.getItem(GALVUE_STORE)==="retouches"?"retouches":"galeries"; }catch(e){}
+const vueGaleriesActive=()=>!!document.querySelector("#galeries.view.active");
+/* L'une des deux listes est-elle a l'ecran, et pas seulement choisie ? */
+const galeriesVisibles=()=>vueGaleriesActive() && galVue==="galeries";
 const galeriesATraiter=()=>aRetoucher().length;
-function majOngletGaleries(){
-  const b=document.getElementById("ongletRetouches"); if(!b) return;
+function openGaleriesVue(){ renderGaleriesVue(); setView("galeries"); }
+function setGalVue(v){
+  galVue=v==="retouches"?"retouches":"galeries";
+  try{ localStorage.setItem(GALVUE_STORE,galVue); }catch(e){}
+  renderGaleriesVue();
+}
+function sousOngletsGaleries(){
+  const sub=document.getElementById("galSubtabs"); if(!sub) return;
   const n=galeriesATraiter();
-  b.textContent="À retoucher"+(n?" ("+n+")":"");
-  b.classList.toggle("retard",galeriesEnRetard()>0);
+  sub.innerHTML=`<button class="${galVue==='galeries'?'on':''}" onclick="setGalVue('galeries')">Toutes les galeries</button>
+    <button id="ongletRetouches" class="${galVue==='retouches'?'on':''}${galeriesEnRetard()?" retard":""}" onclick="setGalVue('retouches')">À retoucher${n?" ("+n+")":""}</button>`;
+}
+function renderGaleriesVue(){
+  sousOngletsGaleries();
+  if(galVue==="retouches") renderRetouchesList(); else renderGaleriesList();
+}
+/* La recherche ne relit pas le serveur a chaque lettre. */
+function redessinerGaleriesVue(){
+  if(!galeriesCache){ renderGaleriesVue(); return; }
+  if(galVue==="retouches") dessinerRetouches(); else dessinerGaleries(galeriesCache);
+}
+function majOngletGaleries(){
+  const n=galeriesATraiter();
+  const b=document.getElementById("ongletRetouches");
+  if(b){ b.textContent="À retoucher"+(n?" ("+n+")":""); b.classList.toggle("retard",galeriesEnRetard()>0); }
+  /* La pastille de l'onglet du bas : des photos attendent leurs retouches. */
+  const d=document.getElementById("tabGalDot");
+  if(d) d.style.display=n?"block":"none";
 }
 
 /* ---------- l'onglet "A retoucher" ----------
@@ -3508,7 +3561,7 @@ const joursDepuisGal=t=>t?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
 const aRetoucher=()=>(galeriesCache||[]).filter(g=>g.aRetoucher!==undefined?g.aRetoucher:g.statut==="choisie");
 const nbARetoucherGal=g=>g.nbARetoucher!==undefined?g.nbARetoucher:(g.nbCoeurs||0);
 const galeriesEnRetard=()=>aRetoucher().filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
-const retouchesVisibles=()=>FILTER==="mybabyshoot" && mbsView==="retouches" && !!document.querySelector("#clients.view.active");
+const retouchesVisibles=()=>vueGaleriesActive() && galVue==="retouches";
 function couleurRetouche(j){ return j>=RETOUCHE_RETARD_J?"var(--danger)":j>=RETOUCHE_ALERTE_J?"var(--warn)":"var(--ok)"; }
 function cadranRetouche(j){
   const R=19, C=2*Math.PI*R, part=Math.min(1,j/RETOUCHE_RETARD_J), coul=couleurRetouche(j);
@@ -3519,10 +3572,9 @@ function cadranRetouche(j){
     <div class="cadran-n" style="color:${coul}"><b>${j}</b><span>j</span></div></div>`;
 }
 function renderRetouchesList(){
-  document.getElementById("clientStatusPills").style.display="none";
-  const titleEl=document.querySelector("#clients .section-title h2");
+  const titleEl=document.getElementById("galTitre");
   if(titleEl) titleEl.textContent="Photos à retoucher";
-  const box=document.getElementById("clientsList");
+  const box=document.getElementById("galList");
   if(!CLOUD){
     box.innerHTML=`<div class="empty"><div class="t">Disponible seulement en ligne</div><div class="s">Les galeries sont stockées sur le serveur.</div></div>`;
     return;
@@ -3531,17 +3583,18 @@ function renderRetouchesList(){
   else box.innerHTML=`<div class="empty"><div class="t">Chargement...</div></div>`;
   chargerGaleries(true).then(l=>{
     if(!retouchesVisibles()) return;
+    sousOngletsGaleries();
     if(l) dessinerRetouches();
     else box.innerHTML=`<div class="empty"><div class="t">Chargement impossible</div><div class="s">Vérifie ta connexion, puis reviens sur cet onglet.</div></div>`;
     majOngletGaleries();
   });
 }
 function dessinerRetouches(){
-  const box=document.getElementById("clientsList");
-  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  const box=document.getElementById("galList");
+  const q=(document.getElementById("galSearch").value||"").toLowerCase().trim();
   let l=aRetoucher().sort((a,b)=>(a.choisieAt||a.createdAt||0)-(b.choisieAt||b.createdAt||0));
   if(q) l=l.filter(g=>String(g.nom||"").toLowerCase().includes(q));
-  document.getElementById("clientCount").textContent=l.length+" cliente(s)";
+  document.getElementById("galCount").textContent=l.length+" cliente(s)";
   if(!l.length){
     box.innerHTML=`<div class="empty">
       <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
@@ -3582,10 +3635,9 @@ function dessinerRetouches(){
 
 /* ---------- l'onglet Galeries ---------- */
 function renderGaleriesList(){
-  document.getElementById("clientStatusPills").style.display="none";
-  const titleEl=document.querySelector("#clients .section-title h2");
+  const titleEl=document.getElementById("galTitre");
   if(titleEl) titleEl.textContent="Galeries";
-  const box=document.getElementById("clientsList");
+  const box=document.getElementById("galList");
   if(!CLOUD){
     box.innerHTML=`<div class="empty"><div class="t">Disponible seulement en ligne</div><div class="s">Les galeries sont stockées sur le serveur.</div></div>`;
     return;
@@ -3594,6 +3646,7 @@ function renderGaleriesList(){
   else box.innerHTML=`<div class="empty"><div class="t">Chargement des galeries...</div></div>`;
   chargerGaleries(true).then(l=>{
     if(!(galeriesVisibles())) return;
+    sousOngletsGaleries();
     if(l) dessinerGaleries(l);
     else box.innerHTML=`<div class="empty"><div class="t">Chargement impossible</div><div class="s">Vérifie ta connexion, puis reviens sur cet onglet.</div></div>`;
     majOngletGaleries();
@@ -3601,16 +3654,16 @@ function renderGaleriesList(){
 }
 
 function dessinerGaleries(list){
-  const box=document.getElementById("clientsList");
-  const q=(document.getElementById("clientSearch").value||"").toLowerCase().trim();
+  const box=document.getElementById("galList");
+  const q=(document.getElementById("galSearch").value||"").toLowerCase().trim();
   /* A traiter d'abord : une selection recue attend Matt. */
   const ordre={choisie:0,attente_paiement:1,envoyee:2,preparation:3,retouchee:4};
   let l=list.slice().sort((a,b)=>(ordre[a.statut]??9)-(ordre[b.statut]??9)||(b.createdAt||0)-(a.createdAt||0));
   if(q) l=l.filter(g=>[g.nom,nomFormuleGal(g.formule),(GAL_STATUT[g.statut]||[])[0]].join(" ").toLowerCase().includes(q));
-  document.getElementById("clientCount").textContent=l.length+" galerie(s)";
+  document.getElementById("galCount").textContent=l.length+" galerie(s)";
 
   const aide=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:0 0 12px">
-      Une galerie se prépare depuis la fiche de la cliente : <b>Préparer la galerie</b>.
+      Une galerie se crée avec <b>Créer une galerie</b>, juste au-dessus, ou depuis la fiche de la cliente.
       Elle reste en ligne 3 mois, puis ses aperçus sont effacés. Tes photos originales ne sont jamais envoyées.</div>`;
   if(!l.length){
     box.innerHTML=aide+`<div class="empty">
@@ -3638,6 +3691,86 @@ function dessinerGaleries(list){
       </div>
     </div>`;
   }).join("");
+}
+
+/* ---------- creer une galerie depuis l'onglet : choisir la cliente ----------
+   Les clientes Mybabyshoot, celle dont la seance vient d'avoir lieu en
+   haut. Les fiches archivees (les anciennes clientes importees) ne
+   sortent qu'en cherchant. */
+const sansAccentGal=t=>String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+function seancesClienteGal(clientId){
+  return (DB.seances||[]).filter(s=>s.clientId===clientId && s.type!=="Indispo" && s.status!=="Annulee")
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+}
+function choisirClienteGalerie(){
+  if(!CLOUD){ alert("Disponible seulement en ligne : les galeries sont sur le serveur."); return; }
+  openModal(`<h2>Créer une galerie</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Pour quelle cliente ? Celles dont la séance vient d'avoir lieu sont en haut.</div>
+    <div class="search" style="margin:0 0 10px">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="cgRecherche" type="text" placeholder="Nom, téléphone, mail..." autocomplete="off" oninput="listerClientesGalerie()">
+    </div>
+    <div id="cgListe"></div>
+    <div style="font-size:12.5px;color:var(--ink-3);line-height:1.55;margin-top:12px">Elle n'est pas dans la liste ? Crée d'abord sa fiche :
+      <a style="cursor:pointer;text-decoration:underline" onclick="closeModal();openClientEdit(null)">nouvelle fiche client</a>.</div>`);
+  listerClientesGalerie();
+  /* Sur ordinateur, on peut taper tout de suite ; sur telephone, le clavier
+     cacherait la liste. */
+  try{ if(matchMedia("(pointer:fine)").matches) document.getElementById("cgRecherche").focus(); }catch(e){}
+  if(!galeriesCache) chargerGaleries().then(()=>{ if(document.getElementById("cgListe")) listerClientesGalerie(); });
+}
+function listerClientesGalerie(){
+  const box=document.getElementById("cgListe"); if(!box) return;
+  const q=sansAccentGal((document.getElementById("cgRecherche")||{}).value||"").trim();
+  const chiffres=q.replace(/\D/g,"");
+  const auj=todayStr();
+  let l=DB.clients.filter(c=>c.brand==="mybabyshoot");
+  if(q) l=l.filter(c=>sansAccentGal([c.name,c.email,c.insta].join(" ")).includes(q)
+                     || (chiffres.length>=4 && String(c.tel||"").replace(/\D/g,"").includes(chiffres)));
+  else l=l.filter(c=>c.status!=="Archive");
+  /* La seance passee la plus recente d'abord ; puis les seances a venir et
+     les fiches sans seance, les plus recentes en premier. */
+  const cle=c=>{ const p=seancesClienteGal(c.id).find(x=>(x.date||"")<=auj); return p?p.date:""; };
+  l=l.map(c=>({c,k:cle(c)})).sort((a,b)=>b.k.localeCompare(a.k)||(b.c.createdAt||0)-(a.c.createdAt||0)).map(x=>x.c);
+  const total=l.length; l=l.slice(0,q?40:25);
+  if(!l.length){
+    box.innerHTML=`<div class="empty" style="padding:18px 0"><div class="t">${q?"Personne à ce nom":"Aucune cliente Mybabyshoot"}</div></div>`;
+    return;
+  }
+  const date=d=>{ if(!d) return ""; const x=new Date(d+"T12:00:00");
+    return x.toLocaleDateString("fr-FR",{day:"numeric",month:"short",...(d.slice(0,4)!==auj.slice(0,4)?{year:"numeric"}:{})}); };
+  box.innerHTML=l.map(c=>{
+    const s=seancesClienteGal(c.id).find(x=>(x.date||"")<=auj)||seancesClienteGal(c.id).slice(-1)[0];
+    const gals=(galeriesCache||[]).filter(g=>g.clientId===c.id);
+    const manque=gals.map(seanceManquanteGal).find(Boolean);
+    const badge=manque?`<span class="badge warn">${esc(manque)} à ajouter</span>`
+      :gals.length?`<span class="badge info">${gals.length>1?gals.length+" galeries":"a sa galerie"}</span>`:"";
+    const sous=s?[s.type,date(s.date)+((s.date||"")>auj?" (à venir)":"")].filter(Boolean).join(" · "):(c.email||c.tel||"pas encore de séance");
+    return `<div class="row" data-b="mybabyshoot" onclick="galeriePourCliente('${esc(c.id)}')">
+      <div class="avatar" data-b="mybabyshoot">${esc(initials(c.name||"?"))}</div>
+      <div class="row-main"><div class="t">${esc(c.name||"Sans nom")}</div><div class="s">${esc(sous)}</div></div>
+      <div class="row-end">${badge}</div>
+    </div>`;
+  }).join("")
+  +(total>l.length?`<div style="font-size:12.5px;color:var(--ink-3);text-align:center;margin-top:8px">${total-l.length} autre(s) : tape son nom.</div>`:"");
+}
+/* Une cliente choisie. Si sa galerie grossesse + naissance attend la
+   naissance, on propose d'abord de l'y ajouter : c'est presque toujours ca. */
+function galeriePourCliente(clientId){
+  const c=clientById(clientId); if(!c) return;
+  const g=(galeriesCache||[]).find(x=>x.clientId===clientId && seanceManquanteGal(x) && x.statut!=="preparation");
+  if(!g){ openPreparerGalerie(clientId); return; }
+  const manque=seanceManquanteGal(g);
+  openModal(`<h2>${esc(c.name)}</h2>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
+      Elle a déjà une galerie grossesse + naissance, où il manque la <b>${esc(manque)}</b>.</div>
+    <button class="btn wide" onclick="ajouterSeanceDepuisListe('${esc(g.jeton)}','${esc(clientId)}')">Ajouter la ${esc(manque)} à sa galerie</button>
+    <button class="btn ghost wide" style="margin-top:8px" onclick="openPreparerGalerie('${esc(clientId)}')">Créer une nouvelle galerie</button>
+    <button class="btn ghost wide" style="margin-top:8px" onclick="choisirClienteGalerie()">Retour</button>`);
+}
+async function ajouterSeanceDepuisListe(jeton,clientId){
+  await openGalerie(jeton);
+  if(galOuverte && galOuverte.g && galOuverte.g.jeton===jeton && seanceManquanteGal(galOuverte.g)) openPreparerGalerie(clientId,true);
 }
 
 /* ---------- dans la fiche de la cliente ---------- */
@@ -7874,6 +8007,7 @@ function repaintActive(){
   if(id==="home") buildHome(); else if(id==="clients") renderClients();
   else if(id==="agenda") renderAgenda(); else if(id==="paiements") renderPaiements();
   else if(id==="rappels") renderRappels(); else if(id==="demandes") renderDemandes();
+  else if(id==="galeries") redessinerGaleriesVue();
 }
 
 /* Fusionne le cloud dans le local :
@@ -8097,6 +8231,8 @@ function onAuthenticated(){
   cloudPull();
   checkChatUnread();
   setInterval(checkChatUnread,60000);
+  /* La pastille de l'onglet Galeries : des photos attendent leurs retouches. */
+  try{ chargerGaleries().then(majOngletGaleries); }catch(e){}
 }
 
 /* ---------- empreinte digitale (WebAuthn) ---------- */
