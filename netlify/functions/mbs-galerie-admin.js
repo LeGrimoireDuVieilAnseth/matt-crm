@@ -12,6 +12,7 @@
 //   POST {action:"quota", g, quota}                : le total de retouches comprises
 //   POST {action:"transfert", g, lien, seance}     : remplacer le lien "tout telecharger"
 //   POST {action:"retouches", g, lien, prevenir, tour} : le lien des photos retouchees
+//   POST {action:"couverture", g, id, seance}      : la photo de bienvenue (d'une seance)
 //   POST {action:"supprimer", g}
 //
 // Les images arrivent DEJA allegees par le navigateur de Matt. Ici on ne
@@ -279,6 +280,19 @@ export default async (request) => {
   if (corps.action === "couverture") {
     const id = String(corps.id || "");
     if (id && !(idPhotoValide(id) && g.photos.some(p => p.id === id))) return json({ ok: false, error: "photo" }, 400);
+    /* Galerie a deux seances : une photo par seance, prise dans SES photos.
+       L'ancienne couverture unique, si elle etait de cette seance, s'efface :
+       sinon "revenir au choix automatique" la remettrait. */
+    if (g.seances && corps.seance) {
+      const cle = String(corps.seance);
+      if (!g.seances.some(x => x.cle === cle)) return json({ ok: false, error: "seance" }, 400);
+      if (id && (g.photos.find(p => p.id === id) || {}).s !== cle) return json({ ok: false, error: "photo" }, 400);
+      g.couvertures = { ...(g.couvertures || {}) };
+      if (id) g.couvertures[cle] = id; else delete g.couvertures[cle];
+      if (g.couverture && (g.photos.find(p => p.id === g.couverture) || {}).s === cle) g.couverture = "";
+      await enregistrer(store, g);
+      return json({ ok: true, couvertures: g.couvertures });
+    }
     g.couverture = id;
     await enregistrer(store, g);
     return json({ ok: true, couverture: id });

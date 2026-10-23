@@ -320,6 +320,8 @@ export function vuePublique(g) {
     passees: (g.passees || []).map(t => ({ coeurs: t.coeurs || [], at: t.at, seances: t.seances || [],
                                            retouches: t.retouches || "" })),
     statut: g.statut, expiresAt: g.expiresAt, couverture: g.couverture || "",
+    /* Galerie a deux seances : la photo de bienvenue de chaque seance. */
+    couvertures: g.couvertures || {},
   };
 }
 

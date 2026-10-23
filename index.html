@@ -4531,8 +4531,11 @@ async function preRemplirGalerieMail(clientId){
   if(n) n.textContent="La galerie Mybabyshoot de "+(c.name||"la cliente")+", préparée le "+dateGal(g.createdAt)+".";
 }
 
+/* L'ecran de fin, garde pour y revenir apres le choix de la couverture. */
+let finGal=null;
 function galeriePrete(clientId,adresse,nb,p){
   galPrep=null;
+  finGal={clientId,adresse,nb,p};
   const c=clientById(clientId);
   const jeton=p&&p.jeton;
   /* Les photos allegees, et le lien SwissTransfer a coller des qu'il existe :
@@ -4560,9 +4563,21 @@ function galeriePrete(clientId,adresse,nb,p){
       <button class="btn ghost sm" style="flex:1" onclick="copierTexteGal('${esc(adresse)}','Lien copié')">Copier le lien</button>
       <a class="btn ghost sm" style="flex:1" href="${esc(apercuDeGalerie(adresse))}" target="_blank" rel="noopener">Voir comme elle</a>
     </div>
+    <div id="finCouv"></div>
     ${blocTransfert}
     ${c&&c.email?boutonsEnvoiGalerie(c):""}`);
+  if(jeton) remplirCouvertureFin(jeton);
   if(galeriesVisibles()) renderGaleriesList();
+}
+/* La galerie est relue pour montrer sa photo de bienvenue (et ses formats). */
+async function remplirCouvertureFin(jeton){
+  try{
+    const r=await fetch(GALA_API+"?g="+encodeURIComponent(jeton),{headers:apiHeaders(),cache:"no-store"});
+    const j=await r.json(); if(!j||!j.ok) return;
+    galOuverte={g:j.galerie,adresse:j.adresse};
+  }catch(e){ return; }
+  const el=document.getElementById("finCouv");
+  if(el && galOuverte.g.jeton===jeton) el.innerHTML=htmlCouverturesGal(galOuverte.g,"fin");
 }
 /* Les deux facons de lui envoyer sa galerie : avec la facture de solde, ou
    seule (pack deja regle en entier, facture deja partie au studio). Si sa
@@ -4617,6 +4632,7 @@ async function enregistrerLienFinGal(jeton,cle){
     const {j}=await appelGal({action:"transfert",g:jeton,lien,seance:suf?cle:undefined});
     if(!j.ok){ alert("Lien refusé."); return; }
     galeriesLu=0;
+    if(finGal && finGal.p && finGal.p.jeton===jeton) (finGal.p.liens=finGal.p.liens||{})[cle||"seule"]=lien;
     const ok=document.getElementById("gpLienFinOk"+suf);
     if(ok) ok.innerHTML=`<div style="font-size:13px;color:var(--ok);font-weight:600;margin-bottom:14px">Lien enregistré : il apparaît dans sa galerie.</div>`;
     const info=document.getElementById("swissInfo"+suf);
@@ -4872,15 +4888,7 @@ function dessinerGalerie(){
   /* La photo de couverture : celle que Matt a choisie, sinon la premiere en
      paysage (meme regle que la page de la cliente, photoDeCouverture). */
   if(g.statut!=="preparation"){
-    const c=couvertureGal(g);
-    h+=`<div class="grouplab" style="margin-top:18px">Photo de couverture</div>
-      <div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center">
-        ${c?`<img src="${esc(vignetteGal(g.jeton,c.id))}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;background:var(--surface-3);flex:none">`:""}
-        <div style="flex:1;min-width:0;font-size:13px;line-height:1.5">
-          <b>${esc(c?c.nom:"")}</b><br>
-          <span style="color:var(--ink-3)">${g.couverture?"Choisie par toi.":"Choisie automatiquement (la première en paysage)."}</span></div>
-      </div>
-      <button class="btn ghost sm wide" style="margin-top:8px" onclick="choisirCouvertureGal()">Changer la photo de couverture</button>`;
+    h+=htmlCouverturesGal(g,"detail");
   }
   if(g.statut!=="preparation"){
     /* le lien "tout telecharger" : un par seance dans une galerie a deux seances */
@@ -5067,41 +5075,83 @@ async function envoyerMailRetouches(){
   if(!ok && document.getElementById("mrGo")){ go.disabled=false; go.textContent="Envoyer"; }
 }
 
-function couvertureGal(g){
-  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id));
-  return (g.couverture && recues.find(p=>p.id===g.couverture)) || recues.find(p=>Number(p.r)>1.2) || recues[0] || null;
+/* Le bloc "Photo de couverture" : une photo par seance en ligne (galerie a
+   deux seances), qui s'affichent alors cote a cote. retour : d'ou on vient,
+   "detail" (le detail de la galerie) ou "fin" (l'ecran de fin, avant
+   d'envoyer la galerie), pour y revenir apres le choix. */
+function htmlCouverturesGal(g,retour){
+  const cles=g.seances?g.seances.filter(x=>x.prete).map(x=>x.cle):[""];
+  const fin=retour==="fin";
+  let h=`<div class="grouplab" style="margin-top:${fin?"4":"18"}px">${fin?"Sa photo de bienvenue":"Photo de couverture"}${cles.length>1?" · une par séance":""}</div>`;
+  if(fin) h+=`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-4px 0 4px">C'est la première chose qu'elle verra : vérifie-la avant de lui envoyer la galerie.</div>`;
+  cles.forEach(cle=>{
+    const c=couvertureGal(g,cle);
+    h+=`<div class="card" style="padding:12px 14px;display:flex;gap:12px;align-items:center;margin-top:8px">
+      ${c?`<img src="${esc(vignetteGal(g.jeton,c.id))}" alt="" style="width:96px;height:64px;object-fit:cover;border-radius:8px;background:var(--surface-3);flex:none">`:""}
+      <div style="flex:1;min-width:0;font-size:13px;line-height:1.5">
+        ${cle?`<span style="font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)">La ${esc(cle)}</span><br>`:""}
+        <b>${esc(c?c.nom:"")}</b><br>
+        <span style="color:var(--ink-3)">${couvertureChoisieGal(g,cle)?"Choisie par toi.":"Choisie automatiquement (la première en paysage"+(cle?" de la séance":"")+")."}</span></div>
+    </div>
+    <button class="btn ghost sm wide" style="margin-top:8px" onclick="choisirCouvertureGal('${cle}','${retour}')">Changer la photo${cle?" de la "+esc(cle):" de couverture"}</button>`;
+  });
+  if(cles.length>1) h+=`<div style="font-size:12px;color:var(--ink-3);line-height:1.5;margin-top:6px">Elles s'affichent côte à côte en haut de sa galerie.</div>`;
+  return h+(fin?`<div style="height:14px"></div>`:"");
+}
+/* Apres le choix (ou "Retour") : revenir la ou on etait. */
+function retourCouvertureGal(){
+  if(galOuverte && galOuverte.retourCouv==="fin" && finGal) galeriePrete(finGal.clientId,finGal.adresse,finGal.nb,finGal.p);
+  else dessinerGalerie();
+}
+
+/* La photo de bienvenue : celle de la seance (cle, galerie a deux seances)
+   ou de la galerie. Meme regle que la page de la cliente (couvertureDe) :
+   le choix de Matt, sinon la premiere en paysage. */
+function couvertureGal(g,cle){
+  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id) && (!cle || p.s===cle));
+  const choisie=cle?((g.couvertures||{})[cle]||g.couverture):g.couverture;
+  return (choisie && recues.find(p=>p.id===choisie)) || recues.find(p=>Number(p.r)>1.2) || recues[0] || null;
+}
+function couvertureChoisieGal(g,cle){
+  const c=couvertureGal(g,cle); if(!c) return false;
+  return c.id===(cle?((g.couvertures||{})[cle]||g.couverture):g.couverture);
 }
 /* Toutes les miniatures, a leur format : Matt touche celle qui accueillera
    sa cliente. */
-function choisirCouvertureGal(){
+function choisirCouvertureGal(cle,retour){
   const {g}=galOuverte;
-  const actuelle=(couvertureGal(g)||{}).id;
-  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id));
-  openModal(`<h2>Photo de couverture</h2>
+  cle=cle||"";
+  galOuverte.retourCouv=retour||"detail";
+  const actuelle=(couvertureGal(g,cle)||{}).id;
+  const recues=g.photos.filter(p=>(g.recues||[]).includes(p.id) && (!cle || p.s===cle));
+  openModal(`<h2>Photo de couverture${cle?" · la "+esc(cle):""}</h2>
     <div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:12px">
-      Touche la photo qui accueillera ta cliente, en grand, avec son prénom.
-      Une photo en paysage rend le mieux : en portrait, le haut et le bas sont coupés.</div>
+      ${cle?"Touche la photo de la "+esc(cle)+" qui accueillera ta cliente. Quand les deux séances sont en ligne, les deux photos s'affichent côte à côte, plus hautes que larges : une photo en portrait rend bien aussi."
+        :"Touche la photo qui accueillera ta cliente, en grand, avec son prénom. Une photo en paysage rend le mieux : en portrait, le haut et le bas sont coupés."}</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px">
       ${recues.map(p=>{
         const r=Number(p.r)>0.2?Number(p.r):1.5;
-        return `<button onclick="definirCouvertureGal('${p.id}')" style="flex:${r} 1 ${Math.round(r*90)}px;aspect-ratio:${r};padding:0;border:3px solid ${p.id===actuelle?"var(--ok)":"transparent"};border-radius:10px;overflow:hidden;cursor:pointer;background:var(--surface-3);position:relative">
+        return `<button onclick="definirCouvertureGal('${p.id}','${cle}')" style="flex:${r} 1 ${Math.round(r*90)}px;aspect-ratio:${r};padding:0;border:3px solid ${p.id===actuelle?"var(--ok)":"transparent"};border-radius:10px;overflow:hidden;cursor:pointer;background:var(--surface-3);position:relative">
           <img src="${esc(vignetteGal(g.jeton,p.id))}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
           <span style="position:absolute;left:4px;bottom:4px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(0,0,0,.5);padding:1px 6px;border-radius:99px">${esc(p.nom)}</span>
         </button>`;
       }).join("")}
       <span style="flex:1000 1 0"></span>
     </div>
-    ${g.couverture?`<button class="btn ghost sm wide" style="margin-top:12px" onclick="definirCouvertureGal('')">Revenir au choix automatique</button>`:""}
-    <button class="btn ghost wide" style="margin-top:8px" onclick="dessinerGalerie()">Retour</button>`);
+    ${couvertureChoisieGal(g,cle)?`<button class="btn ghost sm wide" style="margin-top:12px" onclick="definirCouvertureGal('','${cle}')">Revenir au choix automatique</button>`:""}
+    <button class="btn ghost wide" style="margin-top:8px" onclick="retourCouvertureGal()">Retour</button>`);
 }
-async function definirCouvertureGal(id){
+async function definirCouvertureGal(id,cle){
   const {g}=galOuverte;
   try{
-    const {j}=await appelGal({action:"couverture",g:g.jeton,id});
+    const {j}=await appelGal({action:"couverture",g:g.jeton,id,seance:cle||undefined});
     if(!j.ok){ alert("Photo refusée."); return; }
-    g.couverture=id;
+    if(cle){
+      g.couvertures=j.couvertures||{};
+      if(g.couverture && seanceDePhotoGal(g,g.couverture)===cle) g.couverture="";
+    } else g.couverture=id;
     toast(id?"Couverture choisie":"Couverture automatique");
-    dessinerGalerie();
+    retourCouvertureGal();
   }catch(e){ if(e.message!=="cle") alert("Erreur : "+e.message); }
 }
 
@@ -8855,7 +8905,7 @@ const LIEN_MAX_CHOIX = 8;
    qui seul decide de ce qui sera facture. Les rappeler ici en dur, c'est
    la promesse de deux grilles qui divergent un jour. */
 const LIEN_COMPTOIR = [
-  ["photos",  "Photos retouchées en plus", "Elle choisit le nombre. 15 € l'unité, une offerte à partir de 5, 10 € l'unité à partir de 10."],
+  ["photos",  "Photos retouchées en plus", "Elle choisit le nombre. 15 € l'unité, 10 € l'unité à partir de 5."],
   ["album",   "Album photo imprimé",       "150 €. Elle peut en prendre plusieurs."],
   ["tirages", "Tirages papier",            "20×30 à 10 €, 30×45 à 15 €, 40×60 à 20 €. Elle indique les numéros des photos, et son adresse."],
 ];

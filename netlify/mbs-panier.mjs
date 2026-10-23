@@ -12,19 +12,19 @@
 // reservation doit rester lisible d'un coup d'oeil. Les paliers ci-dessous
 // n'existent que dans le lien envoye apres la seance.
 
-/* Photos retouchees supplementaires.
+/* Photos retouchees supplementaires (grille de Matt du 23/10/2026).
    1 a 4  : 15 euros piece.
-   5 a 9  : une photo n'est pas facturee -> (n - 1) x 15.
-   10 et + : 10 euros piece, sans photo offerte.
+   5 et + : 10 euros piece, TOUTES : 5 photos = 50 euros, 10 = 100.
+   (Avant : une photo offerte de 5 a 9, et 10 euros seulement des 10.)
 
-   Consequence a connaitre : 9 photos coutent 120 euros et 10 en coutent
-   100. Le prix baisse en montant d'une photo. C'est la grille voulue par
-   Matt ; la page le dit a la cliente au lieu de le laisser passer pour un
-   bug, et ca l'invite a en prendre dix. Voir conseilPhotos(). */
+   Consequence a connaitre : 4 photos coutent 60 euros et 5 en coutent 50.
+   Le prix baisse en montant d'une photo. C'est la grille voulue par Matt ;
+   la page le dit a la cliente au lieu de le laisser passer pour un bug, et
+   ca l'invite a en prendre cinq. Voir conseilPhotos().
+   grillePublique garde les cles historiques photoDes10 et grosDes. */
 export const PRIX_PHOTO = 15;
-export const PRIX_PHOTO_DES_10 = 10;
-export const PHOTOS_UNE_OFFERTE_DES = 5;
-export const PHOTOS_GROS_DES = 10;
+export const PRIX_PHOTO_DEGRESSIF = 10;
+export const PHOTOS_DEGRESSIF_DES = 5;
 export const PHOTOS_MAX = 60;
 
 export const PRIX_ALBUM_PANIER = 150;
@@ -50,20 +50,18 @@ const tailleParCle = (c) => TAILLES.find(t => t.cle === c) || null;
 export function prixPhotos(n) {
   n = entier(n, PHOTOS_MAX);
   if (!n) return 0;
-  if (n >= PHOTOS_GROS_DES) return n * PRIX_PHOTO_DES_10;
-  if (n >= PHOTOS_UNE_OFFERTE_DES) return (n - 1) * PRIX_PHOTO;
-  return n * PRIX_PHOTO;
+  return n * (n >= PHOTOS_DEGRESSIF_DES ? PRIX_PHOTO_DEGRESSIF : PRIX_PHOTO);
 }
 
-/* "Vous en avez 9 pour 120 euros ; a 10, c'est 100." On ne le dit que
+/* "Vous en avez 4 pour 60 euros ; a 5, c'est 50." On ne le dit que
    lorsque c'est vrai et avantageux pour elle. */
 export function conseilPhotos(n) {
   n = entier(n, PHOTOS_MAX);
-  if (!n || n >= PHOTOS_GROS_DES) return null;
+  if (!n || n >= PHOTOS_DEGRESSIF_DES) return null;
   const ici = prixPhotos(n);
-  const dix = prixPhotos(PHOTOS_GROS_DES);
-  if (dix >= ici) return null;
-  return { vers: PHOTOS_GROS_DES, prix: dix, economie: ici - dix };
+  const palier = prixPhotos(PHOTOS_DEGRESSIF_DES);
+  if (palier >= ici) return null;
+  return { vers: PHOTOS_DEGRESSIF_DES, prix: palier, economie: ici - palier };
 }
 
 /* Ce que la page a le droit de savoir pour afficher la grille. Elle s'en
@@ -71,9 +69,8 @@ export function conseilPhotos(n) {
 export function grillePublique() {
   return {
     photo: PRIX_PHOTO,
-    photoDes10: PRIX_PHOTO_DES_10,
-    uneOfferteDes: PHOTOS_UNE_OFFERTE_DES,
-    grosDes: PHOTOS_GROS_DES,
+    photoDes10: PRIX_PHOTO_DEGRESSIF,     // le prix a partir de grosDes photos (nom historique)
+    grosDes: PHOTOS_DEGRESSIF_DES,
     photosMax: PHOTOS_MAX,
     album: PRIX_ALBUM_PANIER,
     albumsMax: ALBUMS_MAX,
@@ -108,12 +105,10 @@ export function calculerPanier({ formules = [], extras = {}, choix = {} }) {
   if (extras.photos) {
     const n = entier(choix.photos, PHOTOS_MAX);
     if (n > 0) {
-      const offerte = n >= PHOTOS_UNE_OFFERTE_DES && n < PHOTOS_GROS_DES;
       lignes.push({
         cle: "photos",
         libelle: n + " photo" + (n > 1 ? "s" : "") + " retouchée" + (n > 1 ? "s" : "") + " en plus",
-        detail: n >= PHOTOS_GROS_DES ? PRIX_PHOTO_DES_10 + " € l'unité"
-              : offerte ? PRIX_PHOTO + " € l'unité, une offerte"
+        detail: n >= PHOTOS_DEGRESSIF_DES ? PRIX_PHOTO_DEGRESSIF + " € l'unité, à partir de " + PHOTOS_DEGRESSIF_DES
               : PRIX_PHOTO + " € l'unité",
         quantite: n, montant: prixPhotos(n),
       });

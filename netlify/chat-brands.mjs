@@ -63,7 +63,7 @@ Le pack ne bloque qu'un creneau, celui de la grossesse : la seance naissance
 se cale ensuite, dans les 10 jours qui suivent l'arrivee de bebe.
 
 OPTIONS ET PAIEMENT
-- Photo retouchee supplementaire : 15 euros l'unite, une offerte a partir de 5, 10 euros l'unite a partir de 10.
+- Photo retouchee supplementaire : 15 euros l'unite, et 10 euros l'unite a partir de 5 photos (5 photos = 50 euros).
 - Album photo imprime : 150 euros. Tirages papier : 20x30 a 10 euros, 30x45 a 15 euros, 40x60 a 20 euros.
 - Reservation en ligne sur le site : on choisit sa formule, son creneau, puis on regle un acompte (90 euros, ou 190 euros des que le total atteint 590 euros) pour bloquer la date. Le solde se regle le jour de la seance.
 - Codes de reduction : certains partenaires distribuent des codes de 100 euros de remise. Le code se saisit sur la page de reservation, a l'etape des coordonnees. Il est a usage unique.
