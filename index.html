@@ -3717,12 +3717,8 @@ function openPreparerGalerie(clientId,ajout){
   const c=clientById(clientId); if(!c) return;
   if(!CLOUD){ alert("Disponible seulement en ligne : les galeries sont sur le serveur."); return; }
   if(galPrep && galPrep.enCours){ alert("Une galerie est déjà en cours d'envoi. Attends qu'elle se termine."); return; }
-  const allege=allegementPossible()?`<div class="field">
-      <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:var(--ink)">
-        <input type="checkbox" id="gpAllege" onchange="galAllegeCoche(this)" style="margin-top:2px;width:auto">
-        <span><b>Créer aussi les photos allégées pour SwissTransfer</b><br>
-        <span style="font-weight:400;color:var(--ink-3);font-size:12.5px">Même définition, qualité 92 % : environ 4 fois plus léger, sans différence visible. Tes originaux ne sont pas touchés.</span></span></label>
-      <div id="gpAllegeOu" style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.5"></div></div>`
+  /* Sans Chrome ou Edge sur ordinateur, pas d'allegement : on le dit une fois. */
+  const allege=allegementPossible()?""
     :`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-4px 0 14px">Sur ordinateur avec Chrome ou Edge, le CRM peut aussi alléger tes photos pour SwissTransfer, en même temps.</div>`;
 
   if(ajout){
@@ -3849,33 +3845,45 @@ function dessinerBlocsGal(){
     const lien=`<div class="field"${plusieurs?' style="margin-bottom:0"':""}><label>Lien pour tout télécharger${plusieurs?" (la "+esc(cle)+")":""}</label>
         <input id="gpTransfert-${cle}" data-lien="${cle}" type="url" inputmode="url" autocomplete="off" placeholder="https://..." value="${esc(b.transfert||"")}">
         <div style="font-size:12px;color:var(--ink-3);margin-top:5px">WeTransfer ou SwissTransfer. Facultatif ici : tu peux l'ajouter ou le changer plus tard.</div></div>`;
+    /* Les copies allegees de CETTE seance, rangees ou Matt le choisit :
+       grossesse et naissance n'ont pas le meme dossier sur son disque. */
+    const allege=allegementPossible()?`<div class="field"${plusieurs?' style="margin:12px 0 0"':""}>
+        <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:var(--ink);font-weight:400;letter-spacing:0">
+          <input type="checkbox" id="gpAllege-${cle}" data-cle="${cle}" onchange="galAllegeCoche(this)" style="margin-top:2px;width:auto"${b.parent?" checked":""}>
+          <span><b>Créer aussi les photos allégées pour SwissTransfer${plusieurs?" (la "+esc(cle)+")":""}</b><br>
+          <span style="color:var(--ink-3);font-size:12.5px">Même définition, qualité 92 % : environ 4 fois plus léger, sans différence visible. Tes originaux ne sont pas touchés.</span></span></label>
+        <div id="gpAllegeOu-${cle}" style="font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.5"></div></div>`:"";
     return plusieurs?`<div class="card" style="padding:13px 14px;margin-bottom:14px">
-        <div style="font-weight:700;font-size:14px;margin-bottom:10px">Séance ${esc(cle)}</div>${photos}${lien}</div>`:photos+lien;
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px">Séance ${esc(cle)}</div>${photos}${lien}${allege}</div>`:photos+lien+allege;
   }).join("");
   majAllegeOuGal();
 }
 
-/* La case cochee : Matt choisit ou ranger les copies (en general le dossier
-   de la seance). Le sous-dossier n'est cree qu'au lancement. */
+/* La case cochee : Matt choisit ou ranger les copies de cette seance (en
+   general le dossier de la seance). Le sous-dossier n'est cree qu'au
+   lancement. */
 async function galAllegeCoche(cb){
   if(!galPrep) return;
-  if(!cb.checked){ galPrep.parent=null; majAllegeOuGal(); return; }
+  const b=blocGal(cb.dataset.cle||"seule");
+  if(!cb.checked){ b.parent=null; majAllegeOuGal(); return; }
   const d=await choisirRangementAl();
-  if(!d){ cb.checked=false; galPrep.parent=null; majAllegeOuGal(); return; }
-  galPrep.parent=d; majAllegeOuGal();
+  if(!d){ cb.checked=false; b.parent=null; majAllegeOuGal(); return; }
+  b.parent=d; majAllegeOuGal();
 }
 /* Changer d'emplacement : si Matt ferme la fenetre, on garde le precedent. */
-async function galAllegeChanger(){
+async function galAllegeChanger(cle){
   if(!galPrep) return;
   const d=await choisirRangementAl();
-  if(d){ galPrep.parent=d; majAllegeOuGal(); }
+  if(d){ blocGal(cle).parent=d; majAllegeOuGal(); }
 }
 function majAllegeOuGal(){
-  const el=document.getElementById("gpAllegeOu"); if(!el||!galPrep) return;
-  if(!galPrep.parent){ el.innerHTML=""; return; }
-  const noms=clesBlocsGal().filter(k=>blocGal(k).fichiers.length).map(k=>nomDossierAllegeAl(blocGal(k).fichiers,repliAllegeGal(k)));
-  el.innerHTML=`Dans <b>${esc(galPrep.parent.name)}</b>, ${noms.length>1?"deux nouveaux dossiers":"un nouveau dossier"} ${noms.length?noms.map(n=>"<b>"+esc(n)+"</b>").join(" et "):"(choisis d'abord les photos)"}.
-    <a style="cursor:pointer;text-decoration:underline" onclick="galAllegeChanger()">Changer</a>`;
+  if(!galPrep) return;
+  clesBlocsGal().forEach(cle=>{
+    const el=document.getElementById("gpAllegeOu-"+cle), b=blocGal(cle); if(!el) return;
+    if(!b.parent){ el.innerHTML=""; return; }
+    el.innerHTML=`Dans <b>${esc(b.parent.name)}</b>, un nouveau dossier ${b.fichiers.length?"<b>"+esc(nomDossierAllegeAl(b.fichiers,repliAllegeGal(cle)))+"</b>":"(choisis d'abord les photos)"}.
+      <a style="cursor:pointer;text-decoration:underline" onclick="galAllegeChanger('${cle}')">Changer</a>`;
+  });
 }
 /* Le nom du dossier des copies, quand les photos ne viennent pas d'un
    dossier choisi : "Photos Amélie Robe naissance". */
@@ -4240,11 +4248,13 @@ async function lancerGalerie(){
   p.cles=lots.flatMap(x=>x.fichiers.map(()=>x.cle));
   p.liens=Object.fromEntries(cles.map(k=>[k,lienDe(k)]));
   const go=document.getElementById("gpGo");
-  if(p.parent){
-    p.sorties={}; p.allege={}; p.allegees=new Set();
+  const aAlleger=lots.filter(x=>blocGal(x.cle).parent);
+  if(aAlleger.length){
+    p.sorties={}; p.parents={}; p.allege={}; p.allegees=new Set();
     try{
-      for(const x of lots){
-        p.sorties[x.cle]=await ouvrirSousDossierAl(p.parent,nomDossierAllegeAl(x.fichiers,repliAllegeGal(x.cle)));
+      for(const x of aAlleger){
+        p.parents[x.cle]=blocGal(x.cle).parent;
+        p.sorties[x.cle]=await ouvrirSousDossierAl(p.parents[x.cle],nomDossierAllegeAl(x.fichiers,repliAllegeGal(x.cle)));
         p.allege[x.cle]={avant:0,apres:0,nb:0,rates:[]};
       }
     }catch(e){ p.sorties=null; alert("Impossible de créer le dossier des photos allégées : "+e.message); return; }
@@ -4427,7 +4437,7 @@ function blocSwissFinGal(p,cle){
   return `<div class="grouplab" style="margin-top:4px">${al&&al.nb?"Photos allégées pour SwissTransfer":"Lien pour tout télécharger"}${deLa}</div>
     ${al&&al.nb?`<div class="card" style="padding:13px 15px;font-size:13.5px;line-height:1.6;margin-bottom:8px">
       <b>${al.nb} photos</b> : ${goAl(al.avant)} → <b>${goAl(al.apres)}</b> (${al.avant?Math.round((1-al.apres/al.avant)*100):0} % de moins).<br>
-      Dans <b>${esc(p.parent.name)}</b> › <b>${esc(sortie.name)}</b>.
+      Dans <b>${esc(p.parents[cle].name)}</b> › <b>${esc(sortie.name)}</b>.
       ${al.rates.length?`<div style="color:var(--danger);margin-top:6px">${al.rates.length} photo(s) non allégée(s), à envoyer telles quelles : ${esc(al.rates.slice(0,5).join(", "))}</div>`:""}
     </div>`:""}
     <button class="btn wide" onclick="envoyerSwissFin('${esc(p.jeton)}','${cle}')">Envoyer sur SwissTransfer${suf?" (la "+esc(cle)+")":""}</button>
