@@ -55,7 +55,9 @@ const LIBELLES_SEANCE = {
   "grossesse + naissance":   "Séance photo grossesse + naissance",
   "suivi bebe":              "Séance photo suivi bébé",
   "famille":                 "Séance photo famille",
-  "smash cake":              "Séance photo smash cake"
+  "smash cake":              "Séance photo smash cake",
+  /* Matt la Photo (24/10/2026). */
+  "shooting portrait":       "Shooting photo portrait"
 };
 
 /* Le detail d'une seance, reconstruit depuis les metadonnees Stripe. Les
@@ -164,6 +166,8 @@ export async function saveInvoice({ number, kind, pdf, client, montant, dateStr,
 
 // inv : { number, dateStr, client:{name,email}, typeLabel, seanceDateFr, time, acompte, total }
 export async function makeInvoicePdf(inv){
+  /* L'enseigne : Mybabyshoot, ou Matt la Photo pour un shooting (inv.enseigne). */
+  const ISSUER = emetteur(inv);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595, 842]); // A4
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -177,7 +181,7 @@ export async function makeInvoicePdf(inv){
   T(M, 84, ISSUER.nom, 10, font, soft);
   T(M, 98, ISSUER.adresse, 10, font, soft);
   T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
-  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
+  T(M, 126, contactDe(ISSUER), 10, font, soft);
 
   // Bloc facture (droite)
   T(360, 62, "FACTURE D'ACOMPTE", 15, bold);
@@ -217,7 +221,7 @@ export async function makeInvoicePdf(inv){
     y += 20;
   } else {
     T(M, y, "Acompte - " + libelleSeance(inv.typeLabel), 11, font);
-    T(M, y + 16, "du " + inv.seanceDateFr + " à " + inv.time + " (studio, La Mulatière)", 9.5, font, soft);
+    T(M, y + 16, "du " + inv.seanceDateFr + " à " + inv.time + (inv.lieu ? " (" + String(inv.lieu).slice(0, 60) + ")" : " (studio, La Mulatière)"), 9.5, font, soft);
     T(430, y, eur(inv.acompte), 11, bold);
     y += 36;
   }

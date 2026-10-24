@@ -204,8 +204,12 @@ export function isBooked(data, date, time){
 }
 
 // Un creneau est-il verrouille (paiement en cours) et non expire ?
+/* Les verrous d'un shooting Matt la Photo (brand "matt-la-photo") ne
+   comptent pas ici : Mybabyshoot garde la priorite sur l'agenda (choix de
+   Matt, 24/10/2026, voir mlp-resa.mjs). */
 export function isLocked(data, date, time, now = Date.now()){
   return data.mbsLocks.some(l =>
+    l.brand !== "matt-la-photo" &&
     l.date === date && l.time === time && Number(l.expiresAt) > now
   );
 }

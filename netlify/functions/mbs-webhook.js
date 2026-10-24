@@ -7,6 +7,8 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { marqueDe } from "../marques.mjs";
 import { FORMATION, codePourVente, enregistrerVente, afficherCode } from "../mlp-formation.mjs";
+import { FORMULES_MLP, BRAND_MLP, retouchesTexte, contenuFormule, seanceMybabyshootSur, shootingQuiChevauche } from "../mlp-resa.mjs";
+import { prixPhotos } from "../mbs-panier.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice, lignesSeance } from "../mbs-invoice.mjs";
@@ -353,6 +355,175 @@ async function traiterFormation(session) {
   }
 }
 
+/* Un shooting portrait Matt la Photo reserve et paye (compte Stripe Matt la
+   Photo, voir mlp-resa.mjs) : meme chemin qu'une reservation Mybabyshoot,
+   mais tout au nom de Matt la Photo (fiche, seance et paiement de sa
+   marque, facture MLP, son mail). Une seance Mybabyshoot au meme moment ne
+   bloque pas le shooting (priorite a Mybabyshoot, choix de Matt) : on le
+   signale et on pose un rappel pour decaler. */
+async function traiterResaMlp(session, md) {
+  const store = crmStore();
+  const data = await loadData(store);
+  if (data.seances.some(s => s.stripeSession === session.id) || data.paiements.some(p => p.stripeSession === session.id)) return;
+  const now = Date.now();
+  pruneLocks(data, now);
+  const marque = marqueDe("matt-la-photo");
+  const f = FORMULES_MLP[md.gamme] || { nom: String(md.gamme || "?"), prix: 0, retouches: null };
+  const date = md.date, time = md.time;
+  const acompte = Number(md.acompte) || 0, total = Number(md.total) || acompte;
+  const photos = parseInt(md.photos, 10) || 0, fraisDepl = Number(md.fraisDepl) || 0;
+  const prenom = md.prenom || "", nom = md.nom || "";
+  const email = (md.email || session.customer_email || "").trim(), tel = (md.tel || "").trim();
+  const name = [prenom, nom].filter(Boolean).join(" ").trim() || "Client Matt la Photo";
+  const toutRegle = md.integral === "1";
+  const lieu = md.lieuExt || "";
+
+  let client = data.clients.find(c => c.brand === BRAND_MLP &&
+    ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) ||
+     (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, ""))));
+  if (!client) {
+    client = { id: uid(), brand: BRAND_MLP, name, status: "Confirme", type: "Shooting", tel, email, insta: "",
+      source: "Réservation site Matt la Photo", origineWeb: String(md.origine || "Direct"), notes: "", fromSite: true, createdAt: now };
+    data.clients.push(client);
+  } else {
+    client.tel = client.tel || tel; client.email = client.email || email;
+    if (!["Seance faite", "Livre", "Archive"].includes(client.status)) client.status = "Confirme";
+  }
+
+  const nomDe = (s) => (data.clients.find(c => c.id === s.clientId) || {}).name || "une autre cliente";
+  /* Un autre shooting sur ce creneau : la page Stripe reste payable 24 h,
+     le verrou ne tient que 3 minutes. On garde l'argent et on previent. */
+  const autre = data.seances.find(s => s.brand === BRAND_MLP && s.date === date && s.time === time && s.status !== "Annulee" && s.type !== "Indispo");
+  const mbs = seanceMybabyshootSur(data, date, time);
+  const nomFormule = f.video ? f.nom : "Formule " + f.nom;
+  const formuleTxt = nomFormule + " (" + contenuFormule(f) + ")"
+    + (photos ? ", " + photos + " photo" + (photos > 1 ? "s" : "") + " retouchée" + (photos > 1 ? "s" : "") + " en plus" : "") + ".";
+
+  data.seances.push({
+    id: uid(), clientId: client.id, brand: BRAND_MLP, type: "Shooting portrait",
+    date, time, place: lieu, status: "A venir",
+    notes: (autre ? "CRÉNEAU EN DOUBLE : " + nomDe(autre) + " a déjà ce créneau. À déplacer. " : "")
+      + (mbs ? "EN MÊME TEMPS QU'UNE SÉANCE MYBABYSHOOT (" + nomDe(mbs) + " à " + (mbs.time || "?") + ") : Mybabyshoot est prioritaire, ce shooting est à décaler. " : "")
+      /* L'offre video : l'accord, sa date, et le compte a identifier. */
+      + (md.video === "1" ? "OFFRE VIDÉO : accord pour être filmé(e) et publié(e) sur TikTok et Instagram donné en réservant, le "
+          + new Date(md.consentVideo || now).toLocaleString("fr-FR", { timeZone: "Europe/Paris" }) + "."
+          + (md.reseau ? " Compte à identifier : " + md.reseau + "." : " Pas de compte à identifier.") + " " : "")
+      + "Réservation en ligne. " + formuleTxt + " Total " + total + " €, "
+      + (toutRegle ? "réglé en totalité en 3 fois avec Klarna, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
+      + (lieu ? " Lieu : " + lieu + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : ""),
+    createdAt: now, stripeSession: session.id
+  });
+  data.paiements.push({
+    id: uid(), brand: BRAND_MLP, clientId: client.id,
+    label: toutRegle ? "Shooting portrait réglé en ligne" : "Acompte shooting portrait",
+    total: String(total), acompte: String(acompte), statut: toutRegle ? "Solde" : "Acompte recu",
+    date: new Date(now).toISOString().slice(0, 10), dueDate: date,
+    notes: (toutRegle ? "Totalité réglée en ligne en 3 fois avec Klarna, rien à encaisser le jour J. " : "Réglé en ligne via Stripe. ") + formuleTxt
+      + (fraisDepl ? " Déplacement " + fraisDepl + " €." : ""),
+    stripeSession: session.id
+  });
+  data.taches = data.taches || [];
+  const aujourdhui = new Date(now).toISOString().slice(0, 10);
+  if (autre) data.taches.push({ id: uid(), done: false, priority: "Haute", clientId: client.id, dueDate: aujourdhui,
+    title: "Shooting en double — " + name + " et " + nomDe(autre),
+    notes: "Les deux ont payé pour le " + frDate(date) + " à " + time + ". " + nomDe(autre) + " a réservé en premier : appelez " + name + " pour une autre date.",
+    stripeSession: session.id });
+  if (mbs) data.taches.push({ id: uid(), done: false, priority: "Haute", clientId: client.id, dueDate: aujourdhui,
+    title: "Décaler le shooting de " + name,
+    notes: "Shooting Matt la Photo réservé le " + frDate(date) + " à " + time + ", en même temps que la séance Mybabyshoot de "
+      + nomDe(mbs) + " (" + (mbs.time || "journée") + "). Mybabyshoot est prioritaire : appelez " + name + " pour décaler.",
+    stripeSession: session.id });
+  /* La video a tourner et a publier : le rappel tombe le jour du shooting. */
+  if (md.video === "1") data.taches.push({ id: uid(), done: false, priority: "Haute", clientId: client.id, dueDate: date,
+    title: "Vidéo à tourner et publier — " + name,
+    notes: "Offre Matt la Photo : tourner la vidéo pendant le shooting, puis la publier sur TikTok et Instagram."
+      + (md.reseau ? "\nL'identifier : " + md.reseau + "." : "") + "\nAccord donné en réservant (voir la séance).",
+    stripeSession: session.id });
+  if (md.lockId) data.mbsLocks = data.mbsLocks.filter(l => l.id !== md.lockId);
+  data.t = now;
+  await store.setJSON("data", data);
+
+  try { await notifyAll("Nouveau shooting · Matt la Photo",
+    name + " · " + frDate(date) + " à " + time + " · " + (toutRegle ? "réglé en 3 fois" : "acompte " + acompte + " €")
+      + (mbs ? " · EN MÊME TEMPS QU'UNE SÉANCE MYBABYSHOOT" : ""), "/"); } catch (e) {}
+
+  let invNum = null, invPdf = null;
+  try {
+    const dateStr = new Date(now).toLocaleDateString("fr-FR");
+    invNum = await nextInvoiceNumber(marque.serieFactures);
+    const lignes = [{ libelle: (f.video ? f.nom + " : shooting + vidéo" : "Formule " + f.nom) + " (" + retouchesTexte(f) + ")", montant: f.prix }];
+    if (photos) lignes.push({ libelle: photos + " photo" + (photos > 1 ? "s" : "") + " retouchée" + (photos > 1 ? "s" : "") + " en plus", montant: prixPhotos(photos) });
+    if (fraisDepl) lignes.push({ libelle: "Frais de déplacement" + (md.km ? " (" + md.km + " km)" : ""), montant: fraisDepl });
+    const commun = { number: invNum, dateStr, client: { name, email }, typeLabel: "Shooting portrait", seanceDateFr: frDate(date),
+      lignes, enseigne: marque.nom, email: marque.email() };
+    invPdf = toutRegle
+      ? await makeFinalInvoicePdf({ ...commun, total, acompte: 0 })
+      : await makeInvoicePdf({ ...commun, time, acompte, total, lieu });
+    await saveInvoice({ number: invNum, kind: toutRegle ? "solde" : "acompte", pdf: invPdf, client: { name, email },
+      montant: toutRegle ? total : acompte, dateStr,
+      detail: (toutRegle ? "Shooting réglé " : "Acompte shooting ") + "du " + frDate(date) + " a " + time + " (Matt la Photo)" });
+  } catch (e) { invNum = null; invPdf = null; }
+
+  if (email) {
+    const reste = Math.max(0, total - acompte);
+    const html =
+      "<p>Bonjour " + esc(prenom) + " !</p>" +
+      "<p>Votre shooting est bien réservé. Merci pour votre confiance, j'ai hâte !</p>" +
+      "<ul>" +
+      "<li><b>Formule :</b> " + esc(f.nom) + ", " + esc(contenuFormule(f)) + (photos ? " + " + photos + " en plus" : "") + "</li>" +
+      "<li><b>Date :</b> " + frDate(date) + " à " + esc(time.replace(":", "h")) + "</li>" +
+      (lieu ? "<li><b>Lieu :</b> " + esc(lieu) + "</li>" : "") +
+      (toutRegle
+        ? "<li><b>Shooting réglé :</b> " + total + " €, en 3 fois avec Klarna</li><li><b>À régler le jour J :</b> rien, tout est payé</li>"
+        : "<li><b>Acompte réglé :</b> " + acompte + " €</li><li><b>Solde le jour du shooting :</b> " + reste + " €</li>") +
+      "</ul>" +
+      (invPdf ? (toutRegle ? "<p>Votre facture est en pièce jointe.</p>"
+        : "<p>Votre facture d'acompte est en pièce jointe. La facture complète suivra le dernier règlement.</p>") : "") +
+      (md.video === "1"
+        ? "<p>Pendant le shooting, je tourne aussi la vidéo que je publierai sur TikTok et Instagram" + (md.reseau ? ", en vous identifiant (" + esc(md.reseau) + ")" : "") + ". Vous m'avez donné votre accord en réservant ; si vous changez d'avis, dites-le-moi simplement.</p>"
+        : "") +
+      "<p>Une question d'ici le jour J (tenues, lieu précis) ? Répondez à ce mail ou appelez-moi au 06 47 76 54 17.</p>" +
+      "<p>À très vite<br>" + esc(marque.signature) + "</p>";
+    try {
+      await sendMail({ to: email, subject: "Votre shooting est réservé · " + marque.nom, html, marque: marque.cle,
+        attachments: invPdf ? [{ filename: "Facture-" + (invNum || "shooting") + ".pdf", content: invPdf, contentType: "application/pdf" }] : [] });
+    } catch (e) {}
+  }
+}
+
+/* Un shooting commence mais jamais paye : on garde le contact (Prospect de la
+   marque Matt la Photo), on previent Matt, et on relance avec douceur. */
+async function traiterAbandonMlp(session, md) {
+  const store = crmStore();
+  const data = await loadData(store);
+  if ((data.clients || []).some(c => c.abandonSession === session.id)) return;
+  const now = Date.now();
+  const marque = marqueDe("matt-la-photo");
+  const prenom = md.prenom || "", nom = md.nom || "";
+  const email = (md.email || session.customer_email || "").trim(), tel = (md.tel || "").trim();
+  const qui = [prenom, nom].filter(Boolean).join(" ").trim() || "Prospect";
+  const ligne = "Shooting commencé le " + new Date(now).toLocaleDateString("fr-FR") + " (" + frDate(md.date) + " à " + md.time
+    + ", " + (md.total || "?") + " €) mais paiement non finalisé.";
+  const dup = data.clients.find(c => c.brand === BRAND_MLP &&
+    ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) || (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, ""))));
+  if (dup) { dup.notes = (dup.notes ? dup.notes + "\n" : "") + ligne; dup.abandonSession = session.id; dup.fromSite = true; }
+  else data.clients.push({ id: uid(), brand: BRAND_MLP, name: qui, status: "Prospect", type: "Shooting", tel, email, insta: "",
+    source: "Réservation abandonnée, site Matt la Photo", notes: ligne, fromSite: true, abandonSession: session.id, createdAt: now });
+  data.t = now;
+  await store.setJSON("data", data);
+  try { await notifyAll("Shooting non finalisé · Matt la Photo", qui + " · " + frDate(md.date) + (tel ? " · " + tel : ""), "/"); } catch (e) {}
+  if (email) {
+    const html = "<p>Bonjour " + esc(prenom) + ",</p>"
+      + "<p>Vous avez commencé à réserver un <b>shooting portrait</b>, et la réservation n'est pas allée au bout. Aucun souci : le créneau a simplement été libéré.</p>"
+      + "<p>Si vous avez toujours envie de faire ce shooting, tout est encore possible :</p>"
+      + "<p><a href=\"" + esc(marque.site() + "/shooting.html#reserver") + "\" style=\"display:inline-block;background:#FF7518;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:bold\">Choisir une nouvelle date</a></p>"
+      + "<p>Une question sur le lieu, les tenues ou le déroulé ? Répondez simplement à ce mail ou appelez-moi au <b>06 47 76 54 17</b>.</p>"
+      + "<p>À très vite<br>" + esc(marque.signature) + "</p>"
+      + "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une réservation a été commencée avec cette adresse. Si ce n'était pas vous, ignorez simplement ce mail.</p>";
+    try { await sendMail({ to: email, subject: "Votre shooting est resté en attente", html, marque: marque.cle }); } catch (e) {}
+  }
+}
+
 /* Bon cadeau paye : on cree le code, on l'envoie a l'acheteur (bon a imprimer
    ou a transferer), on previent Matt et on trace l'encaissement dans le CRM. */
 async function traiterBonCadeau(session, md) {
@@ -583,6 +754,18 @@ export default async (request) => {
       try { await traiterFormation(s0); } catch (e) {}
       return new Response(JSON.stringify({ received: true, formation: true }), { status: 200 });
     }
+    /* Un shooting portrait, reserve sur le site Matt la Photo. */
+    if (md0.app === "mlp-resa") {
+      if (event.type === "checkout.session.expired") {
+        try { await traiterAbandonMlp(s0, md0); } catch (e) {}
+        return new Response(JSON.stringify({ received: true, abandon: true }), { status: 200 });
+      }
+      if (event.type === "checkout.session.completed" && s0.payment_status === "paid") {
+        try { await traiterResaMlp(s0, md0); } catch (e) {}
+        return new Response(JSON.stringify({ received: true, shooting: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ received: true, unpaid: true }), { status: 200 });
+    }
     if (event.type !== "checkout.session.completed" || md0.app !== "mbs-lien" || s0.payment_status !== "paid")
       return new Response(JSON.stringify({ received: true, ignored: "matt_la_photo" }), { status: 200 });
     try { await traiterLien(s0, md0, { compte: "matt-la-photo" }); } catch (e) {}
@@ -754,6 +937,24 @@ export default async (request) => {
         + "\n" + autreNom + " a réservé en premier."
         + "\n\nSa page de paiement était restée ouverte : le créneau s'était libéré"
         + " entre-temps. Appelez " + name + " pour lui proposer une autre date.",
+      stripeSession: session.id
+    });
+  }
+
+  /* Un shooting Matt la Photo deja pose au meme moment : Mybabyshoot est
+     prioritaire (choix de Matt, 24/10/2026), c'est le shooting qu'il faut
+     decaler. Le rappel le dit le jour meme. */
+  const shooting = shootingQuiChevauche(data, date, time);
+  if (shooting) {
+    const qui = (data.clients.find(c => c.id === shooting.clientId) || {}).name || "le client";
+    data.taches = data.taches || [];
+    data.taches.push({
+      id: uid(), done: false, priority: "Haute", clientId: shooting.clientId || "",
+      title: "Décaler le shooting de " + qui,
+      dueDate: new Date(now).toISOString().slice(0, 10),
+      notes: name + " vient de réserver une séance Mybabyshoot le " + frDate(date) + " à " + time
+        + ", en même temps que le shooting Matt la Photo de " + qui + " (" + (shooting.time || "journée") + ")."
+        + " Mybabyshoot est prioritaire : appelez " + qui + " pour décaler son shooting.",
       stripeSession: session.id
     });
   }

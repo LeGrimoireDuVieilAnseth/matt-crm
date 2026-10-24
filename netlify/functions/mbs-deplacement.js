@@ -46,4 +46,6 @@ export default async (request) => {
   });
 };
 
-export const config = { path: "/.netlify/functions/mbs-deplacement" };
+/* Une adresse neutre pour le site Matt la Photo (reservation des shootings),
+   qui ne doit pas nommer Mybabyshoot, meme dans son code. */
+export const config = { path: ["/.netlify/functions/mbs-deplacement", "/deplacement-api"] };
