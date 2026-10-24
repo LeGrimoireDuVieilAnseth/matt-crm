@@ -6,6 +6,7 @@
 import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { marqueDe } from "../marques.mjs";
+import { FORMATION, codePourVente, enregistrerVente, afficherCode } from "../mlp-formation.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice, lignesSeance } from "../mbs-invoice.mjs";
@@ -278,6 +279,80 @@ async function traiterLien(session, md, { compte = "mybabyshoot" } = {}) {
   }
 }
 
+/* La formation "Oser" de Matt la Photo, achetee sur son site (compte Stripe
+   Matt la Photo). Le code d'acces part par mail, avec la facture ; la
+   recette entre dans le CRM. Le code lui-meme peut deja exister : la page
+   de remerciement l'a peut-etre cree avant que Stripe nous previenne (voir
+   mlp-formation.mjs), c'est alors le meme. */
+async function traiterFormation(session) {
+  const cd = session.customer_details || {};
+  const email = (cd.email || session.customer_email || "").trim();
+  const nom = (cd.name || "").trim();
+  const montant = Math.round((session.amount_total || 0) / 100);
+  const v = await codePourVente({ sessionId: session.id, email, montant });
+  /* Stripe peut rejouer l'evenement : une seule facture, un seul mail. */
+  if (v.traitee) return;
+  const marque = marqueDe("matt-la-photo");
+  const code = afficherCode(v.code);
+  const now = Date.now();
+  const dateStr = new Date(now).toLocaleDateString("fr-FR");
+  const lignes = [{ libelle: FORMATION.libelle, detail: "Code d'accès personnel " + code, montant }];
+
+  let invNum = null, invPdf = null;
+  try {
+    invNum = await nextInvoiceNumber(marque.serieFactures);
+    invPdf = await makeComplementInvoicePdf({
+      number: invNum, dateStr, client: { name: nom || email, email },
+      libelle: FORMATION.libelle, lignes, adresse: null, montant, troisFois: false,
+      enseigne: marque.nom, email: marque.email()
+    });
+    await saveInvoice({ number: invNum, kind: "complement", pdf: invPdf, client: { name: nom || email, email },
+      montant, dateStr, detail: FORMATION.libelle + " (code " + code + ")" });
+  } catch (e) { invNum = null; invPdf = null; }
+
+  try {
+    const store = crmStore();
+    const data = await loadData(store);
+    if (!(data.paiements || []).some(p => p.stripeSession === session.id)) {
+      data.paiements.push({
+        id: uid(), brand: marque.cle, clientId: "",
+        label: ("Formation « " + FORMATION.nom + " » · " + (nom || email)).slice(0, 120),
+        total: String(montant), acompte: String(montant), statut: "Solde",
+        date: new Date(now).toISOString().slice(0, 10), dueDate: "",
+        notes: "Formation vendue en ligne sur le site Matt la Photo. " + (email ? "Acheteur : " + email + ". " : "")
+          + "Code " + code + "." + (invNum ? " Facture " + invNum + "." : ""),
+        stripeSession: session.id, invoiceNumber: invNum || ""
+      });
+      data.t = now;
+      await store.setJSON("data", data);
+    }
+  } catch (e) {}
+
+  v.traitee = now; v.facture = invNum || "";
+  try { await enregistrerVente(v); } catch (e) {}
+
+  try { await notifyAll("Formation vendue · " + montant + " €", (nom || email || "Un acheteur") + " · « " + FORMATION.nom + " »", "/"); } catch (e) {}
+
+  if (email) {
+    const lien = marque.site() + "/cours.html#code=" + v.code;
+    const html =
+      "<p>Bonjour" + (nom ? " " + esc(nom.split(" ")[0]) : "") + " !</p>" +
+      "<p>Merci pour ton achat de la formation <b>« " + esc(FORMATION.nom) + " »</b>. Voici ton code d'accès personnel :</p>" +
+      "<p style=\"font-size:24px;font-weight:bold;letter-spacing:2px;font-family:monospace\">" + esc(code) + "</p>" +
+      "<p>Il sert <b>une seule fois</b>, à créer ton compte. Ensuite, tu entres avec ton mail et ton mot de passe.</p>" +
+      "<p><a href=\"" + esc(lien) + "\" style=\"display:inline-block;background:#FF7518;color:#fff;padding:12px 20px;"
+        + "border-radius:999px;text-decoration:none;font-weight:bold\">Créer mon compte</a></p>" +
+      (invPdf ? "<p>Ta facture est en pièce jointe.</p>" : "") +
+      "<p>Une question ? Réponds à ce mail ou appelle-moi au 06 47 76 54 17.</p>" +
+      "<p>À très vite<br>" + esc(marque.signature) + "</p>";
+    try {
+      /* La formation tutoie, comme Matt dans ses videos. */
+      await sendMail({ to: email, subject: "Ton accès à la formation « " + FORMATION.nom + " »", html, marque: marque.cle,
+        attachments: invPdf ? [{ filename: "Facture-" + (invNum || "formation") + ".pdf", content: invPdf, contentType: "application/pdf" }] : [] });
+    } catch (e) {}
+  }
+}
+
 /* Bon cadeau paye : on cree le code, on l'envoie a l'acheteur (bon a imprimer
    ou a transferer), on previent Matt et on trace l'encaissement dans le CRM. */
 async function traiterBonCadeau(session, md) {
@@ -485,8 +560,8 @@ export default async (request) => {
 
   /* Deux comptes Stripe envoient ici : celui de Mybabyshoot, et celui de
      Matt la Photo (MLP_STRIPE_WEBHOOK_SECRET). Un evenement du compte Matt la
-     Photo ne peut etre qu'une commande de SA galerie : rien d'autre n'y est
-     traite (ni reservation, ni bon cadeau). */
+     Photo ne peut etre qu'une commande de SA galerie, ou l'achat de sa
+     formation : rien d'autre n'y est traite (ni reservation, ni bon cadeau). */
   let event, compteMatt = false;
   try {
     const stripe = new Stripe(secret);
@@ -503,6 +578,11 @@ export default async (request) => {
   }
   if (compteMatt) {
     const s0 = (event.data && event.data.object) || {}, md0 = s0.metadata || {};
+    /* La formation "Oser", vendue sur le site Matt la Photo. */
+    if (event.type === "checkout.session.completed" && md0.app === "mlp-formation" && s0.payment_status === "paid") {
+      try { await traiterFormation(s0); } catch (e) {}
+      return new Response(JSON.stringify({ received: true, formation: true }), { status: 200 });
+    }
     if (event.type !== "checkout.session.completed" || md0.app !== "mbs-lien" || s0.payment_status !== "paid")
       return new Response(JSON.stringify({ received: true, ignored: "matt_la_photo" }), { status: 200 });
     try { await traiterLien(s0, md0, { compte: "matt-la-photo" }); } catch (e) {}

@@ -7264,6 +7264,7 @@ let regOnglet = "";
 function setRegOnglet(g){ regOnglet = g || ""; majRegOnglets(); window.scrollTo(0,0); }
 function majRegOnglets(){
   renderAvisCard();
+  if (regOnglet === "formation") chargerFormation();
   const menu = document.getElementById("regMenu");
   if (menu) menu.style.display = regOnglet ? "none" : "";
   document.querySelectorAll("#reglagesBody .reg-groupe").forEach(function(d){
@@ -7306,6 +7307,11 @@ function renderReglages(){
         <button class="reg-ligne" onclick="setRegOnglet('codes')">
           <span class="ic"><svg viewBox="0 0 24 24"><path d="M20.6 13.4L11 3.8V3H4v7h.8l9.6 9.6a2 2 0 0 0 2.8 0l3.4-3.4a2 2 0 0 0 0-2.8z"/><circle cx="7.5" cy="6.5" r="1.2"/></svg></span>
           <span class="tx"><b>Codes de réduction</b><span>Générer des codes de 100 € pour un partenaire</span></span>
+          <span class="fl">&rsaquo;</span>
+        </button>
+        <button class="reg-ligne" onclick="setRegOnglet('formation')">
+          <span class="ic"><svg viewBox="0 0 24 24"><path d="M2 8.5l10-5 10 5-10 5z"/><path d="M6 10.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.5"/></svg></span>
+          <span class="tx"><b>Formation « Oser »</b><span>Matt la Photo : la vente, les vidéos, les acheteurs</span></span>
           <span class="fl">&rsaquo;</span>
         </button>
         <button class="reg-ligne" onclick="setRegOnglet('ca')">
@@ -7439,6 +7445,12 @@ function renderReglages(){
           <span id="iaConsignesMsg" style="font-size:12.5px;color:var(--ink-3)"></span>
         </div>
       </div>
+    </div>
+
+    <div class="reg-groupe" data-g="formation">
+      <button class="reg-retour" onclick="setRegOnglet('')"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Tous les réglages</button>
+      <div class="reg-titre">Formation « Oser »</div>
+      <div id="formationCard"></div>
     </div>
 
     <div class="reg-groupe" data-g="contacts">
@@ -9943,6 +9955,202 @@ async function envoyerFactureSolde(id){
     openSeance(id);
     toast("Facture "+(j.facture||"")+" envoyée");
   }catch(e){ toast("Pas de réseau, réessaie"); }
+}
+
+/* ============================================================
+   FORMATION "OSER" (MATT LA PHOTO)
+
+   La formation en ligne vendue sur mattlaphoto.netlify.app (24/10/2026).
+   Chaque acheteur recoit un code qui ne sert qu'une fois, a creer son
+   compte. Ici, Matt ouvre ou ferme la vente, met ses videos Vimeo, voit
+   qui a achete, offre un acces (une collab, un ami) ou le retire (un
+   remboursement). Le detail est dans netlify/mlp-formation.mjs.
+   ============================================================ */
+const FORMATION_API = "/.netlify/functions/mlp-formation-admin";
+let formationEtat = null;
+/* Les lecons en cours de modification, tant qu'elles ne sont pas enregistrees. */
+let formationLecons = [];
+
+async function appelFormation(corps){
+  try{
+    const r=await fetch(FORMATION_API,{method:"POST",headers:apiHeaders(true),body:JSON.stringify(corps)});
+    if(r.status===401){ handleUnauthorized(); return null; }
+    return await r.json().catch(()=>({ok:false}));
+  }catch(e){ return {ok:false,error:"reseau"}; }
+}
+
+async function chargerFormation(){
+  const box=document.getElementById("formationCard"); if(!box) return;
+  if(!formationEtat) box.innerHTML='<div class="card" style="padding:16px;color:var(--ink-3)">Chargement…</div>';
+  const j=await appelFormation({action:"etat"});
+  if(!j) return;
+  if(!j.ok){ box.innerHTML='<div class="card" style="padding:16px">'+(j.error==="reseau"?"Pas de réseau, réessaie.":"La formation ne répond pas.")+'</div>'; return; }
+  formationEtat=j;
+  formationLecons=(j.lecons||[]).map(l=>({...l}));
+  dessinerFormation();
+}
+
+function dessinerFormation(){
+  const box=document.getElementById("formationCard"), e=formationEtat; if(!box||!e) return;
+  const ouverte=!!(e.reglages&&e.reglages.ouverte);
+  const pres=(e.reglages&&e.reglages.presentation)||{};
+  const codes=e.codes||[];
+  const vendus=codes.filter(c=>c.source==="achat"), offerts=codes.filter(c=>c.source==="offert");
+  const recette=vendus.reduce((s,c)=>s+(Number(c.montant)||0),0);
+  const alertes=[];
+  if(!e.paiement) alertes.push("Ton compte Stripe Matt la Photo n'est pas encore branché (variable <b>MLP_STRIPE_SECRET_KEY</b> dans Netlify) : la vente ne peut pas s'ouvrir.");
+  if(!e.mail) alertes.push("La boîte mail Matt la Photo n'est pas branchée (variable <b>MLP_SMTP_PASS</b>) : les acheteurs verraient leur code à l'écran, mais ne le recevraient pas par mail, ni le lien « mot de passe oublié ».");
+  box.innerHTML=`
+    <div class="card" style="padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:800;font-size:16px">La vente est ${ouverte?'<span style="color:#1f9d55">ouverte</span>':'<span style="color:var(--ink-3)">fermée</span>'}</div>
+          <div style="font-size:12.5px;color:var(--ink-3)">${e.prix} € · ${vendus.length} vendue${vendus.length>1?"s":""} (${recette} €)${offerts.length?" · "+offerts.length+" offerte"+(offerts.length>1?"s":""):""}</div>
+        </div>
+        <button class="btn${ouverte?" ghost":""}" onclick="ouvrirFormation(${!ouverte})" ${!ouverte&&!e.paiement?"disabled":""}>${ouverte?"Fermer la vente":"Ouvrir la vente"}</button>
+      </div>
+      ${alertes.map(a=>`<div style="margin-top:12px;font-size:13px;line-height:1.5;background:var(--surface-2);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px">${a}</div>`).join("")}
+      <div style="font-size:12.5px;color:var(--ink-3);margin-top:12px;line-height:1.5">
+        Fermée, la page affiche « Bientôt disponible ». Ouvre-la quand tes vidéos sont en ligne.<br>
+        La page : <a href="${esc(e.adresse)}" target="_blank" rel="noopener">${esc(String(e.adresse).replace(/^https:\/\//,""))}</a>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px;margin-bottom:12px">
+      <div style="font-weight:800;margin-bottom:6px">Ta vidéo de présentation</div>
+      <div style="font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:10px">
+        En haut de la page de la formation : ta vidéo d'appel à l'action, celle qui explique la formation.
+        Tout le monde la voit, même sans avoir acheté. Sans lien, la page affiche « Bientôt ici ».
+      </div>
+      <div class="field"><label>Lien Vimeo</label>
+        <input id="formPresVideo" type="url" inputmode="url" placeholder="https://vimeo.com/..." value="${esc(pres.video||"")}"></div>
+      <div class="field"><label>Format de la vidéo</label>
+        <select id="formPresFormat">
+          <option value="vertical" ${pres.format!=="horizontal"?"selected":""}>Verticale, comme sur TikTok</option>
+          <option value="horizontal" ${pres.format==="horizontal"?"selected":""}>Horizontale, comme sur YouTube</option>
+        </select></div>
+      <button class="btn" onclick="enregistrerPresentation()">Enregistrer la vidéo</button>
+    </div>
+
+    <div class="card" style="padding:16px;margin-bottom:12px">
+      <div style="font-weight:800;margin-bottom:6px">Les 30 leçons</div>
+      <div style="font-size:13px;color:var(--ink-2);line-height:1.55">
+        Elles arrivent avec l'espace élève, la prochaine étape : tu pourras coller ici le lien Vimeo de chaque leçon,
+        et voir la formation en mode auteur, avec tes scripts vidéo.
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <div style="font-weight:800">Acheteurs et codes</div>
+        <button class="btn ghost" onclick="offrirFormation()">Offrir un accès</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-bottom:8px">
+        Chaque code ne sert qu'une fois, à créer un compte. Un compte s'ouvre sur ${e.appareils} appareils au plus en même temps.
+      </div>
+      ${codes.length?codes.map(ligneCodeFormation).join(""):'<div style="font-size:13.5px;color:var(--ink-3)">Aucune vente pour l\'instant.</div>'}
+    </div>`;
+  dessinerLecons();
+}
+
+function ligneCodeFormation(c){
+  const d=(t)=>t?new Date(t).toLocaleDateString("fr-FR"):"";
+  const etat=c.retire?'<span style="color:#c0392b">accès retiré</span>'
+    :c.statut==="utilise"?"compte de <b>"+esc(c.compte)+"</b> depuis le "+d(c.utiliseLe)
+    :'<span style="color:var(--accent)">pas encore utilisé</span>';
+  const quoi=c.source==="offert"?"Offert"+(c.note?" · "+esc(c.note):""):"Acheté "+(c.montant||0)+" €"+(c.email?" · "+esc(c.email):"");
+  return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <div style="min-width:0">
+        <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;letter-spacing:.04em">${esc(c.code)}</div>
+        <div style="font-size:12.5px;color:var(--ink-3)">${quoi} · le ${d(c.at)}</div>
+        <div style="font-size:12.5px;color:var(--ink-2)">${etat}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        ${c.statut!=="utilise"?`<button class="btn ghost" style="padding:7px 11px;font-size:12.5px" data-code="${esc(c.code)}" onclick="copierTexteGal(this.dataset.code,'Code copié')">Copier</button>`:""}
+        ${c.statut==="utilise"&&!c.retire?`<button class="btn ghost" style="padding:7px 11px;font-size:12.5px" data-email="${esc(c.compte)}" onclick="retirerFormation(this.dataset.email)">Retirer l'accès</button>`:""}
+      </div>
+    </div>`;
+}
+
+function dessinerLecons(){
+  const z=document.getElementById("formLecons"); if(!z) return;
+  if(!formationLecons.length){ z.innerHTML='<div style="font-size:13.5px;color:var(--ink-3)">Aucune leçon pour l\'instant.</div>'; return; }
+  z.innerHTML=formationLecons.map((l,i)=>`
+    <div style="border:1px solid var(--line);border-radius:12px;padding:10px 10px 2px;margin-bottom:8px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <b style="font-size:13px;color:var(--ink-3);min-width:22px">${String(i+1).padStart(2,"0")}</b>
+        <span style="flex:1"></span>
+        <button class="btn ghost" style="padding:6px 10px" title="Monter" onclick="bougerLecon(${i},-1)" ${i===0?"disabled":""}>↑</button>
+        <button class="btn ghost" style="padding:6px 10px" title="Descendre" onclick="bougerLecon(${i},1)" ${i===formationLecons.length-1?"disabled":""}>↓</button>
+        <button class="btn ghost" style="padding:6px 10px" title="Supprimer" onclick="supprimerLecon(${i})">✕</button>
+      </div>
+      <div class="field"><label>Titre</label>
+        <input type="text" maxlength="120" placeholder="Ex : Faire le premier pas" value="${esc(l.titre)}" oninput="formationLecons[${i}].titre=this.value"></div>
+      <div class="field"><label>Lien Vimeo</label>
+        <input type="url" inputmode="url" placeholder="https://vimeo.com/... (vide = bientôt disponible)" value="${esc(l.video)}" oninput="formationLecons[${i}].video=this.value"></div>
+      <div class="field"><label>Texte sous la vidéo (facultatif)</label>
+        <textarea maxlength="3000" style="min-height:64px" oninput="formationLecons[${i}].texte=this.value">${esc(l.texte)}</textarea></div>
+    </div>`).join("");
+}
+function ajouterLecon(){ formationLecons.push({titre:"",video:"",texte:""}); dessinerLecons(); }
+function bougerLecon(i,d){
+  const j=i+d; if(j<0||j>=formationLecons.length) return;
+  [formationLecons[i],formationLecons[j]]=[formationLecons[j],formationLecons[i]]; dessinerLecons();
+}
+function supprimerLecon(i){
+  const l=formationLecons[i];
+  if((l.titre||l.video||l.texte)&&!confirm("Retirer la leçon « "+(l.titre||"sans titre")+" » ?\n\nElle disparaît après « Enregistrer les leçons ».")) return;
+  formationLecons.splice(i,1); dessinerLecons();
+}
+async function enregistrerLecons(){
+  const sansTitre=formationLecons.filter(l=>!String(l.titre||"").trim()).length;
+  const j=await appelFormation({action:"lecons",lecons:formationLecons});
+  if(!j) return;
+  if(!j.ok){ toast(j.error==="video"?"Un lien n'est pas un lien Vimeo : vérifie les leçons":"Enregistrement impossible"); return; }
+  formationEtat.lecons=j.lecons; formationLecons=j.lecons.map(l=>({...l}));
+  dessinerLecons();
+  toast(sansTitre?"Leçons enregistrées (celles sans titre sont retirées)":"Leçons enregistrées");
+}
+
+async function enregistrerPresentation(){
+  const video=document.getElementById("formPresVideo").value.trim();
+  const format=document.getElementById("formPresFormat").value;
+  const j=await appelFormation({action:"presentation",video,format});
+  if(!j) return;
+  if(!j.ok){ toast(j.error==="video"?"Ce n'est pas un lien Vimeo":"Enregistrement impossible"); return; }
+  formationEtat.reglages=j.reglages;
+  toast(video?"Vidéo de présentation enregistrée":"Vidéo retirée : la page affiche « Bientôt ici »");
+}
+
+async function ouvrirFormation(ouvrir){
+  const e=formationEtat||{};
+  if(ouvrir){
+    if(!e.mail&&!confirm("Ta boîte mail Matt la Photo n'est pas branchée : les acheteurs verront leur code à l'écran, mais ne le recevront pas par mail.\n\nOuvrir quand même ?")) return;
+    if(!(e.lecons||[]).some(l=>l.video)&&!confirm("Aucune leçon n'a encore de vidéo : les acheteurs trouveront un espace vide.\n\nOuvrir quand même ?")) return;
+  } else if(!confirm("Fermer la vente ?\n\nLa page affichera « Bientôt disponible ». Ceux qui ont déjà acheté gardent leur accès.")) return;
+  const j=await appelFormation({action:"ouvrir",ouverte:ouvrir});
+  if(!j) return;
+  if(!j.ok){ toast("Impossible, réessaie"); return; }
+  toast(ouvrir?"La vente est ouverte":"La vente est fermée");
+  chargerFormation();
+}
+
+async function offrirFormation(){
+  const note=prompt("Un accès offert, sans paiement. Pour qui ? (pour t'en souvenir : une collab, un ami…)","");
+  if(note===null) return;
+  const j=await appelFormation({action:"offrir",note:note.trim()});
+  if(!j) return;
+  if(!j.ok){ toast("Impossible de créer le code"); return; }
+  copierTexteGal("Ton code d'accès à la formation « Oser » : "+j.code+"\nCrée ton compte ici : "+j.adresse,"Code "+j.code+" copié, avec le lien, prêt à envoyer");
+  chargerFormation();
+}
+
+async function retirerFormation(email){
+  if(!confirm("Retirer l'accès de "+email+" ?\n\nSon compte ne s'ouvrira plus. À faire seulement après un remboursement.")) return;
+  const j=await appelFormation({action:"retirer",email});
+  if(!j) return;
+  toast(j.ok?"Accès retiré":"Compte introuvable");
+  chargerFormation();
 }
 
 </script>
