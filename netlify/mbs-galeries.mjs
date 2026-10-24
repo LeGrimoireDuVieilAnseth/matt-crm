@@ -28,6 +28,7 @@
    jusqu'au bout : webhook, facture, ligne de recette, rappel des tirages. */
 import { getStore } from "@netlify/blobs";
 import { makeCode } from "./mbs-coupons.mjs";
+import { MARQUES_GALERIE } from "./marques.mjs";
 
 /* "mbs-galeries-clientes", et non "mbs-galeries" : le store "mbs-galerie"
    existe deja, il garde l'ordre des photos de la galerie PUBLIQUE du site.
@@ -41,6 +42,9 @@ export const galerieStore = () => getStore({ name: GALERIE_STORE, consistency: "
    site : un test compare les deux. */
 export const QUOTA = { essentielle: 5, confort: 15, prestige: 0 };
 export const NOM_FORMULE = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige" };
+/* "libre" : pas de formule, Matt fixe le nombre de retouches a chaque
+   galerie (Matt la Photo, 24/10/2026 : shootings et collabs au cas par cas). */
+export const FORMULE_LIBRE = "libre";
 
 /* LA GALERIE A DEUX SEANCES (23/10/2026). Une cliente qui vient pour sa
    grossesse puis pour la naissance a UNE galerie, et UN total de retouches
@@ -70,6 +74,7 @@ export function quotaDesFormules(formule, formules) {
   return (!a || !b) ? 0 : a + b;
 }
 export function nomFormuleDe(g) {
+  if (g.formule === FORMULE_LIBRE) return "";
   if (g.formule === "duo" && g.formules) {
     const a = NOM_FORMULE[g.formules.grossesse] || "", b = NOM_FORMULE[g.formules.naissance] || "";
     return a === b ? a + " (grossesse et naissance)" : "Grossesse " + a + ", naissance " + b;
@@ -136,16 +141,18 @@ export function estExpiree(g, now = Date.now()) {
    suffire a la creation : l'autre s'ajoute plus tard (ajouterSeance).
    quota : le total de retouches comprises, s'il differe des formules. */
 export async function creerGalerie(store, { clientId, prenom, nom, email, formule, formules, quota, seance,
-                                             transfert, transferts, photos, now = Date.now() }) {
-  const duo = formule === "duo";
+                                             transfert, transferts, photos, marque, now = Date.now() }) {
+  const duo = formule === "duo", libre = formule === FORMULE_LIBRE;
   let fs = null;
   if (duo) {
     fs = { grossesse: String((formules && formules.grossesse) || ""), naissance: String((formules && formules.naissance) || "") };
     if (!(fs.grossesse in QUOTA) || !(fs.naissance in QUOTA)) return { erreur: "formule" };
-  } else if (!(formule in QUOTA)) return { erreur: "formule" };
+  } else if (!libre && !(formule in QUOTA)) return { erreur: "formule" };
   const saisi = quotaSaisi(quota);
   if (Number.isNaN(saisi)) return { erreur: "quota" };
-  const base = quotaDesFormules(formule, fs);
+  /* Sans formule, c'est Matt qui donne le nombre : rien ne le devine. */
+  if (libre && saisi == null) return { erreur: "quota" };
+  const base = libre ? 0 : quotaDesFormules(formule, fs);
   const liste = Array.isArray(photos) ? photos.slice(0, PHOTOS_MAX_GALERIE) : [];
   if (!liste.length) return { erreur: "photos" };
   /* En duo, chaque photo appartient a une seance, et on les range grossesse
@@ -167,6 +174,8 @@ export async function creerGalerie(store, { clientId, prenom, nom, email, formul
   exp.setMonth(exp.getMonth() + DUREE_MOIS);
   const g = {
     jeton, clientId: propre(clientId, 40),
+    /* La marque : le site qui sert la page, le nom sur la facture et les mails. */
+    marque: MARQUES_GALERIE.includes(marque) ? marque : "mybabyshoot",
     prenom: propre(prenom, 40), nom: propre(nom, 80), email: propre(email, 120),
     formule, quota: saisi == null ? base : saisi, quotaFormule: base,
     seance: duo ? "duo" : (propre(seance, 20) || ""),
@@ -220,6 +229,7 @@ export function ligneIndex(g) {
   const aFaire = choixARetoucher(g);
   return {
     jeton: g.jeton, clientId: g.clientId, nom: [g.prenom, g.nom].filter(Boolean).join(" "),
+    marque: g.marque || "mybabyshoot",
     formule: g.formule, statut: g.statut, nbPhotos: g.photos.length,
     nbCoeurs: (s ? s.coeurs.length : (g.coeurs || []).length),
     createdAt: g.createdAt, expiresAt: g.expiresAt, vueAt: g.vueAt || 0,
@@ -304,7 +314,7 @@ export function vuePublique(g) {
   /* Les photos offertes par Matt : ce qui depasse les formules. */
   const offertes = (g.quota && g.quotaFormule > 0) ? Math.max(0, g.quota - g.quotaFormule) : 0;
   return {
-    jeton: g.jeton, prenom: g.prenom, formule: g.formule, nomFormule: nomFormuleDe(g),
+    jeton: g.jeton, prenom: g.prenom, marque: g.marque || "mybabyshoot", formule: g.formule, nomFormule: nomFormuleDe(g),
     quota: g.quota, quotaRestant: quotaRestant(g), offertes, seance: g.seance,
     transfert: g.transfert, retouches: g.retouches,
     photos: g.photos.filter(p => recues.has(p.id) && !(p.s && cachees.has(p.s))),
@@ -455,10 +465,11 @@ export function texteSelection(g, { photosSeules = false } = {}) {
   /* Ce qui est compris : sur ce qui restait, si un premier choix a deja
      pris sa part (galerie a deux seances). */
   const comprises = comprisesDe(g, s), avant = (g.passees || []).length;
-  const detail = !g.quota ? "formule " + (nomFormuleDe(g) || "Prestige") + ", sans limite"
+  const nf = nomFormuleDe(g);
+  const detail = !g.quota ? (nf ? "formule " + nf + ", " : "") + "sans limite"
     : comprises + " comprise" + (comprises > 1 ? "s" : "") + (s.enPlus ? ", " + s.enPlus + " en plus" : "")
       + (avant ? " ; " + quotaRestant(g) + " restaient sur les " + g.quota : " ; " + g.quota + " au total")
-      + ", formule " + nomFormuleDe(g);
+      + (nf ? ", formule " + nf : "");
   lignes.push(n + " photo" + pl + " choisie" + pl + " (" + detail + ") :");
   /* Les numeros, seance par seance : Matt retouche dans deux dossiers. */
   if (n && g.formule === "duo") {

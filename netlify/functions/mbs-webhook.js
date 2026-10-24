@@ -5,6 +5,7 @@
 // libere le verrou, notifie Matt et envoie l'email de confirmation au client.
 import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
+import { marqueDe } from "../marques.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { makeInvoicePdf, makeGiftInvoicePdf, makeFinalInvoicePdf, makeComplementInvoicePdf, nextInvoiceNumber, saveInvoice, lignesSeance } from "../mbs-invoice.mjs";
@@ -96,7 +97,7 @@ async function sendClientEmail(m){
 
    Le montant vient de la SESSION Stripe, pas de la metadonnee : c'est ce
    qui a reellement ete encaisse qui doit etre facture. */
-async function traiterLien(session, md) {
+async function traiterLien(session, md, { compte = "mybabyshoot" } = {}) {
   const lstore = lienStore();
   const code = normaliserCode(md.lienCode || "");
   if (!code) return;
@@ -106,6 +107,10 @@ async function traiterLien(session, md) {
   /* Stripe peut rejouer un evenement : un lien deja paye ne doit pas
      produire une seconde facture ni une seconde recette. */
   if (!lien || lien.statut === "paye") return;
+  /* Un paiement recu sur un compte Stripe ne vaut que pour un lien de CETTE
+     marque : le compte Matt la Photo ne regle pas un lien Mybabyshoot, et
+     inversement. */
+  if ((lien.marque || "mybabyshoot") !== compte) return;
 
   const now = Date.now();
   const montant = Math.round((session.amount_total || 0) / 100) || Number(md.montant) || 0;
@@ -129,14 +134,18 @@ async function traiterLien(session, md) {
   const email = (md.email || session.customer_email || lien.email || "").trim();
   const troisFois = String(session.payment_method_types || "").includes("klarna");
   const dateStr = new Date(now).toLocaleDateString("fr-FR");
+  /* La marque du lien : Mybabyshoot, sauf une commande de galerie Matt la
+     Photo (lien.marque). Elle donne l'enseigne de la facture, la marque de
+     la recette dans le CRM et la signature du mail. */
+  const marque = marqueDe(lien.marque || BRAND);
 
   /* Facture : un numero neuf, comme pour toute recette. */
   let invNum = null, invPdf = null;
   try {
-    invNum = await nextInvoiceNumber();
+    invNum = await nextInvoiceNumber(marque.serieFactures);
     invPdf = await makeComplementInvoicePdf({
       number: invNum, dateStr, client: { name: nom, email },
-      libelle, lignes, adresse, montant, troisFois
+      libelle, lignes, adresse, montant, troisFois, enseigne: marque.nom, email: marque.email()
     });
     await saveInvoice({
       number: invNum, kind: "complement", pdf: invPdf,
@@ -168,7 +177,7 @@ async function traiterLien(session, md) {
     const data = await loadData(store);
     if (!(data.paiements || []).some(p => p.stripeSession === session.id)) {
       data.paiements.push({
-        id: uid(), brand: BRAND, clientId: lien.clientId || "",
+        id: uid(), brand: marque.cle, clientId: lien.clientId || "",
         label: libelle.slice(0, 120),
         total: String(montant), acompte: String(montant), statut: "Solde",
         date: new Date(now).toISOString().slice(0, 10), dueDate: "",
@@ -257,10 +266,10 @@ async function traiterLien(session, md) {
         : "") +
       (invPdf ? "<p>Votre facture est en pièce jointe.</p>" : "") +
       "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
-      "<p>À très vite<br>Matteo · Mybabyshoot</p>";
+      "<p>À très vite<br>" + esc(marque.signature) + "</p>";
     try {
       await sendMail({
-        to: email, subject: "Votre règlement · Mybabyshoot", html,
+        to: email, subject: "Votre règlement · " + marque.nom, html, marque: marque.cle,
         attachments: invPdf
           ? [{ filename: "Facture-" + (invNum || "complement") + ".pdf", content: invPdf, contentType: "application/pdf" }]
           : []
@@ -474,12 +483,30 @@ export default async (request) => {
   const sig = request.headers.get("stripe-signature") || "";
   const raw = await request.text(); // corps brut indispensable pour la verification
 
-  let event;
+  /* Deux comptes Stripe envoient ici : celui de Mybabyshoot, et celui de
+     Matt la Photo (MLP_STRIPE_WEBHOOK_SECRET). Un evenement du compte Matt la
+     Photo ne peut etre qu'une commande de SA galerie : rien d'autre n'y est
+     traite (ni reservation, ni bon cadeau). */
+  let event, compteMatt = false;
   try {
     const stripe = new Stripe(secret);
     event = await stripe.webhooks.constructEventAsync(raw, sig, whSecret);
   } catch (e) {
-    return new Response("signature invalide", { status: 400 });
+    const whMatt = process.env.MLP_STRIPE_WEBHOOK_SECRET;
+    try {
+      if (!whMatt) throw e;
+      event = await new Stripe(process.env.MLP_STRIPE_SECRET_KEY || secret).webhooks.constructEventAsync(raw, sig, whMatt);
+      compteMatt = true;
+    } catch (e2) {
+      return new Response("signature invalide", { status: 400 });
+    }
+  }
+  if (compteMatt) {
+    const s0 = (event.data && event.data.object) || {}, md0 = s0.metadata || {};
+    if (event.type !== "checkout.session.completed" || md0.app !== "mbs-lien" || s0.payment_status !== "paid")
+      return new Response(JSON.stringify({ received: true, ignored: "matt_la_photo" }), { status: 200 });
+    try { await traiterLien(s0, md0, { compte: "matt-la-photo" }); } catch (e) {}
+    return new Response(JSON.stringify({ received: true, lien: true }), { status: 200 });
   }
 
   const estAbandon = event.type === "checkout.session.expired";

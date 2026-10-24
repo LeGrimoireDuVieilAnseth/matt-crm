@@ -25,6 +25,7 @@ import { galerieStore, creerGalerie, lireGalerie, enregistrer, supprimerGalerie,
 import { crmStore, loadData } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
+import { marqueDe, MARQUES_GALERIE } from "../marques.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -34,9 +35,10 @@ const cors = {
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
-const siteUrl = () =>
-  (process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr").replace(/\/+$/, "");
-const adresseGalerie = (jeton) => siteUrl() + "/galerie.html?g=" + jeton;
+/* L'adresse de la galerie : sur le site de SA marque (Mybabyshoot ou Matt
+   la Photo). C'est la variable de la marque qui decide (MBS_SITE_URL,
+   MLP_SITE_URL), comme dans le mail des retouches. */
+const adresseGalerie = (jeton, marque) => marqueDe(marque).site() + "/galerie.html?g=" + jeton;
 
 /* Le controle de la cle vit dans mbs-garde.mjs : il refuse tout si CRM_KEY
    manque, et bloque une adresse apres trop d'essais rates. */
@@ -62,10 +64,11 @@ const boutonMail = (href, texte, fond) =>
   ';color:#FFFFFF;padding:14px 28px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold">' +
   esc(texte) + "</a></p>";
 function htmlRetouches(texte, ctx) {
+  const c = ctx.couleurs;
   const jetons = {
-    "[bouton retouches]": boutonMail(ctx.retouches, "Télécharger mes photos retouchées", "#C97B63"),
-    "[bouton galerie]": boutonMail(ctx.galerie, "Revoir ma galerie", "#8A8078"),
-    "[bouton avis]": ctx.avis ? boutonMail(ctx.avis, "Laisser un avis", "#6B6B6B") : "",
+    "[bouton retouches]": boutonMail(ctx.retouches, "Télécharger mes photos retouchées", c.retouches),
+    "[bouton galerie]": boutonMail(ctx.galerie, "Revoir ma galerie", c.galerie),
+    "[bouton avis]": ctx.avis ? boutonMail(ctx.avis, "Laisser un avis", c.avis) : "",
   };
   const blocs = String(texte || "").replace(/\r\n/g, "\n").split(/\n[ \t]*\n/).map(b => b.trim()).filter(Boolean);
   /* Sans le repere des retouches, la cliente recevrait un mail sans son
@@ -113,11 +116,11 @@ export default async (request) => {
       }
       /* L'adresse vient d'ici et pas du CRM : c'est MBS_SITE_URL qui la
          decide, comme dans le mail des retouches. */
-      return json({ ok: true, galeries: idx.map(x => ({ ...x, adresse: adresseGalerie(x.jeton) })) });
+      return json({ ok: true, galeries: idx.map(x => ({ ...x, adresse: adresseGalerie(x.jeton, x.marque) })) });
     }
     const g = await lireGalerie(store, normaliserJeton(url.searchParams.get("g")));
     if (!g) return json({ ok: false, error: "introuvable" }, 404);
-    return json({ ok: true, galerie: g, adresse: adresseGalerie(g.jeton) });
+    return json({ ok: true, galerie: g, adresse: adresseGalerie(g.jeton, g.marque) });
   }
   if (request.method !== "POST") return json({ ok: false, error: "methode" }, 405);
 
@@ -134,16 +137,19 @@ export default async (request) => {
       client = (data.clients || []).find(c => c.id === String(corps.clientId || ""));
     } catch (e) {}
     if (!client) return json({ ok: false, error: "client" }, 404);
+    /* Seules les marques qui ont une galerie (pas Maison Lumiere). */
+    const marque = client.brand || "mybabyshoot";
+    if (!MARQUES_GALERIE.includes(marque)) return json({ ok: false, error: "marque" }, 400);
     const mots = String(client.name || "").trim().split(/\s+/);
     const r = await creerGalerie(store, {
       clientId: client.id, prenom: mots[0] || "", nom: mots.slice(1).join(" "),
       email: client.email || "", formule: String(corps.formule || ""), seance: corps.seance,
-      formules: corps.formules, quota: corps.quota,
+      formules: corps.formules, quota: corps.quota, marque,
       transfert: corps.transfert, transferts: corps.transferts, photos: corps.photos
     });
     if (r.erreur) return json({ ok: false, error: r.erreur }, 400);
     return json({ ok: true, jeton: r.galerie.jeton, photos: r.galerie.photos,
-                  adresse: adresseGalerie(r.galerie.jeton) });
+                  adresse: adresseGalerie(r.galerie.jeton, r.galerie.marque) });
   }
 
   const g = await lireGalerie(store, normaliserJeton(corps.g));
@@ -182,7 +188,7 @@ export default async (request) => {
     const r = ajouterSeance(g, { seance: corps.seance, transfert: corps.transfert, photos: corps.photos });
     if (r.erreur) return json({ ok: false, error: r.erreur }, 400);
     await enregistrer(store, g);
-    return json({ ok: true, photos: r.photos, adresse: adresseGalerie(g.jeton) });
+    return json({ ok: true, photos: r.photos, adresse: adresseGalerie(g.jeton, g.marque) });
   }
 
   /* ---------- publier ----------
@@ -200,7 +206,7 @@ export default async (request) => {
     nouvelles.forEach(x => { x.prete = true; x.at = now; });
     const range = etaitEnLigne && nouvelles.length ? nouveauChoix(g) : false;
     await enregistrer(store, g);
-    return json({ ok: true, adresse: adresseGalerie(g.jeton), seances: nouvelles.map(x => x.cle), range });
+    return json({ ok: true, adresse: adresseGalerie(g.jeton, g.marque), seances: nouvelles.map(x => x.cle), range });
   }
 
   /* ---------- le total de retouches comprises ----------
@@ -251,10 +257,14 @@ export default async (request) => {
     await enregistrer(store, g);
     let envoye = false;
     if (corps.prevenir && g.email && String(corps.texte || "").trim()) {
-      let avis = AVIS_MBS_DEFAUT;
-      try { const data = await loadData(crmStore()); avis = lienValide((data.reglages || {}).avisMybabyshoot) || AVIS_MBS_DEFAUT; } catch (e) {}
-      const html = htmlRetouches(corps.texte, { retouches: l, galerie: adresseGalerie(g.jeton), avis });
-      try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html }); }
+      /* Le lien d'avis de la marque (Reglages du CRM). Mybabyshoot a un lien
+         Google par defaut ; Matt la Photo n'en a pas : sans reglage, le
+         repere [bouton avis] ne produit rien. */
+      const m = marqueDe(g.marque);
+      let avis = m.cle === "mybabyshoot" ? AVIS_MBS_DEFAUT : "";
+      try { const data = await loadData(crmStore()); avis = lienValide((data.reglages || {})[m.reglageAvis]) || avis; } catch (e) {}
+      const html = htmlRetouches(corps.texte, { retouches: l, galerie: adresseGalerie(g.jeton, g.marque), avis, couleurs: m.couleurs });
+      try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html, marque: g.marque }); }
       catch (e) { envoye = false; }
     } else if (corps.prevenir && g.email) {
       /* Un CRM pas encore mis a jour n'envoie pas de texte : l'ancien mail. */
@@ -265,10 +275,10 @@ export default async (request) => {
         'padding:14px 28px;border-radius:999px;text-decoration:none;display:inline-block;font-weight:bold">' +
         "Télécharger mes photos retouchées</a></p>" +
         "<p>Vous les retrouvez aussi dans votre galerie, avec toutes les autres :<br>" +
-        '<a href="' + esc(adresseGalerie(g.jeton)) + '">' + esc(adresseGalerie(g.jeton)) + "</a></p>" +
+        '<a href="' + esc(adresseGalerie(g.jeton, g.marque)) + '">' + esc(adresseGalerie(g.jeton, g.marque)) + "</a></p>" +
         "<p>Le lien de téléchargement a une durée limitée : pensez à enregistrer vos photos.</p>" +
-        "<p>Matteo<br>Mybabyshoot · 06 47 76 54 17</p>";
-      try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html }); }
+        "<p>" + esc(marqueDe(g.marque).signature) + " · 06 47 76 54 17</p>";
+      try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html, marque: g.marque }); }
       catch (e) { envoye = false; }
     }
     return json({ ok: true, envoye });

@@ -27,6 +27,7 @@ import { ouvrirSessionPanier } from "../mbs-paiement-panier.mjs";
 import { porteFermee, noterEchec, LIMITE_CODES } from "../mbs-garde.mjs";
 import { crmStore, loadData, uid } from "../mbs-lib.mjs";
 import { notifyAll } from "../push-lib.mjs";
+import { marqueDe } from "../marques.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -36,8 +37,6 @@ const cors = {
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
-const siteUrl = () =>
-  (process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr").replace(/\/+$/, "");
 
 const MESSAGE_TROP = "Trop d'essais avec des liens inconnus. Réessayez dans une heure, ou appelez le 06 47 76 54 17.";
 
@@ -196,8 +195,9 @@ export default async (request) => {
   if (panier.total < LIEN_MIN)
     return json({ ok: false, erreur: "trop_bas", messages: ["Le paiement en ligne commence à " + LIEN_MIN + " €."] }, 400);
 
-  const secret = process.env.STRIPE_SECRET_KEY;
-  if (!secret) return json({ ok: false, erreur: "stripe" }, 503);
+  /* Le compte Stripe de la marque (Matt la Photo a le sien), sans repli. */
+  const secret = marqueDe(g.marque).stripeSecret();
+  if (!secret) return json({ ok: false, erreur: "stripe", messages: ["Le paiement en ligne n'est pas encore disponible. Appelez-moi au 06 47 76 54 17, je vous envoie un lien."] }, 503);
 
   /* ---------- a payer : la commande devient un lien de paiement ----------
      Le webhook le traitera comme tous les liens (facture, recette, rappel
@@ -208,6 +208,8 @@ export default async (request) => {
   });
   if (!lien) return json({ ok: false, erreur: "lien" }, 500);
   lien.galerie = g.jeton;
+  /* La marque suit la galerie jusqu'a la facture et au mail de reglement. */
+  lien.marque = g.marque || "mybabyshoot";
   await lstore.setJSON("l-" + lien.code, lien);
 
   g.selection.lienCode = lien.code;
@@ -216,7 +218,7 @@ export default async (request) => {
 
   const troisFois = String(corps.paiement || "") === "3x" && panier.total >= LIEN_SEUIL_3X;
   try {
-    const site = siteUrl();
+    const site = marqueDe(g.marque).site();
     const session = await ouvrirSessionPanier(new Stripe(secret), {
       lien, panier, troisFois, site,
       retourOk: site + "/galerie.html?g=" + g.jeton + "&ok=1",
@@ -255,8 +257,10 @@ async function prevenirMatt(g, now) {
     await notifyAll("Sélection reçue · " + nom,
       n + " photo" + (n > 1 ? "s" : "") + " choisie" + (n > 1 ? "s" : "")
       + (g.quota ? " (" + s.comprises + " comprise" + (s.comprises > 1 ? "s" : "") + (s.enPlus ? ", " + s.enPlus + " en plus" : "")
-                   + ", " + nomFormuleDe(g) + ")" : "") + ".", "/");
+                   + (nomFormuleDe(g) ? ", " + nomFormuleDe(g) : "") + ")" : "") + ".", "/");
   } catch (e) {}
 }
 
-export const config = { path: "/.netlify/functions/mbs-galerie-cliente" };
+/* Deux adresses, la meme fonction : la neutre sert la page de Matt la
+   Photo, qui ne doit rien laisser voir de Mybabyshoot (24/10/2026). */
+export const config = { path: ["/.netlify/functions/mbs-galerie-cliente", "/galerie-cliente"] };

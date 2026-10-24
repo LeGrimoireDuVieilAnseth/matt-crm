@@ -39,8 +39,8 @@
     --baby-soft:#fbeef3;
     --lumiere:#b08d57;
     --lumiere-soft:#f6efe3;
-    --matt:#e8622a;
-    --matt-soft:#fceee7;
+    --matt:#FF7518;        /* l'orange de Matt la Photo (avec le bleu #003366) */
+    --matt-soft:#fff1e6;
     --accent:var(--ink);
     --fill:var(--ink);--fill-ink:#fff;--logo-bg:var(--ink);
     --topbar-bg:rgba(243,243,241,.82);--tabbar-bg:rgba(255,255,255,.9);
@@ -244,7 +244,7 @@
   .badge.info{background:#eaf0f6;color:#3a5a80;}
   .badge.baby{background:var(--baby-soft);color:#b04d6e;}
   .badge.lumiere{background:var(--lumiere-soft);color:#8a6a30;}
-  .badge.matt{background:var(--matt-soft);color:#c04a18;}
+  .badge.matt{background:var(--matt-soft);color:#b85208;}
   .dotm{width:7px;height:7px;border-radius:50%;background:currentColor;}
 
   /* ---------- buttons ---------- */
@@ -685,6 +685,7 @@
 
 <!-- ===================== GALERIES (Mybabyshoot) ===================== -->
 <section id="galeries" class="view">
+  <div class="brandbar" id="galeriesBrandbar" style="margin-top:14px"></div>
   <div class="subtabs" id="galSubtabs"></div>
   <button class="btn wide" style="margin:12px 0 2px" onclick="choisirClienteGalerie()">
     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Créer une galerie</button>
@@ -887,9 +888,10 @@ const BRANDS = {
   "maison-lumiere":{ name:"Maison Lumière",  short:"Lumière", color:"var(--lumiere)", badge:"lumiere", tag:"Mariage" },
   "matt-la-photo": { name:"Matt la photo",   short:"Matt",    color:"var(--matt)",    badge:"matt",    tag:"Contenu & street" }
 };
-/* Marques proposees dans les selecteurs. "matt-la-photo" en a ete retiree a la
-   demande de Matt : les fiches qui la portent restent visibles sous "Tout". */
-const BRAND_ORDER = ["mybabyshoot","maison-lumiere"];
+/* Marques proposees dans les selecteurs. "matt-la-photo" en avait ete retiree
+   (11/08/2026) ; Matt l'a remise le 24/10/2026, avec sa galerie (shootings
+   perso et collabs marques). */
+const BRAND_ORDER = ["mybabyshoot","maison-lumiere","matt-la-photo"];
 
 const CLIENT_STATUS = ["Prospect","Devis envoye","Confirme","Seance faite","Livre","Archive"];
 const STATUS_STYLE = {
@@ -2692,7 +2694,7 @@ function closeModal(){
    ============================================================ */
 /* La meme barre est dessinee sur toutes les vues qui filtrent par marque,
    pour qu'on sache toujours dans quelle marque on se trouve. */
-const BARRES_MARQUE=["brandbar","clientsBrandbar","payBrandbar","demandesBrandbar","chiffresBrandbar"];
+const BARRES_MARQUE=["brandbar","clientsBrandbar","payBrandbar","demandesBrandbar","chiffresBrandbar","galeriesBrandbar"];
 function buildBrandbar(){
   let h=`<button class="bchip ${FILTER==="all"?"on":""}" onclick="setFilter('all')"><span class="d"></span>Tout</button>`;
   BRAND_ORDER.forEach(b=>{
@@ -2719,6 +2721,7 @@ function setFilter(b){
   if(document.querySelector("#clients.view.active")) renderClients();
   else if(document.querySelector("#paiements.view.active")) renderPaiements();
   else if(document.querySelector("#demandes.view.active")) renderDemandes();
+  else if(document.querySelector("#galeries.view.active")) renderGaleriesVue();
   else if(document.querySelector("#chiffres.view.active")) renderChiffres();
   else buildHome();
 }
@@ -3442,6 +3445,12 @@ const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","
    seul total de retouches a repartir entre les deux. La naissance peut
    s'ajouter plus tard a la galerie de la grossesse. */
 const GAL_DUO=["grossesse","naissance"];
+/* Les marques qui ont une galerie (MARQUES_GALERIE dans netlify/marques.mjs).
+   Matt la Photo : pas de formule, Matt fixe le nombre de retouches a chaque
+   galerie ("libre"), et ses seances a lui. */
+const GAL_MARQUES=["mybabyshoot","matt-la-photo"];
+const GAL_SEANCES_MATT=[["shooting","Shooting"],["collab","Collab marque"]];
+const estMattGal=x=>!!x && (x.marque||x.brand)==="matt-la-photo";
 const GAL_QUOTA_MAX=300;    // QUOTA_MAX dans mbs-galeries.mjs
 const GAL_STATUT={
   preparation:["En préparation","warn"],
@@ -3459,9 +3468,11 @@ const GAL_APERCU  ={cote:1200,qualite:0.72,plafond:450*1024};
 const GAL_ENVOI_MAX_OCTETS=3.5*1024*1024, GAL_ENVOI_MAX_PHOTOS=10;
 const GAL_PHOTOS_MAX=800;
 
-const nomFormuleGal=k=>{ if(k==="duo") return "Grossesse + naissance"; const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[1]:""; };
+const nomFormuleGal=k=>{ if(k==="duo") return "Grossesse + naissance"; if(k==="libre") return ""; const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[1]:""; };
 const quotaGal=k=>{ const f=GAL_FORMULES.find(x=>x[0]===k); return f?f[2]:0; };
-const nomSeanceGal=k=>{ const s=GAL_SEANCES.find(x=>x[0]===k); return s?s[1]:""; };
+const nomSeanceGal=k=>{ const s=GAL_SEANCES.concat(GAL_SEANCES_MATT).find(x=>x[0]===k); return s?s[1]:""; };
+/* Ce qui nomme une galerie dans les listes : sa formule, sinon sa marque. */
+const titreGal=g=>nomFormuleGal(g.formule)||((BRANDS[g.marque]||{}).name||"");
 /* Les memes calculs que mbs-galeries.mjs (nomFormuleDe, quotaDesFormules,
    comprisesDe, quotaRestant), pour l'affichage. */
 function nomFormuleDeGal(g){
@@ -3530,9 +3541,10 @@ function setGalVue(v){
 }
 function sousOngletsGaleries(){
   const sub=document.getElementById("galSubtabs"); if(!sub) return;
-  const n=galeriesATraiter();
+  const vues=aRetoucher().filter(deLaMarqueGal), n=vues.length;
+  const retard=vues.some(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J);
   sub.innerHTML=`<button class="${galVue==='galeries'?'on':''}" onclick="setGalVue('galeries')">Toutes les galeries</button>
-    <button id="ongletRetouches" class="${galVue==='retouches'?'on':''}${galeriesEnRetard()?" retard":""}" onclick="setGalVue('retouches')">À retoucher${n?" ("+n+")":""}</button>`;
+    <button id="ongletRetouches" class="${galVue==='retouches'?'on':''}${retard?" retard":""}" onclick="setGalVue('retouches')">À retoucher${n?" ("+n+")":""}</button>`;
 }
 function renderGaleriesVue(){
   sousOngletsGaleries();
@@ -3546,7 +3558,11 @@ function redessinerGaleriesVue(){
 function majOngletGaleries(){
   const n=galeriesATraiter();
   const b=document.getElementById("ongletRetouches");
-  if(b){ b.textContent="À retoucher"+(n?" ("+n+")":""); b.classList.toggle("retard",galeriesEnRetard()>0); }
+  if(b){
+    const vues=aRetoucher().filter(deLaMarqueGal);
+    b.textContent="À retoucher"+(vues.length?" ("+vues.length+")":"");
+    b.classList.toggle("retard",vues.some(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J));
+  }
   /* La pastille de l'onglet du bas : des photos attendent leurs retouches. */
   const d=document.getElementById("tabGalDot");
   if(d) d.style.display=n?"block":"none";
@@ -3565,6 +3581,14 @@ const joursDepuisGal=t=>t?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
    choisit deja la naissance. Une ligne plus ancienne retombe sur le statut. */
 const aRetoucher=()=>(galeriesCache||[]).filter(g=>g.aRetoucher!==undefined?g.aRetoucher:g.statut==="choisie");
 const nbARetoucherGal=g=>g.nbARetoucher!==undefined?g.nbARetoucher:(g.nbCoeurs||0);
+/* La marque choisie en haut : chaque marque ne montre que SES galeries. */
+const deLaMarqueGal=g=>FILTER==="all"||(g.marque||"mybabyshoot")===FILTER;
+/* Des retouches attendent dans une AUTRE marque que celle affichee : on le
+   dit, sans les montrer. La pastille de l'onglet, elle, compte tout. */
+function autresARetoucherGal(){
+  const n=aRetoucher().filter(g=>!deLaMarqueGal(g)).length;
+  return n?`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:10px">${n} galerie${n>1?"s":""} d'une autre marque attend${n>1?"ent":""} ${n>1?"leurs":"ses"} retouches : choisis « Tout » en haut pour ${n>1?"les":"la"} voir.</div>`:"";
+}
 const galeriesEnRetard=()=>aRetoucher().filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
 const retouchesVisibles=()=>vueGaleriesActive() && galVue==="retouches";
 function couleurRetouche(j){ return j>=RETOUCHE_RETARD_J?"var(--danger)":j>=RETOUCHE_ALERTE_J?"var(--warn)":"var(--ok)"; }
@@ -3597,14 +3621,14 @@ function renderRetouchesList(){
 function dessinerRetouches(){
   const box=document.getElementById("galList");
   const q=(document.getElementById("galSearch").value||"").toLowerCase().trim();
-  let l=aRetoucher().sort((a,b)=>(a.choisieAt||a.createdAt||0)-(b.choisieAt||b.createdAt||0));
+  let l=aRetoucher().filter(deLaMarqueGal).sort((a,b)=>(a.choisieAt||a.createdAt||0)-(b.choisieAt||b.createdAt||0));
   if(q) l=l.filter(g=>String(g.nom||"").toLowerCase().includes(q));
   document.getElementById("galCount").textContent=l.length+" cliente(s)";
   if(!l.length){
     box.innerHTML=`<div class="empty">
       <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
       <div class="t">Rien à retoucher</div>
-      <div class="s">Dès qu'une cliente valide sa sélection, elle apparaît ici avec le nombre de jours écoulés.</div></div>`;
+      <div class="s">Dès qu'une cliente valide sa sélection, elle apparaît ici avec le nombre de jours écoulés.</div></div>`+autresARetoucherGal();
     return;
   }
   const enRetard=l.filter(g=>joursDepuisGal(g.choisieAt)>=RETOUCHE_RETARD_J).length;
@@ -3624,7 +3648,7 @@ function dessinerRetouches(){
     const bouts=[quoi];
     if(g.nbTirages) bouts.push(g.nbTirages+" tirage"+(g.nbTirages>1?"s":"")+" à poster");
     bouts.push("reçue le "+new Date(g.choisieAt||g.createdAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}));
-    return `<div class="row" data-b="mybabyshoot" onclick="openGalerie('${esc(g.jeton)}')">
+    return `<div class="row" data-b="${esc(g.marque||"mybabyshoot")}" onclick="openGalerie('${esc(g.jeton)}')">
       ${cadranRetouche(j)}
       <div class="row-main">
         <div class="t">${esc(g.nom||"Cliente")} ${etat}</div>
@@ -3634,7 +3658,8 @@ function dessinerRetouches(){
   }).join("");
   h+=`<div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin-top:10px">
       Le cadran se remplit en ${RETOUCHE_RETARD_J} jours : orange à ${RETOUCHE_ALERTE_J} jours, rouge à ${RETOUCHE_RETARD_J}.
-      Une cliente quitte cette liste dès que tu lui envoies ses retouches (ouvre-la, puis « Envoyer les retouches »).</div>`;
+      Une cliente quitte cette liste dès que tu lui envoies ses retouches (ouvre-la, puis « Envoyer les retouches »).</div>`
+    +autresARetoucherGal();
   box.innerHTML=h;
 }
 
@@ -3663,8 +3688,8 @@ function dessinerGaleries(list){
   const q=(document.getElementById("galSearch").value||"").toLowerCase().trim();
   /* A traiter d'abord : une selection recue attend Matt. */
   const ordre={choisie:0,attente_paiement:1,envoyee:2,preparation:3,retouchee:4};
-  let l=list.slice().sort((a,b)=>(ordre[a.statut]??9)-(ordre[b.statut]??9)||(b.createdAt||0)-(a.createdAt||0));
-  if(q) l=l.filter(g=>[g.nom,nomFormuleGal(g.formule),(GAL_STATUT[g.statut]||[])[0]].join(" ").toLowerCase().includes(q));
+  let l=list.filter(deLaMarqueGal).sort((a,b)=>(ordre[a.statut]??9)-(ordre[b.statut]??9)||(b.createdAt||0)-(a.createdAt||0));
+  if(q) l=l.filter(g=>[g.nom,titreGal(g),(GAL_STATUT[g.statut]||[])[0]].join(" ").toLowerCase().includes(q));
   document.getElementById("galCount").textContent=l.length+" galerie(s)";
 
   const aide=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:0 0 12px">
@@ -3673,14 +3698,14 @@ function dessinerGaleries(list){
   if(!l.length){
     box.innerHTML=aide+`<div class="empty">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
-      <div class="t">Aucune galerie</div>
+      <div class="t">${FILTER==="maison-lumiere"?"Maison Lumière n'a pas de galerie":"Aucune galerie"+(FILTER!=="all"?" "+esc((BRANDS[FILTER]||{}).name||""):"")}</div>
       <div class="s">Les sélections de tes clientes arriveront ici, avec les miniatures et les numéros des photos.</div>
     </div>`;
     return;
   }
   box.innerHTML=aide+l.map(g=>{
     const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
-    const bouts=[nomFormuleGal(g.formule),g.nbPhotos+" photos"];
+    const bouts=[titreGal(g),g.nbPhotos+" photos"];
     const manque=seanceManquanteGal(g);
     if(manque) bouts.push(manque+" à venir");
     if(g.nbCoeurs) bouts.push(g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""));
@@ -3688,8 +3713,8 @@ function dessinerGaleries(list){
     /* La date de fin, seulement quand elle approche : sur un telephone la
        ligne est courte. */
     if(g.expiresAt-Date.now()<14*86400000) bouts.push("fermée le "+new Date(g.expiresAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}));
-    return `<div class="row" data-b="mybabyshoot" onclick="openGalerie('${esc(g.jeton)}')">
-      <div class="avatar" data-b="mybabyshoot">${esc(initials(g.nom||"?"))}</div>
+    return `<div class="row" data-b="${esc(g.marque||"mybabyshoot")}" onclick="openGalerie('${esc(g.jeton)}')">
+      <div class="avatar" data-b="${esc(g.marque||"mybabyshoot")}">${esc(initials(g.nom||"?"))}</div>
       <div class="row-main">
         <div class="t">${esc(g.nom||"Cliente")} <span class="badge ${st[1]}">${esc(st[0])}</span></div>
         <div class="s">${esc(bouts.join(" · "))}</div>
@@ -3710,7 +3735,7 @@ function seancesClienteGal(clientId){
 function choisirClienteGalerie(){
   if(!CLOUD){ alert("Disponible seulement en ligne : les galeries sont sur le serveur."); return; }
   openModal(`<h2>Créer une galerie</h2>
-    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Pour quelle cliente ? Celles dont la séance vient d'avoir lieu sont en haut.</div>
+    <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px">Pour quelle cliente (Mybabyshoot ou Matt la photo) ? Celles dont la séance vient d'avoir lieu sont en haut.</div>
     <div class="search" style="margin:0 0 10px">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="cgRecherche" type="text" placeholder="Nom, téléphone, mail..." autocomplete="off" oninput="listerClientesGalerie()">
@@ -3729,7 +3754,7 @@ function listerClientesGalerie(){
   const q=sansAccentGal((document.getElementById("cgRecherche")||{}).value||"").trim();
   const chiffres=q.replace(/\D/g,"");
   const auj=todayStr();
-  let l=DB.clients.filter(c=>c.brand==="mybabyshoot");
+  let l=DB.clients.filter(c=>GAL_MARQUES.includes(c.brand) && (!GAL_MARQUES.includes(FILTER) || c.brand===FILTER));
   if(q) l=l.filter(c=>sansAccentGal([c.name,c.email,c.insta].join(" ")).includes(q)
                      || (chiffres.length>=4 && String(c.tel||"").replace(/\D/g,"").includes(chiffres)));
   else l=l.filter(c=>c.status!=="Archive");
@@ -3739,7 +3764,7 @@ function listerClientesGalerie(){
   l=l.map(c=>({c,k:cle(c)})).sort((a,b)=>b.k.localeCompare(a.k)||(b.c.createdAt||0)-(a.c.createdAt||0)).map(x=>x.c);
   const total=l.length; l=l.slice(0,q?40:25);
   if(!l.length){
-    box.innerHTML=`<div class="empty" style="padding:18px 0"><div class="t">${q?"Personne à ce nom":"Aucune cliente Mybabyshoot"}</div></div>`;
+    box.innerHTML=`<div class="empty" style="padding:18px 0"><div class="t">${q?"Personne à ce nom":"Aucune cliente Mybabyshoot ou Matt la photo"}</div></div>`;
     return;
   }
   const date=d=>{ if(!d) return ""; const x=new Date(d+"T12:00:00");
@@ -3750,9 +3775,10 @@ function listerClientesGalerie(){
     const manque=gals.map(seanceManquanteGal).find(Boolean);
     const badge=manque?`<span class="badge warn">${esc(manque)} à ajouter</span>`
       :gals.length?`<span class="badge info">${gals.length>1?gals.length+" galeries":"a sa galerie"}</span>`:"";
-    const sous=s?[s.type,date(s.date)+((s.date||"")>auj?" (à venir)":"")].filter(Boolean).join(" · "):(c.email||c.tel||"pas encore de séance");
-    return `<div class="row" data-b="mybabyshoot" onclick="galeriePourCliente('${esc(c.id)}')">
-      <div class="avatar" data-b="mybabyshoot">${esc(initials(c.name||"?"))}</div>
+    const sous=(c.brand==="matt-la-photo"?"Matt la photo · ":"")
+      +(s?[s.type,date(s.date)+((s.date||"")>auj?" (à venir)":"")].filter(Boolean).join(" · "):(c.email||c.tel||"pas encore de séance"));
+    return `<div class="row" data-b="${esc(c.brand)}" onclick="galeriePourCliente('${esc(c.id)}')">
+      <div class="avatar" data-b="${esc(c.brand)}">${esc(initials(c.name||"?"))}</div>
       <div class="row-main"><div class="t">${esc(c.name||"Sans nom")}</div><div class="s">${esc(sous)}</div></div>
       <div class="row-end">${badge}</div>
     </div>`;
@@ -3780,7 +3806,7 @@ async function ajouterSeanceDepuisListe(jeton,clientId){
 
 /* ---------- dans la fiche de la cliente ---------- */
 function blocGalerie(c){
-  if(!c || c.brand!=="mybabyshoot") return "";
+  if(!c || !GAL_MARQUES.includes(c.brand)) return "";
   setTimeout(()=>remplirBlocGalerie(c.id),0);
   return `<div id="ficheGalerie" data-c="${esc(c.id)}">${htmlBlocGalerie(c.id,galeriesCache)}</div>`;
 }
@@ -3791,7 +3817,7 @@ function htmlBlocGalerie(clientId,list){
     const st=GAL_STATUT[g.statut]||[g.statut,"neutral"];
     h+=`<div class="card" style="margin:12px 0 6px;padding:13px 15px;cursor:pointer" onclick="openGalerie('${esc(g.jeton)}')">
       <div style="display:flex;align-items:center;gap:8px;justify-content:space-between">
-        <b style="font-size:14px">Galerie ${esc(nomFormuleGal(g.formule))}</b>
+        <b style="font-size:14px">Galerie ${esc(titreGal(g))}</b>
         <span class="badge ${st[1]}">${esc(st[0])}</span></div>
       <div style="font-size:12.5px;color:var(--ink-3);margin-top:4px">${g.nbPhotos} photos${g.nbCoeurs?" · "+g.nbCoeurs+" cœur"+(g.nbCoeurs>1?"s":""):""} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>
       ${seanceManquanteGal(g)?`<div style="font-size:12.5px;color:var(--accent,var(--ink-2));margin-top:4px;font-weight:600">Les photos de la ${esc(seanceManquanteGal(g))} sont à ajouter : ouvre la galerie.</div>`:""}
@@ -3879,15 +3905,17 @@ function openPreparerGalerie(clientId,ajout){
     return;
   }
 
-  const d=devinerGalerie(c);
-  galPrep={clientId,blocs:{},jeton:"",ajout:"",dejaEnLigne:0,photos:[],recues:new Set(),enCours:false,devine:d,quotaTouche:false};
+  const matt=c.brand==="matt-la-photo";
+  const d=matt?devinerGalerieMatt(c):devinerGalerie(c);
+  galPrep={clientId,blocs:{},jeton:"",ajout:"",dejaEnLigne:0,photos:[],recues:new Set(),enCours:false,devine:d,quotaTouche:false,
+           marque:matt?"matt-la-photo":"mybabyshoot"};
   const opt=(liste,choisi)=>liste.map(x=>`<option value="${x[0]}"${x[0]===choisi?" selected":""}>${esc(x[1])}</option>`).join("");
   openModal(`<h2>Préparer la galerie</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
-      Pour <b>${esc(c.name)}</b>. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
+      Pour <b>${esc(c.name)}</b>${matt?` · <span class="badge matt">Matt la photo</span>`:""}. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
       légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 3 mois.</div>
     <div class="field"><label>Séance</label>
-      <select id="gpSeance" onchange="majFormulesGal()">${opt(GAL_SEANCES,d.seance||"grossesse")}</select>
+      <select id="gpSeance" onchange="majFormulesGal()">${matt?opt(GAL_SEANCES_MATT,d.seance||"shooting"):opt(GAL_SEANCES,d.seance||"grossesse")}</select>
       <div id="gpSeanceNote" style="font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5"></div></div>
     <div id="gpFormules"></div>
     <div class="field"><label>Photos retouchées comprises *</label>
@@ -3903,8 +3931,22 @@ function openPreparerGalerie(clientId,ajout){
 
 /* La formule (ou les deux formules, pour une galerie a deux seances), et
    les blocs de photos qui vont avec. Les choix deja faits sont gardes. */
+/* Matt la Photo : la seance d'apres sa derniere seance (une collab marque
+   ou un shooting). Pas de formule a deviner. */
+function devinerGalerieMatt(c){
+  const s=(DB.seances||[]).filter(x=>x.clientId===c.id && x.status!=="Annulee")
+    .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")))[0];
+  return {seance:s&&/collab/i.test(String(s.type||""))?"collab":"shooting",formule:"libre",formules:{}};
+}
 function majFormulesGal(){
   const p=galPrep, box=document.getElementById("gpFormules"); if(!p||!box) return;
+  /* Matt la Photo : pas de formule, seulement le nombre de retouches. */
+  if(p.marque==="matt-la-photo"){
+    box.innerHTML="";
+    document.getElementById("gpSeanceNote").innerHTML="";
+    majQuotaGal(); dessinerBlocsGal();
+    return;
+  }
   const seance=document.getElementById("gpSeance").value, duo=seance==="duo";
   const val=id=>{ const e=document.getElementById(id); return e?e.value:null; };
   const d=p.devine||{formules:{}};
@@ -3928,6 +3970,7 @@ function majFormulesGal(){
   dessinerBlocsGal();
 }
 function formuleChoisieGal(){
+  if(galPrep && galPrep.marque==="matt-la-photo") return {duo:false,libre:true,pret:true,base:0,f:"libre"};
   const seance=(document.getElementById("gpSeance")||{}).value;
   if(seance==="duo"){
     const fg=(document.getElementById("gpFormuleG")||{}).value||"", fn=(document.getElementById("gpFormuleN")||{}).value||"";
@@ -3940,7 +3983,8 @@ function formuleChoisieGal(){
 function majQuotaGal(){
   const z=document.getElementById("gpQuota"); if(!z||!galPrep) return;
   const f=formuleChoisieGal();
-  if(!galPrep.quotaTouche) z.value=f.pret?String(f.base):"";
+  /* Sans formule, rien a preremplir : c'est Matt qui donne le nombre. */
+  if(!galPrep.quotaTouche && !f.libre) z.value=f.pret?String(f.base):"";
   majQuotaNoteGal();
 }
 function majQuotaNoteGal(){
@@ -3948,7 +3992,11 @@ function majQuotaNoteGal(){
   const f=formuleChoisieGal(), v=z.value.trim()===""?null:Number(z.value);
   const repartir=f.duo?" À répartir entre les deux séances.":"";
   let t;
-  if(!f.pret) t="Choisis la formule"+(f.duo?" de chaque séance":"")+" : le nombre se remplit tout seul.";
+  if(f.libre) t=v===null?"Combien de photos retouchées sont comprises dans cette galerie ? Au-delà, 15 € la photo, 10 € l'unité dès 5. 0 = sans limite."
+    :(!Number.isInteger(v)||v<0||v>GAL_QUOTA_MAX)?`<span style="color:var(--danger)">Un nombre entier, de 0 à ${GAL_QUOTA_MAX}.</span>`
+    :v===0?"0 = sans limite : ses cœurs te guident, rien ne se paie en plus."
+    :`<b>${v}</b> photo${v>1?"s":""} retouchée${v>1?"s":""} comprise${v>1?"s":""}. Au-delà, 15 € la photo, 10 € l'unité dès 5.`;
+  else if(!f.pret) t="Choisis la formule"+(f.duo?" de chaque séance":"")+" : le nombre se remplit tout seul.";
   else if(v===null||!Number.isInteger(v)||v<0||v>GAL_QUOTA_MAX) t=`<span style="color:var(--danger)">Un nombre entier, de 0 à ${GAL_QUOTA_MAX}.</span>`;
   else if(v===0) t="0 = sans limite : ses cœurs te guident, rien ne se paie en plus."+(f.base?" (La formule en comprend "+f.base+".)":"");
   else if(f.base && v>f.base) t=`<b style="color:var(--ok)">${v-f.base} offerte${v-f.base>1?"s":""}</b> en plus de la formule (${f.base}) : elle verra « dont ${v-f.base} offerte${v-f.base>1?"s":""} ».`+repartir;
@@ -4585,7 +4633,7 @@ async function remplirCouvertureFin(jeton){
 function boutonsEnvoiGalerie(c){
   const id=esc(c.id);
   const note=t=>`<div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;line-height:1.5">${t}</div>`;
-  if(c.brand!=="mybabyshoot" || venuAvecBonCadeau(c))
+  if(!GAL_MARQUES.includes(c.brand) || venuAvecBonCadeau(c))
     return `<button class="btn wide" onclick="closeModal();openMailFinal('${id}')">Envoyer la galerie</button>`
       +note("Le lien de la galerie est déjà rempli dans le mail.");
   const f=factureDejaEnvoyee(c);
@@ -4828,8 +4876,9 @@ function dessinerGalerie(){
     ? `<b>${quota} retouches comprises</b>${offertes?", dont "+offertes+" offerte"+(offertes>1?"s":""):""}${duo?", pour les deux séances":""}${passees.length?" · il en reste "+quotaRestantGal(g):""}`
     : "<b>Retouches sans limite</b>";
   let h=`<h2>Galerie de ${esc(nom)}</h2>
-    <div class="meta" style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge("mybabyshoot")}<span class="badge ${st[1]}">${esc(st[0])}</span></div>
-    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px"><b>${esc(nomFormuleDeGal(g))}</b>${!duo&&g.seance?" · "+esc(nomSeanceGal(g.seance)):""} · ${esc(photosTxt)}${g.statut==="preparation"?" ("+recues.size+" reçues)":""}</div>
+    <div class="meta" style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap">${brandBadge(g.marque||"mybabyshoot")}<span class="badge ${st[1]}">${esc(st[0])}</span></div>
+    <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px">${[nomFormuleDeGal(g)?"<b>"+esc(nomFormuleDeGal(g))+"</b>":"",
+      !duo&&g.seance?esc(nomSeanceGal(g.seance)):"", esc(photosTxt)].filter(Boolean).join(" · ")}${g.statut==="preparation"?" ("+recues.size+" reçues)":""}</div>
     <div style="font-size:13.5px;line-height:1.55;margin-bottom:4px">${totalTxt} · <a onclick="modifierQuotaGal()" style="cursor:pointer;text-decoration:underline">Modifier</a></div>
     <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5">Créée le ${esc(court(g.createdAt))}${g.statut==="preparation"?"":" · "+(g.vueAt?"ouverte le "+esc(court(g.vueAt)):"pas encore ouverte")} · en ligne jusqu'au ${esc(dateGal(g.expiresAt))}</div>`;
 
@@ -5024,6 +5073,7 @@ function texteRetouchesParDefaut(g,tour){
   const attendent=precedent&&!(g.selection&&!g.selection.enAttente)
     ?(g.seances||[]).map(x=>x.cle).filter(k=>!quelles.includes(k)):[];
   const suite=!!manque||attendent.length>0;
+  const mattG=estMattGal(g);
   return [
     "Bonjour "+(g.prenom||"")+" !",
     "Vos photos"+de+" retouchées sont prêtes. Je les ai reprises une à une, avec soin.",
@@ -5036,9 +5086,12 @@ function texteRetouchesParDefaut(g,tour){
       +(g.quota?"les "+quotaRestantGal(g)+" photos retouchées qui vous restent.":"vos préférées.")]:[]),
     "[bouton galerie]",
     "Merci encore pour votre confiance. Ce fut un vrai plaisir de partager ce moment avec vous, et j'espère que ces images vous accompagneront longtemps.",
-    "Si vous avez aimé votre expérience, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à d'autres familles de me trouver, et cela ne prend qu'une minute.",
-    "[bouton avis]",
-    ...(suite?[]:["Et pour la suite, je serai heureux de vous retrouver pour d'autres moments à immortaliser : un anniversaire, un baptême, une séance en extérieur ou tout autre événement qui compte pour vous. Le jour où vous y penserez, je reste joignable au 06 47 76 54 17 ou sur Instagram (@mybabyshoot)."]),
+    /* Matt la Photo : l'avis seulement si un lien est regle (Reglages). */
+    ...(!mattG||(DB.reglages||{}).avisMatt?["Si vous avez aimé votre expérience, quelques mots en avis m'aideraient beaucoup. C'est ce qui permet à "+(mattG?"d'autres personnes":"d'autres familles")+" de me trouver, et cela ne prend qu'une minute.",
+      "[bouton avis]"]:[]),
+    ...(suite?[]:[mattG
+      ?"Et pour la suite, je serai heureux de travailler à nouveau avec vous, pour un nouveau shooting ou une collaboration. Le jour où vous y penserez, je reste joignable au 06 47 76 54 17 ou sur Instagram (@matt_la_photo)."
+      :"Et pour la suite, je serai heureux de vous retrouver pour d'autres moments à immortaliser : un anniversaire, un baptême, une séance en extérieur ou tout autre événement qui compte pour vous. Le jour où vous y penserez, je reste joignable au 06 47 76 54 17 ou sur Instagram (@mybabyshoot)."]),
     "Très belle "+moment+" à vous\nMatt"
   ].join("\n\n");
 }
@@ -8747,6 +8800,8 @@ function renderAvisCard(){
       <input id="avisMbs" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisMybabyshoot||"")}"></div>
     <div class="field"><label>Maison Lumière</label>
       <input id="avisMl" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisLumiere||"")}"></div>
+    <div class="field"><label>Matt la Photo</label>
+      <input id="avisMatt" type="url" inputmode="url" placeholder="https://g.page/r/..." value="${esc(r.avisMatt||"")}"></div>
     <div class="field"><label>Code promo faire-part (Mybabyshoot)</label>
       <input id="codeFp" type="text" autocapitalize="characters" placeholder="MLP20" value="${esc(r.codeFairePart||"")}"></div>
     <div style="font-size:12.5px;color:var(--ink-3);line-height:1.5;margin:-6px 0 12px">
@@ -8759,9 +8814,12 @@ function saveAvisLinks(){
   const ml=document.getElementById("avisMl").value.trim();
   if(mbs&&!lienPropre(mbs)){ toast("Le lien Mybabyshoot doit commencer par https://"); return; }
   if(ml&&!lienPropre(ml)){ toast("Le lien Maison Lumière doit commencer par https://"); return; }
+  const zm=document.getElementById("avisMatt"), mt=zm?zm.value.trim():"";
+  if(mt&&!lienPropre(mt)){ toast("Le lien Matt la Photo doit commencer par https://"); return; }
   DB.reglages=DB.reglages||{};
   DB.reglages.avisMybabyshoot=lienPropre(mbs);
   DB.reglages.avisLumiere=lienPropre(ml);
+  if(zm) DB.reglages.avisMatt=lienPropre(mt);
   const cfp=document.getElementById("codeFp");
   DB.reglages.codeFairePart=cfp?cfp.value.trim().toUpperCase().slice(0,24):"";
   saveDB();
@@ -9600,8 +9658,8 @@ function openMailFinal(id,opts){
   const sansFacture=!!(opts&&opts.sansFacture) && c.brand==="mybabyshoot";
   mailFinalSansFacture=sansFacture;
   const r=DB.reglages||{};
-  const avis=c.brand==="maison-lumiere"?r.avisLumiere:r.avisMybabyshoot;
-  const marque=c.brand==="maison-lumiere"?"Maison Lumière":"Mybabyshoot";
+  const avis=c.brand==="maison-lumiere"?r.avisLumiere:c.brand==="matt-la-photo"?r.avisMatt:r.avisMybabyshoot;
+  const marque=c.brand==="maison-lumiere"?"Maison Lumière":c.brand==="matt-la-photo"?"Matt la Photo":"Mybabyshoot";
   const dejaFait=c.mailFinal&&c.mailFinal.date;
 
   const cadeau=venuAvecBonCadeau(c);
@@ -9624,7 +9682,7 @@ function openMailFinal(id,opts){
   }
 
   if(mbs){
-    const p=DB.paiements.filter(x=>x.clientId===c.id&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+    const p=DB.paiements.filter(x=>x.clientId===c.id&&x.brand===c.brand).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
     const solde=p?num(p.total)-num(p.acompte):0;
     h+=p&&num(p.total)
       ? `<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin-bottom:14px">
@@ -9664,7 +9722,7 @@ function openMailFinal(id,opts){
     </div>
     <button class="btn wide" id="mfGo" onclick="envoyerMailFinal('${c.id}',${sansFacture})">Envoyer</button>`;
   openModal(h);
-  if(c.brand==="mybabyshoot") preRemplirGalerieMail(c.id);
+  if(GAL_MARQUES.includes(c.brand)) preRemplirGalerieMail(c.id);
   const zone=document.getElementById("mfTexte");
   if(zone) zone.value=texteMailParDefaut(c,sansFacture);
 }
@@ -9707,7 +9765,7 @@ async function envoyerMailFinal(id,sansFacture){
     // Facture de solde emise a l'instant : le paiement passe a "Solde", comme
     // le fait le bouton facture de la fiche seance.
     if(j.factureCreee){
-      const p=DB.paiements.filter(x=>x.clientId===id&&x.brand==="mybabyshoot").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+      const p=DB.paiements.filter(x=>x.clientId===id&&x.brand===c.brand).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
       if(p) p.statut="Solde";
     }
     saveDB();
@@ -9742,6 +9800,22 @@ function texteMailParDefaut(c,sansFacture){
       (r.avisLumiere?"[bouton avis]":""),
       "Une question, une envie de tirage ou d'album ? Répondez simplement à cet email.",
       "Très belle "+moment+" à vous\nMatteo · Maison Lumière"
+    ].filter(Boolean).join("\n\n");
+  }
+
+  /* Matt la Photo : la meme galerie, sans code faire-part, l'avis seulement
+     si un lien est regle. */
+  if(c.brand==="matt-la-photo"){
+    return [
+      "Bonjour "+prenom+" !",
+      "Merci encore pour ce shooting, c'était un vrai plaisir !",
+      "Vos photos sont en ligne : découvrez-les avec le bouton juste en dessous.",
+      "Pour choisir celles que vous voulez que je retouche, c'est très simple : il suffit de mettre un cœur. Vous pourrez aussi commander des tirages directement depuis la galerie.",
+      "[bouton galerie]",
+      (r.avisMatt?"Si le shooting vous a plu, quelques mots en avis m'aideraient beaucoup, et ça ne prend qu'une minute.":""),
+      (r.avisMatt?"[bouton avis]":""),
+      (sansFacture?"":"Votre facture, solde réglé, est en pièce jointe."),
+      "Très belle "+moment+" à vous\nMatt · Matt la Photo"
     ].filter(Boolean).join("\n\n");
   }
 

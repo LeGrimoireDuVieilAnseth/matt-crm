@@ -17,6 +17,7 @@ import { crmStore, loadData } from "../mbs-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
 import { invoiceStore, nextInvoiceNumber, makeFinalInvoicePdf, saveInvoice, libelleSeance } from "../mbs-invoice.mjs";
 import { cleCRM, statutRefus, MESSAGE_TROP_CRM } from "../mbs-garde.mjs";
+import { marqueDe } from "../marques.mjs";
 
 const FAIRE_PART_URL = "https://www.monfairepart.com/faire-part-naissance.html";
 const AVIS_MBS_DEFAUT = "https://g.page/r/CTGWLnQvUCwtEBM/review";
@@ -145,8 +146,9 @@ async function factureDeSolde(client, data) {
     } catch (e) {}
   }
 
+  const marque = client.brand === "matt-la-photo" ? "matt-la-photo" : "mybabyshoot";
   const p = (data.paiements || [])
-    .filter(x => x.clientId === client.id && x.brand === "mybabyshoot")
+    .filter(x => x.clientId === client.id && x.brand === marque)
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
   if (!p) return null;
 
@@ -155,16 +157,17 @@ async function factureDeSolde(client, data) {
   if (!total) return null;
 
   const s = (data.seances || [])
-    .filter(x => x.clientId === client.id && x.brand === "mybabyshoot" && x.type !== "Indispo")
+    .filter(x => x.clientId === client.id && x.brand === marque && x.type !== "Indispo")
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
   const typeLabel = (s && s.type) || "Séance";
   const seanceDateFr = s && s.date ? String(s.date).split("-").reverse().join("/") : "";
 
-  const number = await nextInvoiceNumber();
+  const m = marqueDe(marque);
+  const number = await nextInvoiceNumber(m.serieFactures);
   const dateStr = new Date().toLocaleDateString("fr-FR");
   const pdf = await makeFinalInvoicePdf({
     number, dateStr, client: { name: client.name, email: client.email },
-    typeLabel, seanceDateFr, total, acompte
+    typeLabel, seanceDateFr, total, acompte, enseigne: m.nom, email: m.email()
   });
   await saveInvoice({
     number, kind: "solde", pdf, client: { name: client.name, email: client.email },
@@ -224,9 +227,12 @@ export default async (request) => {
 
   const reglages = data.reglages || {};
   const mariage = client.brand === "maison-lumiere";
+  /* Matt la Photo (24/10/2026) : comme Mybabyshoot (galerie + facture de
+     solde), avec ses couleurs, sans code faire-part, son lien d'avis. */
+  const matt = client.brand === "matt-la-photo";
   if (factureSeule && mariage) {
     return json({ ok: false, error: "marque",
-      message: "Les factures ne sont émises que pour Mybabyshoot." }, 400);
+      message: "Les factures ne sont émises que pour Mybabyshoot et Matt la Photo." }, 400);
   }
 
   // Facture de solde : uniquement Mybabyshoot, la seule marque facturee ici,
@@ -256,8 +262,8 @@ export default async (request) => {
       "<p>Très belle " + momentDuJour() + " à vous<br>Matt</p>";
     const parti = await sendMail({
       to: client.email,
-      subject: "Votre facture · Mybabyshoot",
-      html,
+      subject: "Votre facture · " + (matt ? "Matt la Photo" : "Mybabyshoot"),
+      html, marque: client.brand,
       attachments: [{ filename: "Facture-" + facture.number + ".pdf",
         content: facture.pdf, contentType: "application/pdf" }]
     });
@@ -269,17 +275,18 @@ export default async (request) => {
   const html = htmlDepuisTexte(texte, {
     galerie,
     libelleGalerie: mariage ? "Voir mes photos" : "Découvrir ma galerie",
-    couleur: mariage ? "#5E4430" : "#C97B63",
+    couleur: mariage ? "#5E4430" : matt ? "#FF7518" : "#C97B63",
     avis: mariage ? lienValide(reglages.avisLumiere)
-                  : (lienValide(reglages.avisMybabyshoot) || AVIS_MBS_DEFAUT),
-    code: mariage ? "" : String(reglages.codeFairePart || "").trim().slice(0, 24)
+        : matt ? lienValide(reglages.avisMatt)
+        : (lienValide(reglages.avisMybabyshoot) || AVIS_MBS_DEFAUT),
+    code: (mariage || matt) ? "" : String(reglages.codeFairePart || "").trim().slice(0, 24)
   });
   const sujet = mariage ? "Vos photos de mariage sont en ligne" : "Vos photos sont en ligne";
 
   const envoye = await sendMail({
     to: client.email,
     subject: sujet,
-    html,
+    html, marque: client.brand,
     attachments: facture
       ? [{ filename: "Facture-" + facture.number + ".pdf", content: facture.pdf, contentType: "application/pdf" }]
       : []

@@ -20,14 +20,18 @@ const ISSUER = {
 
 // Numero de facture continu, remis a 1 chaque annee, stocke dans un blob
 // dedie (jamais ecrase par le CRM). Format MBS-AAAA-NNN.
-export async function nextInvoiceNumber(){
+// serie "MLP" : Matt la Photo a sa propre serie, MLP-AAAA-NNN (24/10/2026),
+// continue elle aussi. Plusieurs series distinctes sont admises pour une
+// meme entreprise, chacune chronologique et sans trou.
+export async function nextInvoiceNumber(serie = "MBS"){
   const store = getStore({ name: "mbs-invoices", consistency: "strong" });
+  const cle = serie === "MBS" ? "seq" : "seq-" + serie.toLowerCase();
   const year = new Date().getFullYear();
-  let s = (await store.get("seq", { type: "json" })) || { year, n: 0 };
+  let s = (await store.get(cle, { type: "json" })) || { year, n: 0 };
   if (s.year !== year) s = { year, n: 0 };
   s.n += 1;
-  await store.setJSON("seq", s);
-  return "MBS-" + year + "-" + String(s.n).padStart(3, "0");
+  await store.setJSON(cle, s);
+  return serie + "-" + year + "-" + String(s.n).padStart(3, "0");
 }
 
 function eur(n){ return Number(n).toFixed(2).replace(".", ",") + " €"; }
@@ -309,7 +313,16 @@ export async function makeGiftInvoicePdf(inv){
    superieure, tirage en plus, deplacement). Reutiliser la facture de solde
    aurait affiche un acompte imaginaire.
    inv : { number, dateStr, client:{name,email}, libelle, montant, troisFois } */
+/* L'emetteur d'une facture : meme personne, meme SIRET ; seule l'enseigne
+   change (Matt la Photo, 24/10/2026). */
+const emetteur = (inv) => (inv && inv.enseigne)
+  ? { ...ISSUER, enseigne: String(inv.enseigne), ...(inv.email !== undefined ? { email: String(inv.email || "") } : {}) }
+  : ISSUER;
+/* Le telephone, et le mail s'il y en a un. */
+const contactDe = (e) => e.tel + (e.email ? "  ·  " + e.email : "");
+
 export async function makeComplementInvoicePdf(inv){
+  const ISSUER = emetteur(inv);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595, 842]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -323,7 +336,7 @@ export async function makeComplementInvoicePdf(inv){
   T(M, 84, ISSUER.nom, 10, font, soft);
   T(M, 98, ISSUER.adresse, 10, font, soft);
   T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
-  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
+  T(M, 126, contactDe(ISSUER), 10, font, soft);
 
   T(360, 62, "FACTURE", 15, bold);
   T(360, 84, "Facture n° " + inv.number, 10, font, soft);
@@ -387,6 +400,7 @@ export async function makeComplementInvoicePdf(inv){
 // Facture de solde (finale) : rappelle l'acompte deja verse et le solde regle.
 // inv : { number, dateStr, client:{name,email}, typeLabel, seanceDateFr, total, acompte }
 export async function makeFinalInvoicePdf(inv){
+  const ISSUER = emetteur(inv);
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595, 842]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -399,7 +413,7 @@ export async function makeFinalInvoicePdf(inv){
   T(M, 84, ISSUER.nom, 10, font, soft);
   T(M, 98, ISSUER.adresse, 10, font, soft);
   T(M, 112, "SIRET " + ISSUER.siret, 10, font, soft);
-  T(M, 126, ISSUER.tel + "  ·  " + ISSUER.email, 10, font, soft);
+  T(M, 126, contactDe(ISSUER), 10, font, soft);
 
   T(360, 62, "FACTURE", 15, bold);
   T(360, 84, "Facture n° " + inv.number, 10, font, soft);
