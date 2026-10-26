@@ -7,7 +7,7 @@ import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
 import { marqueDe } from "../marques.mjs";
 import { FORMATION, codePourVente, enregistrerVente, afficherCode } from "../mlp-formation.mjs";
-import { FORMULES_MLP, BRAND_MLP, retouchesTexte, contenuFormule, seanceMybabyshootSur, shootingQuiChevauche } from "../mlp-resa.mjs";
+import { FORMULES_MLP, BRAND_MLP, RAYON_MLP_KM, retouchesTexte, contenuFormule, seanceMybabyshootSur, shootingQuiChevauche } from "../mlp-resa.mjs";
 import { prixPhotos } from "../mbs-panier.mjs";
 import { notifyAll } from "../push-lib.mjs";
 import { sendMail } from "../mbs-mail.mjs";
@@ -148,7 +148,7 @@ async function traiterLien(session, md, { compte = "mybabyshoot" } = {}) {
     invNum = await nextInvoiceNumber(marque.serieFactures);
     invPdf = await makeComplementInvoicePdf({
       number: invNum, dateStr, client: { name: nom, email },
-      libelle, lignes, adresse, montant, troisFois, enseigne: marque.nom, email: marque.email()
+      libelle, lignes, adresse, montant, troisFois, enseigne: marque.nom, email: marque.email(), tel: marque.tel
     });
     await saveInvoice({
       number: invNum, kind: "complement", pdf: invPdf,
@@ -268,7 +268,7 @@ async function traiterLien(session, md, { compte = "mybabyshoot" } = {}) {
           + esc(adresseTexte).replace(/\n/g, "<br>") + "</p>"
         : "") +
       (invPdf ? "<p>Votre facture est en pièce jointe.</p>" : "") +
-      "<p>Une question ? Répondez à cet email ou appelez le 06 47 76 54 17.</p>" +
+      "<p>Une question ? Répondez à cet email" + (marque.tel ? " ou appelez le " + marque.tel : "") + ".</p>" +
       "<p>À très vite<br>" + esc(marque.signature) + "</p>";
     try {
       await sendMail({
@@ -306,7 +306,7 @@ async function traiterFormation(session) {
     invPdf = await makeComplementInvoicePdf({
       number: invNum, dateStr, client: { name: nom || email, email },
       libelle: FORMATION.libelle, lignes, adresse: null, montant, troisFois: false,
-      enseigne: marque.nom, email: marque.email()
+      enseigne: marque.nom, email: marque.email(), tel: marque.tel
     });
     await saveInvoice({ number: invNum, kind: "complement", pdf: invPdf, client: { name: nom || email, email },
       montant, dateStr, detail: FORMATION.libelle + " (code " + code + ")" });
@@ -345,7 +345,7 @@ async function traiterFormation(session) {
       "<p><a href=\"" + esc(lien) + "\" style=\"display:inline-block;background:#FF7518;color:#fff;padding:12px 20px;"
         + "border-radius:999px;text-decoration:none;font-weight:bold\">Créer mon compte</a></p>" +
       (invPdf ? "<p>Ta facture est en pièce jointe.</p>" : "") +
-      "<p>Une question ? Réponds à ce mail ou appelle-moi au 06 47 76 54 17.</p>" +
+      "<p>Une question ? Réponds simplement à ce mail.</p>" +
       "<p>À très vite<br>" + esc(marque.signature) + "</p>";
     try {
       /* La formation tutoie, comme Matt dans ses videos. */
@@ -410,7 +410,9 @@ async function traiterResaMlp(session, md) {
           + (md.reseau ? " Compte à identifier : " + md.reseau + "." : " Pas de compte à identifier.") + " " : "")
       + "Réservation en ligne. " + formuleTxt + " Total " + total + " €, "
       + (toutRegle ? "réglé en totalité en 3 fois avec Klarna, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
-      + (lieu ? " Lieu : " + lieu + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : ""),
+      + (fraisDepl ? " Lieu : " + lieu + " (frais de déplacement " + fraisDepl + " € compris dans le total)."
+        : md.lieuMode === "studio" ? " Lieu : au studio (adresse à lui envoyer avant la séance)."
+        : lieu ? " Lieu : " + lieu + ". Déplacement offert dans " + RAYON_MLP_KM + " km autour de Lyon ; au-delà, frais à convenir avec " + (prenom || "la personne") + "." : ""),
     createdAt: now, stripeSession: session.id
   });
   data.paiements.push({
@@ -433,6 +435,18 @@ async function traiterResaMlp(session, md) {
     notes: "Shooting Matt la Photo réservé le " + frDate(date) + " à " + time + ", en même temps que la séance Mybabyshoot de "
       + nomDe(mbs) + " (" + (mbs.time || "journée") + "). Mybabyshoot est prioritaire : appelez " + name + " pour décaler.",
     stripeSession: session.id });
+  /* Le lieu (25/10/2026) : l'adresse du studio a envoyer, ou l'endroit exact
+     a caler en exterieur. Le rappel tombe 2 jours avant (aujourd'hui si
+     c'est plus proche). */
+  if (md.lieuMode === "studio" || md.lieuMode === "exterieur") {
+    const deuxJoursAvant = new Date(Date.parse(date + "T12:00:00Z") - 2 * 86400000).toISOString().slice(0, 10);
+    data.taches.push({ id: uid(), done: false, priority: "Normale", clientId: client.id,
+      dueDate: deuxJoursAvant > aujourdhui ? deuxJoursAvant : aujourdhui,
+      title: (md.lieuMode === "studio" ? "Envoyer l'adresse du studio à " : "Caler le lieu exact du shooting avec ") + name,
+      notes: "Shooting du " + frDate(date) + " à " + time + ". " + lieu + "."
+        + (md.lieuMode === "exterieur" ? "\nPlus de " + RAYON_MLP_KM + " km autour de Lyon : convenir des frais de déplacement avant le shooting (réglés le jour J)." : ""),
+      stripeSession: session.id });
+  }
   /* La video a tourner et a publier : le rappel tombe le jour du shooting. */
   if (md.video === "1") data.taches.push({ id: uid(), done: false, priority: "Haute", clientId: client.id, dueDate: date,
     title: "Vidéo à tourner et publier — " + name,
@@ -455,7 +469,7 @@ async function traiterResaMlp(session, md) {
     if (photos) lignes.push({ libelle: photos + " photo" + (photos > 1 ? "s" : "") + " retouchée" + (photos > 1 ? "s" : "") + " en plus", montant: prixPhotos(photos) });
     if (fraisDepl) lignes.push({ libelle: "Frais de déplacement" + (md.km ? " (" + md.km + " km)" : ""), montant: fraisDepl });
     const commun = { number: invNum, dateStr, client: { name, email }, typeLabel: "Shooting portrait", seanceDateFr: frDate(date),
-      lignes, enseigne: marque.nom, email: marque.email() };
+      lignes, enseigne: marque.nom, email: marque.email(), tel: marque.tel };
     invPdf = toutRegle
       ? await makeFinalInvoicePdf({ ...commun, total, acompte: 0 })
       : await makeInvoicePdf({ ...commun, time, acompte, total, lieu });
@@ -482,7 +496,10 @@ async function traiterResaMlp(session, md) {
       (md.video === "1"
         ? "<p>Pendant le shooting, je tourne aussi la vidéo que je publierai sur TikTok et Instagram" + (md.reseau ? ", en vous identifiant (" + esc(md.reseau) + ")" : "") + ". Vous m'avez donné votre accord en réservant ; si vous changez d'avis, dites-le-moi simplement.</p>"
         : "") +
-      "<p>Une question d'ici le jour J (tenues, lieu précis) ? Répondez à ce mail ou appelez-moi au 06 47 76 54 17.</p>" +
+      (md.lieuMode === "studio" ? "<p>Je vous envoie l'adresse exacte du studio quelques jours avant la séance.</p>"
+        : md.lieuMode === "exterieur" ? "<p>On cale ensemble l'endroit exact avant le jour J. Le déplacement est offert dans un rayon de " + RAYON_MLP_KM
+          + " km autour de Lyon ; au-delà, on convient des frais de déplacement avant le shooting.</p>" : "") +
+      "<p>Une question d'ici le jour J (tenues, lieu précis) ? Répondez simplement à ce mail.</p>" +
       "<p>À très vite<br>" + esc(marque.signature) + "</p>";
     try {
       await sendMail({ to: email, subject: "Votre shooting est réservé · " + marque.nom, html, marque: marque.cle,
@@ -517,7 +534,7 @@ async function traiterAbandonMlp(session, md) {
       + "<p>Vous avez commencé à réserver un <b>shooting portrait</b>, et la réservation n'est pas allée au bout. Aucun souci : le créneau a simplement été libéré.</p>"
       + "<p>Si vous avez toujours envie de faire ce shooting, tout est encore possible :</p>"
       + "<p><a href=\"" + esc(marque.site() + "/shooting.html#reserver") + "\" style=\"display:inline-block;background:#FF7518;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:bold\">Choisir une nouvelle date</a></p>"
-      + "<p>Une question sur le lieu, les tenues ou le déroulé ? Répondez simplement à ce mail ou appelez-moi au <b>06 47 76 54 17</b>.</p>"
+      + "<p>Une question sur le lieu, les tenues ou le déroulé ? Répondez simplement à ce mail.</p>"
       + "<p>À très vite<br>" + esc(marque.signature) + "</p>"
       + "<p style=\"font-size:12px;color:#888\">Vous recevez ce message car une réservation a été commencée avec cette adresse. Si ce n'était pas vous, ignorez simplement ce mail.</p>";
     try { await sendMail({ to: email, subject: "Votre shooting est resté en attente", html, marque: marque.cle }); } catch (e) {}

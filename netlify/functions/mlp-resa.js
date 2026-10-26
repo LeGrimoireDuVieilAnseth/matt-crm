@@ -5,14 +5,13 @@
 //
 // PUBLIC, adresse neutre /resa-api :
 //   GET                 : les creneaux libres, et la grille (formules, photos)
-//   POST {gamme, photos, lieu, paiement, date, time, client, totalAffiche}
+//   POST {gamme, lieu: {mode, cadre, precision}, paiement, date, time, client, totalAffiche}
 //                       : pose le verrou du creneau et ouvre le paiement Stripe
 //                         (compte Matt la Photo). Le webhook enregistre le reste.
 import Stripe from "stripe";
 import { crmStore, loadData, pruneLocks, uid } from "../mbs-lib.mjs";
-import { FORMULES_MLP, SLOTS_MLP, GRILLE_PHOTOS, PHOTOS_EN_PLUS_MAX, BRAND_MLP, LOCK_TTL_MS,
+import { FORMULES_MLP, SLOTS_MLP, BRAND_MLP, LOCK_TTL_MS, CADRES_MLP, RAYON_MLP_KM, lieuShooting,
          isValidSlotMlp, isFreeMlp, disponibilitesMlp, prixShooting, acompteMlp } from "../mlp-resa.mjs";
-import { calculerDeplacement, RAYON_OFFERT_KM } from "../mbs-deplacement.mjs";
 import { marqueDe } from "../marques.mjs";
 
 const cors = {
@@ -36,7 +35,7 @@ export default async (request) => {
     try {
       const data = await loadData(store);
       return json({ ok: true, slots: SLOTS_MLP, days: disponibilitesMlp(data),
-        formules: FORMULES_MLP, photos: { ...GRILLE_PHOTOS, max: PHOTOS_EN_PLUS_MAX }, rayonOffert: RAYON_OFFERT_KM,
+        formules: FORMULES_MLP, cadres: CADRES_MLP, rayonOffert: RAYON_MLP_KM,
         paiement: !!MARQUE.stripeSecret() });
     } catch (e) { return json({ ok: false, error: "server" }, 500); }
   }
@@ -44,7 +43,7 @@ export default async (request) => {
 
   const secret = MARQUE.stripeSecret();
   if (!secret) return json({ ok: false, error: "paiement",
-    message: "La réservation en ligne n'est pas encore ouverte. Appelez-moi au 06 47 76 54 17, on fixe la date ensemble." }, 503);
+    message: "La réservation en ligne n'est pas encore ouverte. Écrivez-moi à mattlaphototiktok@gmail.com, on fixe la date ensemble." }, 503);
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ ok: false, error: "json" }, 400); }
@@ -58,7 +57,9 @@ export default async (request) => {
   if (!isValidSlotMlp(date, time)) return json({ ok: false, error: "invalid_slot" }, 400);
   if (!prenom || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return json({ ok: false, error: "missing_client" }, 400);
 
-  const p = prixShooting({ gamme: body.gamme, photos: body.photos });
+  /* Plus de photos en plus a la reservation (Matt, 25/10/2026) : elles se
+     commandent dans la galerie. */
+  const p = prixShooting({ gamme: body.gamme, photos: 0 });
   if (!p) return json({ ok: false, error: "formule", message: "Formule non reconnue. Rechargez la page et recommencez." }, 400);
   const f = FORMULES_MLP[body.gamme];
   /* L'offre video : pas de reservation sans l'accord d'etre filme(e) et
@@ -67,17 +68,11 @@ export default async (request) => {
   if (f.video && body.consentVideo !== true) return json({ ok: false, error: "consentement",
     message: "Pour l'offre Matt la Photo, cochez la case qui autorise la vidéo et sa publication." }, 400);
   const reseau = f.video ? String(body.reseau || "").trim().replace(/\s+/g, "").slice(0, 60) : "";
-  const adresse = String(body.lieu || "").trim().slice(0, 160);
-  if (adresse.length < 3) return json({ ok: false, error: "lieu", message: "Indiquez le lieu du shooting." }, 400);
-
-  /* Le deplacement, recalcule ici depuis la seule adresse : le navigateur
-     n'envoie jamais de montant. */
-  const d = await calculerDeplacement(adresse);
-  if (!d.ok) return json({ ok: false, error: "lieu", message: d.raison === "trop_loin"
-    ? "Ce lieu est au-delà de mon rayon de déplacement. Appelez-moi au 06 47 76 54 17, on trouve une solution."
-    : "Adresse du lieu non reconnue. Reprenez-la dans le formulaire." }, 400);
+  /* Le lieu : le studio, ou un cadre en exterieur (mlp-resa.mjs). */
+  const l = lieuShooting(body.lieu);
+  if (l.erreur) return json({ ok: false, error: "lieu", message: l.erreur }, 400);
   const totalPlein = p.total;
-  const total = totalPlein + d.frais;
+  const total = totalPlein;
 
   /* Ce que la personne a vu doit couvrir ce qu'on va lui compter. */
   const vu = Math.round(Number(body.totalAffiche));
@@ -99,8 +94,8 @@ export default async (request) => {
     try { const d2 = await loadData(store); d2.mbsLocks = d2.mbsLocks.filter(l => l.id !== lockId); await store.setJSON("data", d2); } catch (e) {}
   };
 
-  /* Acompte calcule sur le prix de la seance, hors deplacement, comme pour
-     Mybabyshoot. En 3 fois avec Klarna, tout est regle maintenant. */
+  /* Acompte calcule sur le prix de la seance, comme pour Mybabyshoot. En 3
+     fois avec Klarna, tout est regle maintenant. */
   const acompte = integral ? total : Math.min(acompteMlp(totalPlein), total);
   const site = MARQUE.site();
   try {
@@ -112,14 +107,14 @@ export default async (request) => {
       customer_email: email,
       line_items: [{ quantity: 1, price_data: { currency: "eur", unit_amount: Math.round(acompte * 100),
         product_data: { name: (integral ? "Shooting portrait, " : "Acompte shooting portrait, ") + (f.video ? f.nom + " (shooting + vidéo)" : "formule " + f.nom),
-          description: "Le " + frDate(date) + " à " + time.replace(":", "h") + ", " + d.label + "." } } }],
+          description: "Le " + frDate(date) + " à " + time.replace(":", "h") + ". " + l.texte + "." } } }],
       success_url: site + "/shooting.html?reservation=ok&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/shooting.html?reservation=annulee#reserver",
       /* La relance part quand Stripe declare la session expiree (24 h au plus). */
       expires_at: Math.floor(now / 1000) + 23 * 60 * 60 + 55 * 60,
       metadata: {
         app: "mlp-resa", lockId, gamme: String(body.gamme), photos: String(p.photos), date, time,
-        lieuExt: d.label, km: String(d.km), fraisDepl: String(d.frais),
+        lieuExt: l.texte, lieuMode: l.mode, lieuCadre: l.cadre, km: "", fraisDepl: "0",
         acompte: String(acompte), total: String(total), totalPlein: String(totalPlein),
         integral: integral ? "1" : "", origine, prenom, nom, email, tel, site,
         video: f.video ? "1" : "", consentVideo: f.video ? new Date(now).toISOString() : "", reseau

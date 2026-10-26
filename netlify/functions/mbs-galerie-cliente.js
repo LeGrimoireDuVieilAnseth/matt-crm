@@ -39,6 +39,8 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
 });
 
 const MESSAGE_TROP = "Trop d'essais avec des liens inconnus. Réessayez dans une heure, ou appelez le 06 47 76 54 17.";
+/* La page Matt la Photo passe par /galerie-cliente : pas de telephone. */
+const MESSAGE_TROP_MLP = "Trop d'essais avec des liens inconnus. Réessayez dans une heure, ou écrivez-moi à mattlaphototiktok@gmail.com.";
 
 export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -65,7 +67,7 @@ export default async (request) => {
 
   /* ---------- la galerie ---------- */
   if (await porteFermee("galerie", request, LIMITE_CODES))
-    return json({ ok: false, erreur: "trop", message: MESSAGE_TROP }, 429);
+    return json({ ok: false, erreur: "trop", message: url.pathname.startsWith("/galerie-cliente") ? MESSAGE_TROP_MLP : MESSAGE_TROP }, 429);
   const g = await lireGalerie(store, jeton);
   if (!g) {
     await noterEchec("galerie", request, LIMITE_CODES);
@@ -134,7 +136,7 @@ export default async (request) => {
   const tropDe = TAILLES.filter(t => (parTaille[t.cle] || 0) > TIRAGES_MAX);
   if (tropDe.length) {
     return json({ ok: false, erreur: "trop_de_tirages", messages: tropDe.map(t =>
-      "Au plus " + TIRAGES_MAX + " tirages en " + t.nom + " par commande. Pour davantage, appelez Matteo au 06 47 76 54 17.") }, 400);
+      "Au plus " + TIRAGES_MAX + " tirages en " + t.nom + " par commande. Pour davantage, " + (marqueDe(g.marque).tel ? "appelez Matteo au 06 47 76 54 17" : marqueDe(g.marque).contact) + ".") }, 400);
   }
   if (!coeurs.length && !aDuPapier && g.quota) {
     return json({ ok: false, erreur: "vide", messages: ["Choisissez vos photos avant de valider."] }, 400);
@@ -154,7 +156,7 @@ export default async (request) => {
   const panier = { ...panierSien, lignes: [...panierSien.lignes, ...lignesAutres],
                    total: panierSien.total + lignesAutres.reduce((s, l) => s + l.montant, 0) };
   if (panier.total > LIEN_MAX)
-    return json({ ok: false, erreur: "trop_haut", messages: ["Ce total dépasse ce qui peut être réglé en ligne. Appelez Matteo au 06 47 76 54 17."] }, 400);
+    return json({ ok: false, erreur: "trop_haut", messages: ["Ce total dépasse ce qui peut être réglé en ligne. " + (marqueDe(g.marque).tel ? "Appelez Matteo au 06 47 76 54 17." : "Écrivez-moi à mattlaphototiktok@gmail.com.")] }, 400);
 
   const now = Date.now();
   const tiragesTexte = Object.entries(tir.numeros)
@@ -197,7 +199,7 @@ export default async (request) => {
 
   /* Le compte Stripe de la marque (Matt la Photo a le sien), sans repli. */
   const secret = marqueDe(g.marque).stripeSecret();
-  if (!secret) return json({ ok: false, erreur: "stripe", messages: ["Le paiement en ligne n'est pas encore disponible. Appelez-moi au 06 47 76 54 17, je vous envoie un lien."] }, 503);
+  if (!secret) return json({ ok: false, erreur: "stripe", messages: ["Le paiement en ligne n'est pas encore disponible. " + (marqueDe(g.marque).tel ? "Appelez-moi au 06 47 76 54 17" : "Écrivez-moi à mattlaphototiktok@gmail.com") + ", je vous envoie un lien."] }, 503);
 
   /* ---------- a payer : la commande devient un lien de paiement ----------
      Le webhook le traitera comme tous les liens (facture, recette, rappel

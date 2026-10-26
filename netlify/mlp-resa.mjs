@@ -39,18 +39,42 @@ export const BRAND_MLP = "matt-la-photo";
 
    L'OFFRE MATT LA PHOTO (video: true), demande de Matt le 24/10/2026 : le
    shooting, et en plus Matt tourne une video dans son format habituel et la
-   publie sur TikTok et Instagram. La personne gagne en visibilite, Matt a
-   du contenu : le prix est plus doux. Elle remplace l'Essentielle a 190 EUR.
-   On ne peut la reserver qu'en donnant son accord pour etre filme(e) et
-   publie(e) (consentVideo, verifie par le serveur et date dans le CRM). */
+   publie sur TikTok et Instagram : la personne gagne en visibilite. On ne
+   peut la reserver qu'en donnant son accord pour etre filme(e) et publie(e)
+   (consentVideo, verifie par le serveur et date dans le CRM).
+   Grille du 25/10/2026 (Matt) : Mini shoot 150 (5 retouches, prive), l'offre
+   Matt la Photo au milieu a 250 (15 retouches + la video), Prestige 350.
+   Avant : Essentielle 190, Confort 250, puis l'offre video a 150. */
 export const FORMULES_MLP = {
-  video:    { nom: "L'offre Matt la Photo", prix: 150, retouches: 5, video: true },
-  confort:  { nom: "Confort",  prix: 250, retouches: 15 },
-  prestige: { nom: "Prestige", prix: 350, retouches: null }
+  mini:     { nom: "Mini shoot", prix: 150, retouches: 5 },
+  video:    { nom: "L'offre Matt la Photo", prix: 250, retouches: 15, video: true },
+  /* prive : la formule se dit "rien n'est publie" (Prestige seulement,
+     Matt 25/10/2026 ; le Mini shoot ne promet rien). */
+  prestige: { nom: "Prestige", prix: 350, retouches: null, prive: true }
 };
 export const retouchesTexte = (f) => f.retouches ? f.retouches + " photos retouchées" : "toutes les plus belles photos retouchées";
 /* Ce que la formule comprend, en une ligne (facture, mail, CRM). */
 export const contenuFormule = (f) => (f.video ? "shooting + vidéo publiée sur TikTok et Instagram, " : "") + retouchesTexte(f);
+
+/* LE LIEU (Matt, 25/10/2026) : au studio, ou en exterieur dans un cadre :
+   en ville (Lyon), en foret, dans un champ, ou autre (la personne decrit
+   l'endroit). Plus d'adresse ni de calcul de trajet : le deplacement est
+   offert dans un rayon de 30 km autour de Lyon, au-dela Matt convient des
+   frais avec la personne avant le shooting (ils se reglent le jour J).
+   L'adresse du studio n'est jamais ecrite sur le site : Matt l'envoie avant
+   la seance (rappel dans le CRM). */
+export const CADRES_MLP = { ville: "en ville (Lyon)", foret: "en forêt", champ: "dans un champ", autre: "autre lieu" };
+export const RAYON_MLP_KM = 30;
+export function lieuShooting(l) {
+  const mode = l && (l.mode === "studio" || l.mode === "exterieur") ? l.mode : "";
+  if (!mode) return { erreur: "Choisissez le studio ou l'extérieur." };
+  if (mode === "studio") return { mode, cadre: "", precision: "", texte: "Au studio" };
+  const cadre = l && Object.prototype.hasOwnProperty.call(CADRES_MLP, l.cadre) ? l.cadre : "";
+  if (!cadre) return { erreur: "Choisissez le cadre de votre shooting en extérieur." };
+  const precision = String(l.precision || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (cadre === "autre" && precision.length < 3) return { erreur: "Décrivez l'endroit qui vous ferait plaisir." };
+  return { mode, cadre, precision, texte: "En extérieur, " + CADRES_MLP[cadre] + (precision ? " : " + precision : "") };
+}
 
 /* Un creneau toutes les 1 h 30 (choix de Matt), du lundi au samedi comme
    Mybabyshoot. Une seance tient dans son creneau. */

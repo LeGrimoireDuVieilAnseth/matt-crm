@@ -27,7 +27,7 @@ export default async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (request.method !== "POST") return json({ ok: false }, 405);
   if (await porteFermee("mlp-demande", request, LIMITE_CODES))
-    return json({ ok: false, erreur: "trop", message: "Trop de demandes envoyées. Réessayez dans une heure, ou appelez le 06 47 76 54 17." }, 429);
+    return json({ ok: false, erreur: "trop", message: "Trop de demandes envoyées. Réessayez dans une heure, ou écrivez-moi à mattlaphototiktok@gmail.com." }, 429);
 
   let d = {};
   try { d = await request.json(); } catch (e) { return json({ ok: false, erreur: "json" }, 400); }

@@ -320,10 +320,12 @@ export async function makeGiftInvoicePdf(inv){
 /* L'emetteur d'une facture : meme personne, meme SIRET ; seule l'enseigne
    change (Matt la Photo, 24/10/2026). */
 const emetteur = (inv) => (inv && inv.enseigne)
-  ? { ...ISSUER, enseigne: String(inv.enseigne), ...(inv.email !== undefined ? { email: String(inv.email || "") } : {}) }
+  ? { ...ISSUER, enseigne: String(inv.enseigne), ...(inv.email !== undefined ? { email: String(inv.email || "") } : {}),
+      /* Matt la Photo : pas de telephone (marques.mjs). */
+      ...(inv.tel !== undefined ? { tel: String(inv.tel || "") } : {}) }
   : ISSUER;
 /* Le telephone, et le mail s'il y en a un. */
-const contactDe = (e) => e.tel + (e.email ? "  ·  " + e.email : "");
+const contactDe = (e) => [e.tel, e.email].filter(Boolean).join("  ·  ");
 
 export async function makeComplementInvoicePdf(inv){
   const ISSUER = emetteur(inv);

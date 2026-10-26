@@ -167,7 +167,7 @@ async function factureDeSolde(client, data) {
   const dateStr = new Date().toLocaleDateString("fr-FR");
   const pdf = await makeFinalInvoicePdf({
     number, dateStr, client: { name: client.name, email: client.email },
-    typeLabel, seanceDateFr, total, acompte, enseigne: m.nom, email: m.email()
+    typeLabel, seanceDateFr, total, acompte, enseigne: m.nom, email: m.email(), tel: m.tel
   });
   await saveInvoice({
     number, kind: "solde", pdf, client: { name: client.name, email: client.email },

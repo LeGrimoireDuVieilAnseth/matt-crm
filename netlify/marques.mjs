@@ -18,6 +18,9 @@ export const MARQUES = {
     site: () => propre(process.env.MBS_SITE_URL || "https://www.mybabyshoot.fr"),
     signature: "Matteo · Mybabyshoot",
     instagram: "@mybabyshoot",
+    /* Le telephone dans les mails et sur les factures. */
+    tel: "06 47 76 54 17",
+    contact: "appelez-moi au 06 47 76 54 17",
     /* Variables Netlify : MBS_SMTP_*, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET. */
     stripeSecret: () => process.env.STRIPE_SECRET_KEY || "",
     serieFactures: "MBS",
@@ -34,6 +37,10 @@ export const MARQUES = {
     site: () => propre(process.env.MLP_SITE_URL || "https://mattlaphoto.netlify.app"),
     signature: "Matt · Matt la Photo",
     instagram: "@matt_la_photo",
+    /* Pas de telephone chez Matt la Photo (choix de Matt, 25/10/2026) :
+       on lui ecrit. */
+    tel: "",
+    contact: "écrivez-moi à mattlaphototiktok@gmail.com",
     /* Ses PROPRES variables Netlify, sans repli sur Mybabyshoot :
        MLP_SMTP_USER / MLP_SMTP_PASS (et MLP_FROM_EMAIL, MLP_INVOICE_EMAIL),
        MLP_STRIPE_SECRET_KEY / MLP_STRIPE_WEBHOOK_SECRET (son compte Stripe). */

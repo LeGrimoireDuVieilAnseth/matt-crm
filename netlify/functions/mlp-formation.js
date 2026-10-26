@@ -32,7 +32,7 @@ const json = (obj, status = 200) => new Response(JSON.stringify(obj), {
   status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" }
 });
 /* La formation tutoie, comme Matt dans ses videos (choix du 24/10/2026). */
-const MESSAGE_TROP = "Trop d'essais. Réessaie dans une heure, ou appelle-moi au 06 47 76 54 17.";
+const MESSAGE_TROP = "Trop d'essais. Réessaie dans une heure, ou écris-moi à mattlaphototiktok@gmail.com.";
 /* Les mots de passe : 10 echecs par heure et par adresse, comme les codes.
    Un eleve qui se trompe trois fois n'est pas gene ; un robot, si. */
 const LIMITE_MDP = LIMITE_CODES;
@@ -62,7 +62,7 @@ export default async (request) => {
     const r = await lireReglages();
     if (!r.ouverte) return json({ ok: false, erreur: "fermee" }, 409);
     if (!secret) return json({ ok: false, erreur: "paiement",
-      message: "Le paiement en ligne n'est pas encore disponible. Appelle-moi au 06 47 76 54 17." }, 503);
+      message: "Le paiement en ligne n'est pas encore disponible. Écris-moi à mattlaphototiktok@gmail.com." }, 503);
     /* Un contenu numerique auquel on accede tout de suite : le droit de
        retractation ne s'applique que si l'acheteur y renonce expressement
        (article L221-28, 13° du code de la consommation). La case est
@@ -151,7 +151,7 @@ export default async (request) => {
     const em = normaliserEmail(body.email);
     if (!emailValide(em)) return json({ ok: false, erreur: "email" }, 400);
     if (!process.env.MLP_SMTP_USER || !process.env.MLP_SMTP_PASS)
-      return json({ ok: false, erreur: "mail", message: "L'envoi de mails n'est pas encore en place. Appelle-moi au 06 47 76 54 17." }, 503);
+      return json({ ok: false, erreur: "mail", message: "L'envoi de mails n'est pas encore en place. Écris-moi à mattlaphototiktok@gmail.com." }, 503);
     const d = await demanderReinit(em);
     if (d) {
       const lien = MARQUE.site() + "/cours.html#reinit=" + d.t;

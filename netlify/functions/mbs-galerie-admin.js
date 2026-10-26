@@ -277,7 +277,7 @@ export default async (request) => {
         "<p>Vous les retrouvez aussi dans votre galerie, avec toutes les autres :<br>" +
         '<a href="' + esc(adresseGalerie(g.jeton, g.marque)) + '">' + esc(adresseGalerie(g.jeton, g.marque)) + "</a></p>" +
         "<p>Le lien de téléchargement a une durée limitée : pensez à enregistrer vos photos.</p>" +
-        "<p>" + esc(marqueDe(g.marque).signature) + " · 06 47 76 54 17</p>";
+        "<p>" + esc(marqueDe(g.marque).signature) + (marqueDe(g.marque).tel ? " · " + marqueDe(g.marque).tel : "") + "</p>";
       try { envoye = await sendMail({ to: g.email, subject: "Vos photos retouchées sont prêtes", html, marque: g.marque }); }
       catch (e) { envoye = false; }
     }
