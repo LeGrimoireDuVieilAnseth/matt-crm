@@ -3647,6 +3647,7 @@ function dessinerRetouches(){
       : "Prestige"+(n?" · "+n+" cœur"+(n>1?"s":""):"")+" · toutes les plus belles";
     const bouts=[quoi];
     if(g.nbTirages) bouts.push(g.nbTirages+" tirage"+(g.nbTirages>1?"s":"")+" à poster");
+    if(g.nbDemandes) bouts.push("✎ "+g.nbDemandes+" demande"+(g.nbDemandes>1?"s":"")+" de retouche");
     bouts.push("reçue le "+new Date(g.choisieAt||g.createdAt).toLocaleDateString("fr-FR",{day:"numeric",month:"short"}));
     return `<div class="row" data-b="${esc(g.marque||"mybabyshoot")}" onclick="openGalerie('${esc(g.jeton)}')">
       ${cadranRetouche(j)}
@@ -4781,10 +4782,11 @@ async function openGalerie(jeton){
   dessinerGalerie();
 }
 
-function vignettesGal(g,ids){
+function vignettesGal(g,ids,notes){
   const nom=Object.fromEntries(g.photos.map(p=>[p.id,p.nom]));
   return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px;margin:10px 0">`
-    +ids.map(id=>`<a href="${esc(apercuGal(g.jeton,id))}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit">
+    +ids.map(id=>`<a href="${esc(apercuGal(g.jeton,id))}" target="_blank" rel="noopener" style="display:block;position:relative;text-decoration:none;color:inherit">
+         ${notes&&notes[id]?`<span title="Demande de retouche" style="position:absolute;top:5px;right:5px;width:24px;height:24px;border-radius:50%;background:var(--surface);display:grid;place-items:center;font-size:13px;box-shadow:0 2px 6px -2px rgba(0,0,0,.35)">✎</span>`:""}
         <img src="${esc(vignetteGal(g.jeton,id))}" loading="lazy" alt="" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;background:var(--surface-3);display:block">
         <div style="font-size:11.5px;font-weight:600;margin-top:3px;text-align:center;word-break:break-all">${esc(nom[id]||id)}</div></a>`).join("")
     +`</div>`;
@@ -4794,11 +4796,23 @@ function vignettesGal(g,ids){
    precedent d'une galerie a deux seances (tour = son rang). */
 const choixGal=(g,tour)=>tour===""||tour===undefined?g.selection:(g.passees||[])[tour];
 /* Les miniatures d'un choix, seance par seance quand il y en a deux. */
-function vignettesChoixGal(g,ids){
+function vignettesChoixGal(g,ids,notes){
   const seances=g.formule==="duo"?seancesDeGal(g,ids):[];
-  if(seances.length<2) return vignettesGal(g,ids);
+  if(seances.length<2) return vignettesGal(g,ids,notes);
   return seances.map(k=>`<div style="font-size:12px;font-weight:700;color:var(--ink-2);margin-top:10px">${esc(nomSeanceGal(k))} · ${ids.filter(id=>seanceDePhotoGal(g,id)===k).length}</div>`
-    +vignettesGal(g,ids.filter(id=>seanceDePhotoGal(g,id)===k))).join("");
+    +vignettesGal(g,ids.filter(id=>seanceDePhotoGal(g,id)===k),notes)).join("");
+}
+/* Ses demandes de retouche (29/10/2026, demande de Matt) : le mot laisse
+   sous une photo choisie, avec la miniature et le numero Lightroom. */
+function demandesGal(g,ids,notes){
+  const avec=(ids||[]).filter(id=>notes&&notes[id]);
+  if(!avec.length) return "";
+  const nom=Object.fromEntries(g.photos.map(p=>[p.id,p.nom]));
+  return `<div style="margin:4px 0 10px"><div style="font-size:12.5px;font-weight:700;color:var(--ink-2);margin-bottom:4px">✎ Ses demandes de retouche · ${avec.length}</div>`
+    +avec.map(id=>`<a href="${esc(apercuGal(g.jeton,id))}" target="_blank" rel="noopener" style="display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center;text-decoration:none;color:inherit;padding:7px 0;border-top:1px solid var(--line)">
+        <img src="${esc(vignetteGal(g.jeton,id))}" loading="lazy" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;background:var(--surface-3)">
+        <div style="font-size:13.5px;line-height:1.45"><b>${esc(nom[id]||id)}</b><br>${esc(notes[id])}</div></a>`).join("")
+    +`</div>`;
 }
 function htmlChoixGal(g,t,tour){
   const n=t.coeurs.length, comp=comprisesGal(g,t), plus=t.enPlus!=null?t.enPlus:(g.quota?Math.max(0,n-g.quota):0);
@@ -4809,7 +4823,7 @@ function htmlChoixGal(g,t,tour){
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
         <b style="font-size:14px">${n} photo${n>1?"s":""} à retoucher</b>${paie}</div>
       <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${g.quota?comp+" comprise(s) dans la formule"+(plus?", "+plus+" en plus":""):"Prestige : ses cœurs te guident"} · envoyée le ${esc(dateGal(t.at))}</div>
-      ${n?vignettesChoixGal(g,t.coeurs):""}
+      ${n?vignettesChoixGal(g,t.coeurs,t.notes)+demandesGal(g,t.coeurs,t.notes):""}
       ${n?`<button class="btn ghost sm wide" onclick="copierNumerosGal(${tour===""?"''":tour})">Copier les numéros</button>`:""}
     </div>`;
   /* Les tirages, colis par colis : le sien, puis ceux qu'elle fait
@@ -4927,7 +4941,7 @@ function dessinerGalerie(){
     h+=`<div class="card" style="padding:13px 15px">
         <b style="font-size:14px">Pas encore validée</b>
         <div style="font-size:12.5px;color:var(--ink-3);margin-top:3px">${g.coeurs.length} cœur(s) pour l'instant. Tu seras prévenu quand elle validera.</div>
-        ${vignettesChoixGal(g,g.coeurs)}</div>`;
+        ${vignettesChoixGal(g,g.coeurs,g.notes)}${demandesGal(g,g.coeurs,g.notes)}</div>`;
   } else {
     h+=`<div class="card" style="padding:13px 15px;font-size:13.5px;color:var(--ink-3)">Aucun cœur pour l'instant. Tu seras prévenu quand elle validera.</div>`;
   }
@@ -5033,6 +5047,7 @@ function majLigneGal(g){
   const aFaire=[...(g.passees||[]).filter(t=>!t.retouches), ...(s&&!s.enAttente&&!g.retouches?[s]:[])];
   Object.assign(ligne,{statut:g.statut,retouchesAt:g.retouchesAt||0,aRetoucher:aFaire.length>0,
     nbARetoucher:aFaire.reduce((a,t)=>a+(t.coeurs||[]).length,0),
+    nbDemandes:aFaire.reduce((a,t)=>a+Object.keys(t.notes||{}).length,0),
     choisieAt:aFaire.length?Math.min(...aFaire.map(t=>t.payeAt||t.at||0)):0});
 }
 async function enregistrerRetouchesGal(lien,prevenir,texte,tour){

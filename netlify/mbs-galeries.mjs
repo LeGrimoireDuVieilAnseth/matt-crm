@@ -184,7 +184,7 @@ export async function creerGalerie(store, { clientId, prenom, nom, email, formul
                                     : { id: idDe(i), nom: nomDePhoto(p && p.nom) }),
     recues: [],          // les photos dont la vignette ET l'apercu sont arrives
     statut: "preparation",
-    coeurs: [], selection: null,
+    coeurs: [], notes: {}, selection: null,
     createdAt: now, expiresAt: exp.getTime(), vueAt: 0, envoyeeAt: 0,
   };
   if (duo) {
@@ -239,6 +239,7 @@ export function ligneIndex(g) {
     aRetoucher: aFaire.length > 0,
     choisieAt: aFaire.length ? Math.min(...aFaire.map(x => x.t.payeAt || x.t.at || 0)) : 0,
     nbARetoucher: aFaire.reduce((a, x) => a + (x.t.coeurs || []).length, 0),
+    nbDemandes: aFaire.reduce((a, x) => a + nbNotes(x.t), 0),
     enPlus: aFaire.reduce((a, x) => a + (x.t.enPlus || 0), 0), quota: g.quota || 0,
     nbTirages: aFaire.reduce((a, x) => a + tiragesDe(x.t), 0),
     retouchesAt: g.retouchesAt || 0,
@@ -319,8 +320,10 @@ export function vuePublique(g) {
     transfert: g.transfert, retouches: g.retouches,
     photos: g.photos.filter(p => recues.has(p.id) && !(p.s && cachees.has(p.s))),
     coeurs: g.coeurs || [],
+    /* Les demandes de retouche en cours, photo par photo. */
+    notes: g.notes || {},
     selection: s ? {
-      coeurs: s.coeurs, tirages: s.tirages || {}, at: s.at,
+      coeurs: s.coeurs, tirages: s.tirages || {}, notes: s.notes || {}, at: s.at,
       enAttente: !!s.enAttente, paye: !!s.paye, montant: s.montant || 0,
     } : null,
     /* Galerie a deux seances : les seances en ligne (et leur lien de
@@ -392,6 +395,23 @@ export function autresEnvois(g, envois, tailles) {
   return { envois: out, erreurs };
 }
 
+/* Les demandes de retouche (29/10/2026, demande de Matt) : un petit mot de
+   la cliente sur une photo qu'elle a choisie ("effacer le bouton sur le
+   front"). Seulement sur ses coeurs, NOTE_MAX caracteres au plus : Matt
+   sait ce qu'il doit reprendre sur chaque photo. */
+export const NOTE_MAX = 300;
+export function notesPropres(g, notes, coeurs) {
+  const garde = new Set(coeurs || []), out = {};
+  if (!notes || typeof notes !== "object" || Array.isArray(notes)) return out;
+  for (const [id, t] of Object.entries(notes)) {
+    if (!garde.has(String(id))) continue;
+    const texte = String(t == null ? "" : t).replace(/\s+/g, " ").trim().slice(0, NOTE_MAX);
+    if (texte) out[String(id)] = texte;
+  }
+  return out;
+}
+export const nbNotes = (t) => Object.keys((t && t.notes) || {}).length;
+
 /* Les coeurs gardes : seulement des photos de cette galerie, sans doublon,
    ni une photo deja choisie la fois d'avant (galerie a deux seances). */
 export function coeursPropres(g, coeurs) {
@@ -432,7 +452,7 @@ export function nouveauChoix(g) {
   if (!s || s.enAttente) return false;
   (g.passees = g.passees || []).push({ ...s, comprises: comprisesDe(g, s), seances: seancesDe(g, s.coeurs || []),
     retouches: g.retouches || "", retouchesAt: g.retouchesAt || 0 });
-  g.selection = null; g.coeurs = []; g.retouches = ""; g.retouchesAt = 0;
+  g.selection = null; g.coeurs = []; g.notes = {}; g.retouches = ""; g.retouchesAt = 0;
   g.statut = "envoyee";
   return true;
 }
@@ -476,6 +496,9 @@ export function texteSelection(g, { photosSeules = false } = {}) {
     const parSeance = SEANCES_DUO.map(k => [k, s.coeurs.filter(id => (g.photos.find(p => p.id === id) || {}).s === k)]);
     parSeance.forEach(([k, ids]) => { if (ids.length) lignes.push(NOM_SEANCE[k] + " (" + ids.length + ") : " + ids.map(id => nom[id] || id).join(", ")); });
   } else if (n) lignes.push(s.coeurs.map(id => nom[id] || id).join(", "));
+  /* Ses demandes de retouche, photo par photo, dans l'ordre de ses coeurs. */
+  const avecNote = s.coeurs.filter(id => s.notes && s.notes[id]);
+  if (avecNote.length) lignes.push("", "Ses demandes de retouche :", ...avecNote.map(id => (nom[id] || id) + " : " + s.notes[id]));
   if (!photosSeules) {
     if (s.tiragesTexte) lignes.push("", "Tirages :", s.tiragesTexte);
     if (s.adresseTexte) lignes.push("", "À poster à :", s.adresseTexte);

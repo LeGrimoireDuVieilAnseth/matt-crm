@@ -11,15 +11,16 @@
 //   GET  ?g=JETON                 : la galerie (photos, formule, selection)
 //   GET  ?g=JETON&t=p001          : la vignette d'une photo
 //   GET  ?g=JETON&v=p001          : l'apercu d'une photo
-//   POST ?g=JETON {action:"coeurs", coeurs}            : garde les coeurs en cours
-//   POST ?g=JETON {action:"valider", coeurs, tirages, adresse, paiement}
+//   POST ?g=JETON {action:"coeurs", coeurs, notes}     : garde les coeurs en cours
+//                                                       (et les demandes de retouche)
+//   POST ?g=JETON {action:"valider", coeurs, notes, tirages, adresse, paiement}
 //
 // LE PRIX EST CALCULE ICI, PAS RECU DU NAVIGATEUR : la page n'envoie que des
 // identifiants de photos et des quantites. Une commande a payer devient un
 // lien de paiement, et suit le chemin de tous les liens jusqu'a la facture.
 import Stripe from "stripe";
 import { galerieStore, lireGalerie, enregistrer, vuePublique, estExpiree, normaliserJeton, completerFormats,
-         idPhotoValide, coeursPropres, photosEnPlus, tiragesParTaille, texteSelection, autresEnvois,
+         idPhotoValide, coeursPropres, notesPropres, photosEnPlus, tiragesParTaille, texteSelection, autresEnvois,
          quotaRestant, nomFormuleDe, PHOTOS_MAX_GALERIE } from "../mbs-galeries.mjs";
 import { calculerPanier, lignesAutresEnvois, grillePublique, TAILLES, PHOTOS_MAX, TIRAGES_MAX } from "../mbs-panier.mjs";
 import { lienStore, creerLien, memoriserPanier, LIEN_MIN, LIEN_MAX, LIEN_SEUIL_3X } from "../mbs-liens.mjs";
@@ -109,6 +110,8 @@ export default async (request) => {
   if (corps.action === "coeurs") {
     if (verrouillee) return json({ ok: false, erreur: "validee" }, 409);
     g.coeurs = coeursPropres(g, corps.coeurs).slice(0, g.quota ? plafond : PHOTOS_MAX_GALERIE);
+    /* Une page d'avant (sans demandes) ne doit pas effacer celles deja ecrites. */
+    g.notes = notesPropres(g, corps.notes !== undefined ? corps.notes : g.notes, g.coeurs);
     await enregistrer(store, g);
     return json({ ok: true, coeurs: g.coeurs });
   }
@@ -176,9 +179,10 @@ export default async (request) => {
     } catch (e) {}
   }
 
-  g.coeurs = coeurs;
+  const notes = notesPropres(g, corps.notes !== undefined ? corps.notes : g.notes, coeurs);
+  g.coeurs = coeurs; g.notes = notes;
   g.selection = {
-    coeurs, tirages: corps.tirages && typeof corps.tirages === "object" ? corps.tirages : {},
+    coeurs, notes, tirages: corps.tirages && typeof corps.tirages === "object" ? corps.tirages : {},
     tiragesTexte, adresse: panier.adresse, adresseTexte,
     envois: autres.envois.map(e => ({ adresse: e.adresse, adresseTexte: e.adresseTexte,
                                       tirages: e.tirages, tiragesTexte: e.tiragesTexte, nb: e.nb })),
