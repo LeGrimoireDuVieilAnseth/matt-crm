@@ -75,11 +75,16 @@ export const TARIFS = {
    et pour que la cliente paie toujours un peu moins que les 15 % promis. */
 export const REMISE_DUO = 0.125;
 export const GAMMES_DUO = ["essentielle", "confort", "prestige"];
-export function prixPaireDuo(grossesse, naissance){
+export function prixPaireDuo(grossesse, naissance, { noel = false } = {}){
   const a = TARIFS.simple[String(grossesse || "")];
   const b = TARIFS.simple[String(naissance  || "")];
   if (!a || !b) return null;
   const plein = a + b;
+  /* Noel 2026 (demande de Matt) : pendant l'offre, le pack passe aux prix de
+     Noel, 100 euros de moins sur chaque seance, A LA PLACE de la remise de
+     12,5 % ; et 5 photos imprimees sont offertes, livrees chez elle (une
+     tache le rappelle a Matt). Meme regle dans app.js. */
+  if (noel) return { plein, prix: plein - 2 * REMISE_NOEL.montant, remise: 2 * REMISE_NOEL.montant, noel: true };
   /* Arrondi au centime avant de descendre a la dizaine : sans lui, un
      produit tombant pile sur une dizaine peut valoir 629,9999999 en
      binaire et faire perdre 10 euros. */
@@ -87,14 +92,89 @@ export function prixPaireDuo(grossesse, naissance){
   return { plein, prix, remise: plein - prix };
 }
 
+/* LE MINI-SHOOT DU DIMANCHE (demande de Matt, 02/11/2026) : 97 euros,
+   45 minutes, 5 photos retouchees, SANS les photos brutes (choix de Matt).
+   Le studio est ferme le dimanche : Matt ouvre les quatre dimanches de
+   decembre pour cette offre seulement, et elle ne se prend que ces jours-la.
+   Grossesse, naissance (tres court pour un nouveau-ne, le site le dit),
+   bebe ou famille. Paye en entier a la reservation. Ouvert avec l'habillage
+   de Noel, reservation jusqu'au 26 decembre (la derniere seance est le 27).
+   Ne se cumule avec aucun code ni bon. Il s'offre en bon cadeau (achete
+   pendant l'offre, valable 18 mois en semaine : choix de Matt).
+   Hors de TARIFS.simple pour ne pas entrer dans le pack ni dans les bons.
+   A garder identique a OFFRE_MINI et GAMMES.mini dans app.js. */
+export const OFFRE_MINI = {
+  id: "mini", nom: "Mini-shoot spécial Noël", prix: 97, retouches: 5, duree: 45,
+  dimanches: ["2026-12-06", "2026-12-13", "2026-12-20", "2026-12-27"],
+  creneaux: ["10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00"],
+  types: ["grossesse", "naissance", "bebe", "famille"]
+};
+
+/* LES PRIX DE NOEL (demande de Matt, 02/11/2026 ; sans code depuis le meme
+   jour) : pendant l'offre, 100 euros de moins sur chaque seance unique
+   (grossesse, naissance, bebe, famille) et sur son bon cadeau, appliques
+   d'office et affiches prix barre sur le site. Le pack a ses propres prix
+   de Noel (prixPaireDuo). Ce qui compte, c'est la date de la COMMANDE :
+   reservee ou achetee jusqu'au 26 decembre inclus, la seance peut avoir
+   lieu en mars. Le 27, retour aux prix habituels.
+   La remise demarre quand Matt allume l'habillage de Noel dans son CRM : un
+   seul geste lance la deco, l'encadre du site et les prix.
+   Un code promo ne s'y ajoute pas (des partenaires distribuent des codes de
+   100 euros) ; un bon cadeau reste utilisable, c'est un paiement.
+   A garder identique a REMISE_NOEL dans app.js. */
+export const REMISE_NOEL = { montant: 100, jusquau: "2026-12-26" };
+export async function remiseNoelActive({ jour = todayISOParis(), theme } = {}){
+  if (jour > REMISE_NOEL.jusquau) return false;
+  if (theme === undefined) {
+    try {
+      const doc = await getStore({ name: "mbs-theme", consistency: "strong" }).get("actif", { type: "json" });
+      theme = doc && doc.theme;
+    } catch (e) { theme = ""; }
+  }
+  return theme === "noel";
+}
+/* Un creneau du mini-shoot : un des quatre dimanches, une des heures, et
+   pas avant le delai habituel (la veille au plus tard). */
+export function creneauMiniValide(date, time, jour = todayISOParis()){
+  return OFFRE_MINI.dimanches.includes(String(date || "")) && OFFRE_MINI.creneaux.includes(String(time || ""))
+    && date >= addDaysISO(jour, MIN_LEAD_DAYS);
+}
+/* Le chevauchement tient compte des durees : une seance du mini-shoot dure
+   45 minutes, une seance habituelle deux heures (DUREE_SEANCE_MIN). Les
+   creneaux du dimanche sont espaces d'une heure : deux mini-shoots qui se
+   suivent ne se genent pas. */
+export function dureeDe(s){ return Number(s && s.duree) || DUREE_SEANCE_MIN; }
+export function miniOccupe(data, date, time){
+  const debut = minutesDe(time), fin = debut + OFFRE_MINI.duree;
+  return (data.seances || []).some(s => {
+    if (s.brand !== BRAND || s.date !== date) return false;
+    if (s.status === "Annulee" || s.type === "Indispo") return false;
+    const d = minutesDe(s.time);
+    if (d === null) return true;
+    return d < fin && debut < d + dureeDe(s);
+  });
+}
+export function miniLibre(data, date, time, now = Date.now()){
+  return creneauMiniValide(date, time) && !miniOccupe(data, date, time)
+    && !isLocked(data, date, time, now) && !isBlocked(data, date, time)
+    && !mariageConfirme(data, date);
+}
+export function computeMiniAvailability(data, now = Date.now()){
+  return OFFRE_MINI.dimanches.map(date => ({
+    date, slots: OFFRE_MINI.creneaux.filter(t => miniLibre(data, date, t, now))
+  })).filter(d => d.slots.length);
+}
+
 /* Renvoie le prix de la formule, hors frais de deplacement et hors
    remise, ou null si la formule est inconnue. */
-export function prixSeance({ section, gamme, gammes, photos, album, tirages } = {}){
+export function prixSeance({ section, gamme, gammes, photos, album, tirages, noel = false } = {}){
   let base;
-  if (section === "duo") {
+  if (section === "mini") {
+    base = gamme === OFFRE_MINI.id ? OFFRE_MINI.prix : null;
+  } else if (section === "duo") {
     /* Le pack actuel envoie une formule par seance. L'ancien, a formule
        unique, reste accepte pour les bons cadeaux deja vendus. */
-    const paire = gammes ? prixPaireDuo(gammes.grossesse, gammes.naissance) : null;
+    const paire = gammes ? prixPaireDuo(gammes.grossesse, gammes.naissance, { noel }) : null;
     base = paire ? paire.prix : TARIFS.duo[String(gamme || "")];
   } else {
     base = TARIFS.simple[String(gamme || "")];
@@ -110,13 +190,16 @@ export function prixSeance({ section, gamme, gammes, photos, album, tirages } = 
 /* Les types de seance vendus. Liste fermee : ce qui n'y est pas est
    refuse a la reservation plutot que d'arriver mal etiquete dans le CRM,
    sur la facture et dans le mail de la cliente. */
-export const TYPES_SEANCE = ["grossesse", "naissance", "bebe", "duo"];
+/* "famille" revient le 02/11/2026 : Matt la vend a Noel, et surtout en bon
+   cadeau, pour offrir une seance a quelqu'un qui n'attend pas d'enfant. */
+export const TYPES_SEANCE = ["grossesse", "naissance", "bebe", "famille", "duo"];
 export const typeConnu = (t) => TYPES_SEANCE.includes(String(t || ""));
 
 export function typeLabelFr(type){
   if (type === "duo") return "Grossesse + naissance";
   if (type === "naissance") return "Naissance";
   if (type === "bebe") return "Bébé";
+  if (type === "famille") return "Famille";
   return "Grossesse";
 }
 
@@ -271,6 +354,21 @@ export function computeAvailability(data, now = Date.now()){
     if (slots.length) days.push({ date, slots });
   }
   return days;
+}
+
+/* Le cadeau de Noel du pack : 5 photos imprimees, livrees chez elle. Rien
+   ne le rappelait autrement, et l'adresse n'est pas demandee a la
+   reservation. Partagee par mbs-checkout (bon de pack) et mbs-webhook. */
+export function tachePhotosNoel(name, date, clientId, extra = {}){
+  return {
+    id: uid(), done: false, priority: "Haute", clientId,
+    title: "5 photos imprimées offertes à envoyer à " + name,
+    dueDate: date,
+    notes: "Cadeau de Noël du pack grossesse + naissance : 5 photos imprimées, livrées chez elle."
+      + "\n\nÀ demander : les 5 photos choisies (dans sa galerie) et l'adresse d'envoi"
+      + " (nom sur la boîte aux lettres).",
+    ...extra
+  };
 }
 
 export function uid(){

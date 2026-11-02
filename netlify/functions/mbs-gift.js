@@ -3,12 +3,13 @@
 // le code n'est cree qu'au paiement confirme (dans mbs-webhook).
 import Stripe from "stripe";
 import { offreCadeau, styleValide } from "../mbs-coupons.mjs";
-import { typeConnu } from "../mbs-lib.mjs";
+import { typeConnu, REMISE_NOEL, remiseNoelActive, prixPaireDuo } from "../mbs-lib.mjs";
 
 const SEANCE_LABEL = {
   grossesse: "Séance photo grossesse",
   naissance: "Séance photo naissance",
   bebe:      "Séance photo bébé",
+  famille:   "Séance photo famille",
   duo:       "Séances photo grossesse et naissance"
 };
 
@@ -35,7 +36,18 @@ export default async (request) => {
   // L'offre fixe le prix cote serveur : le navigateur n'envoie qu'un identifiant.
   const offre = offreCadeau(body.offre);
   if (!offre) return json({ ok: false, error: "offre" }, 400);
-  const montant = offre.prix;
+  /* Le bon du mini-shoot ne s'achete que pendant l'offre de Noel. */
+  if (offre.noel && !(await remiseNoelActive()))
+    return json({ ok: false, error: "offre", message: "Le mini-shoot spécial Noël n'est plus proposé." }, 400);
+  /* Les 100 euros de Noel valent aussi pour le bon d'une seance unique
+     (pas le pack, qui a ses prix de Noel, ni le mini-shoot). Le bon porte le
+     montant paye ; il couvre quand meme toute la formule, meme apres Noel. */
+  const remiseNoel = (!offre.duo && !offre.noel && await remiseNoelActive()) ? REMISE_NOEL.montant : 0;
+  /* Le bon d'un pack pendant Noel : les prix de Noel des deux seances, et
+     les 5 photos imprimees offertes inscrites sur le bon. */
+  const paireBon = /^duo-(essentielle|confort|prestige)-(essentielle|confort|prestige)$/.exec(offre.id);
+  const packNoel = !!paireBon && await remiseNoelActive();
+  const montant = (packNoel ? prixPaireDuo(paireBon[1], paireBon[2], { noel: true }).prix : offre.prix) - remiseNoel;
 
   /* Un pack couvre les deux seances ; sinon le client choisit laquelle.
      La liste des types vendus fait foi : avant, tout ce qui n'etait pas
@@ -51,7 +63,7 @@ export default async (request) => {
   const pour   = String(body.pour || "").trim().slice(0, 60);      // prenom du beneficiaire
   const mot    = String(body.message || "").trim().slice(0, 200);  // petit mot sur le bon
   const style  = styleValide(body.style);                          // habillage choisi
-  const label  = offre.nom;
+  const label  = offre.nom + (packNoel ? " + 5 photos imprimées offertes" : "");
 
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
 
@@ -86,7 +98,7 @@ export default async (request) => {
       success_url: site + "/?cadeau=ok&valeur=" + montant + "&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: site + "/?cadeau=annule",
       metadata: {
-        app: "mbs-gift", montant: String(montant),
+        app: "mbs-gift", montant: String(montant), noel: remiseNoel ? String(remiseNoel) : "",
         offre: offre.id, seance, label, style,
         // Le site reellement utilise pour l'achat : c'est lui qui sert bon.html.
         // Sans ca l'email pointerait vers mybabyshoot.fr, encore chez Wix.

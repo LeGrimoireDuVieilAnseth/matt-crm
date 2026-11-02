@@ -3,7 +3,7 @@
 // Ne consomme rien : la remise n'est appliquee (et le code brule) que
 // cote serveur dans mbs-checkout / mbs-webhook.
 import { couponStore, checkCoupon, reasonLabel, discountFor, prettyCode, prettyGift, releaseCoupon, normalizeCode } from "../mbs-coupons.mjs";
-import { acompteFor } from "../mbs-lib.mjs";
+import { acompteFor, remiseNoelActive } from "../mbs-lib.mjs";
 import { porteFermee, noterEchec, LIMITE_CODES, MESSAGE_TROP_CODES } from "../mbs-garde.mjs";
 
 const cors = {
@@ -68,6 +68,13 @@ export default async (request) => {
   if (chk.coupon.kind === "surmesure")
     return json({ ok: true, valide: false, message: "Ce code s'utilise avec le lien de réservation que vous avez reçu." });
   const kind = chk.coupon.kind === "cadeau" ? "cadeau" : "promo";
+  /* Pendant Noel, les prix sont deja baisses : un code promo ne s'y ajoute
+     pas (mbs-checkout le refuse aussi). Le mini-shoot n'accepte aucun code. */
+  const section = String(body.section || "simple");
+  if (section === "mini")
+    return json({ ok: true, valide: false, message: "Le mini-shoot est déjà à prix de Noël : il ne se cumule pas avec un code ou un bon." });
+  if (kind === "promo" && (section === "simple" || section === "duo") && await remiseNoelActive())
+    return json({ ok: true, valide: false, message: "Les prix de Noël ne se cumulent pas avec un code promo." });
   const remise = discountFor(total, chk.coupon.amount, kind);
   if (remise <= 0) {
     return json({ ok: true, valide: false, message: "Ce code ne s'applique pas a cette formule." });

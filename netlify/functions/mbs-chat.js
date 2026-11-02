@@ -11,7 +11,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getStore } from "@netlify/blobs";
 import { notifyAll } from "../push-lib.mjs";
-import { normBrand, systemFor, idxKey, consKey, BRAND_LABEL } from "../chat-brands.mjs";
+import { normBrand, systemFor, idxKey, consKey, BRAND_LABEL, NOEL_CHAT } from "../chat-brands.mjs";
+import { remiseNoelActive } from "../mbs-lib.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -149,9 +150,12 @@ export default async (request) => {
   // ---------- corrections ecrites par Matt dans le CRM ----------
   let extra = "";
   try { extra = (await store.get(consKey(conv.brand))) || ""; } catch (e) {}
+  /* Les prix de Noel, seulement pendant qu'ils s'appliquent vraiment. */
+  let base = systemFor(conv.brand);
+  try { if (normBrand(conv.brand) === "mybabyshoot" && await remiseNoelActive()) base += "\n" + NOEL_CHAT; } catch (e) {}
   const systemPrompt = extra.trim()
-    ? systemFor(conv.brand) + "\n\nCONSIGNES DE MATT (PRIORITAIRES)\nCe qui suit a ete ecrit par Matt lui-meme. En cas de contradiction avec ce qui precede, ces consignes l'emportent TOUJOURS.\n" + extra.trim().slice(0, 6000)
-    : systemFor(conv.brand);
+    ? base + "\n\nCONSIGNES DE MATT (PRIORITAIRES)\nCe qui suit a ete ecrit par Matt lui-meme. En cas de contradiction avec ce qui precede, ces consignes l'emportent TOUJOURS.\n" + extra.trim().slice(0, 6000)
+    : base;
 
   // ---------- mode IA ----------
   if (!process.env.ANTHROPIC_API_KEY) {

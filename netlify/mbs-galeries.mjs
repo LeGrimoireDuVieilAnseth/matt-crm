@@ -40,8 +40,11 @@ export const galerieStore = () => getStore({ name: GALERIE_STORE, consistency: "
    les coeurs sont facultatifs, ils guident Matt sans rien declencher).
    DOIT rester egal aux "retouchees" de GAMMES.simple dans js/app.js du
    site : un test compare les deux. */
-export const QUOTA = { essentielle: 5, confort: 15, prestige: 0 };
-export const NOM_FORMULE = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige" };
+export const QUOTA = { essentielle: 5, confort: 15, prestige: 0, mini: 5 };
+export const NOM_FORMULE = { essentielle: "Essentielle", confort: "Confort", prestige: "Prestige", mini: "Mini-shoot" };
+/* "mini" : le mini-shoot du dimanche de decembre 2026 (5 retouchees, sans
+   les brutes : Matt ne met simplement pas de lien de telechargement). Il
+   est hors de GAMMES.simple, comme OFFRE_MINI dans mbs-lib.mjs. */
 /* "libre" : pas de formule, Matt fixe le nombre de retouches a chaque
    galerie (Matt la Photo, 24/10/2026 : shootings et collabs au cas par cas). */
 export const FORMULE_LIBRE = "libre";

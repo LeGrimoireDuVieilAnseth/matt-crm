@@ -4,7 +4,7 @@
 // confirmee dans le CRM (client + seance + paiement, brand "mybabyshoot"),
 // libere le verrou, notifie Matt et envoie l'email de confirmation au client.
 import Stripe from "stripe";
-import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND } from "../mbs-lib.mjs";
+import { crmStore, loadData, pruneLocks, uid, typeLabelFr, PLACE, BRAND, tachePhotosNoel } from "../mbs-lib.mjs";
 import { marqueDe } from "../marques.mjs";
 import { FORMATION, codePourVente, enregistrerVente, afficherCode } from "../mlp-formation.mjs";
 import { FORMULES_MLP, BRAND_MLP, RAYON_MLP_KM, retouchesTexte, contenuFormule, seanceMybabyshootSur, shootingQuiChevauche } from "../mlp-resa.mjs";
@@ -578,7 +578,8 @@ async function traiterBonCadeau(session, md) {
      (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, "")))
   );
   const ligne = "Bon cadeau " + prettyGift(coupon.code) + " · " + (md.label || "") + " " + SEANCE_TXT[coupon.seance]
-    + " · " + montant + " € acheté le " + new Date(now).toLocaleDateString("fr-FR")
+    + " · " + montant + " €" + (md.noel ? " (prix de Noël, -" + md.noel + " €)" : "")
+    + " acheté le " + new Date(now).toLocaleDateString("fr-FR")
     + (md.pour ? " pour " + md.pour : "") + ". Valable jusqu'au " + frDateShort(coupon.expiresAt) + ".";
   if (!client) {
     client = {
@@ -893,7 +894,11 @@ export default async (request) => {
     : "";
   /* Une seance simple : sa formule, en clair. La galerie du CRM la relit
      pour savoir combien de retouches sont comprises (devinerGalerie). */
-  const formuleTexte = (!duoTexte && md.type !== "duo" && NOM_GAMME[md.gamme])
+  const formuleTexte = md.gamme === "mini"
+    /* Le mini-shoot : la fiche dit tout de suite ce qu'il comprend, et
+       surtout ce qu'il ne comprend pas, avant que Matt prepare la galerie. */
+    ? "Formule Mini-shoot spécial Noël (45 min, 5 photos retouchées, sans les photos brutes)."
+    : (!duoTexte && md.type !== "duo" && NOM_GAMME[md.gamme])
     ? "Formule " + NOM_GAMME[md.gamme] + "." : "";
   /* Le creneau a-t-il ete pris entre-temps ? Le verrou ne tient que 3
      minutes, la page Stripe reste payable 24 heures : une cliente qui paie
@@ -905,13 +910,21 @@ export default async (request) => {
     ? ((data.clients.find(c => c.id === dejaPrise.clientId) || {}).name || "une autre cliente")
     : "";
 
+  /* Paye en entier : en 3 fois (integral), ou d'un coup quand l'acompte
+     couvre deja tout (le mini-shoot du dimanche). Rien a reclamer le jour J. */
+  const toutRegle = md.integral === "1" || (total > 0 && acompte >= total);
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date, time, place: md.lieuExt || PLACE, status: "A venir",
+    /* Une seance plus courte que les deux heures habituelles : l'agenda du
+       site en tient compte pour les creneaux voisins (miniOccupe). */
+    ...(md.gamme === "mini" ? { duree: 45 } : {}),
     notes: (dejaPrise ? "CRÉNEAU EN DOUBLE : " + autreNom + " a déjà ce créneau. À déplacer, l'une ou l'autre. " : "")
       + "Réservation en ligne. " + (duoTexte ? duoTexte + " " : "") + (formuleTexte ? formuleTexte + " " : "")
+      + (md.noel ? "Prix de Noël : -" + md.noel + " € déjà déduits. " : "")
+      + (md.noelPack ? "Pack aux prix de Noël (100 € de moins par séance), 5 photos imprimées offertes à livrer. " : "")
       + "Total séance " + total + " €, "
-      + (md.integral === "1" ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
+      + (toutRegle ? "réglée intégralement, rien à encaisser le jour J." : "acompte " + acompte + " € encaissé.")
       + (md.lieuExt ? " SÉANCE EN EXTÉRIEUR à " + md.lieuExt
           + (fraisDepl ? " (frais de déplacement " + fraisDepl + " € compris dans le total)." : " (déplacement offert).") : "")
       + (md.coupon ? (md.kind === "surmesure"
@@ -922,7 +935,6 @@ export default async (request) => {
 
   /* Paiement. En integral, tout est encaisse : le CRM ne doit reclamer aucun
      solde le jour J, et la seance part directement en "Solde". */
-  const toutRegle = md.integral === "1";
   data.paiements.push({
     id: uid(), brand: BRAND, clientId: client.id,
     label: toutRegle ? ("Séance réglée en ligne " + typeLbl) : ("Acompte réservation " + typeLbl),
@@ -930,6 +942,7 @@ export default async (request) => {
     statut: toutRegle ? "Solde" : "Acompte recu",
     date: new Date(now).toISOString().slice(0, 10), dueDate: date,
     notes: (toutRegle ? "Totalité réglée en ligne via Stripe, rien à encaisser le jour J." : "Réglé en ligne via Stripe.")
+      + (md.noel ? " Prix de Noël (-" + md.noel + " €)." : "")
       + (md.coupon ? (md.kind === "surmesure"
           ? " Prix convenu par lien de réservation : " + md.total + " € au lieu de " + md.totalPlein + " €, acompte " + md.acompte + " €."
           : " Code promo " + prettyCode(md.coupon) + " : -" + md.remise + " € (total plein " + md.totalPlein + " €).") : "")
@@ -994,6 +1007,8 @@ export default async (request) => {
         + " dans les 10 jours qui suivent.",
       stripeSession: session.id
     });
+    /* Le cadeau de Noel du pack : 5 photos imprimees a envoyer. */
+    if (md.noelPack === "1") data.taches.push(tachePhotosNoel(name, date, client.id, { stripeSession: session.id }));
   }
 
   /* Les tirages payes d avance : "20x30:2,40x60:1". Au moment de reserver

@@ -5,8 +5,9 @@
 // jamais dans le code.
 import Stripe from "stripe";
 import {
-  crmStore, loadData, pruneLocks, isFree, isValidSlot,
+  crmStore, loadData, pruneLocks, isFree, isValidSlot, creneauMiniValide, miniLibre,
   acompteFor, typeLabelFr, typeConnu, prixSeance, GAMMES_DUO, LOCK_TTL_MS, COUPON_TTL_MS,
+  OFFRE_MINI, REMISE_NOEL, remiseNoelActive, tachePhotosNoel,
   uid, BRAND, PLACE
 } from "../mbs-lib.mjs";
 import { prixTirages } from "../mbs-panier.mjs";
@@ -72,13 +73,18 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
     ? "Code de réservation " + prettyGift(md.coupon) + (md.formule ? " (" + md.formule + ")" : "") + "."
     : "Bon cadeau " + prettyGift(md.coupon) + " (-" + md.remise + " €, séance " + md.totalPlein + " €).";
 
+  const miniBon = !estResa && /mini-shoot/i.test(String(md.formule || ""));
   data.seances.push({
     id: uid(), clientId: client.id, brand: BRAND, type: typeLbl,
     date: md.date, time: md.time, place: PLACE, status: "A venir",
+    ...(miniBon ? { duree: 45 } : {}),
     notes: estResa
       ? "Seconde séance du pack, déjà réglée. La cliente a choisi son créneau elle-même avec son code. "
         + detail + " Rien à encaisser."
-      : "Réservation en ligne réglée avec un bon cadeau. " + detail + " Rien à encaisser le jour J.",
+      : "Réservation en ligne réglée avec un bon cadeau. "
+        + (miniBon ? "Formule Mini-shoot spécial Noël (45 min, 5 photos retouchées, sans les photos brutes). "
+           : md.formule ? "Formule " + md.formule + ". " : "")
+        + detail + " Rien à encaisser le jour J.",
     createdAt: now, giftCode: md.coupon
   });
   if (!estResa) data.paiements.push({
@@ -108,6 +114,8 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
         + " dans les 10 jours qui suivent.",
       giftCode: md.coupon
     });
+    /* Un bon de pack achete a Noel porte ses 5 photos imprimees offertes. */
+    if (/photos imprimées/i.test(String(md.formule || ""))) data.taches.push(tachePhotosNoel(name, md.date, client.id, { giftCode: md.coupon }));
   }
 
   data.mbsLocks = data.mbsLocks.filter(l => l.id !== lockId);
@@ -159,11 +167,29 @@ export default async (request) => {
   catch (e) { return json({ ok: false, error: "json" }, 400); }
 
   let   type   = String(body.type || "grossesse");
+  /* Le mini-shoot du dimanche a ses propres seances, ses dimanches, et ne
+     se cumule avec rien : ni code, ni bon, ni lien a prix convenu. */
+  const mini = body.section === "mini";
   /* Liste fermee : un type inconnu arriverait etiquete "Grossesse" dans le
      CRM et sur la facture, sans que personne s'en apercoive. */
-  if (!typeConnu(type)) {
+  if (mini ? !OFFRE_MINI.types.includes(type) : !typeConnu(type)) {
     return json({ ok: false, error: "type",
       message: "Type de séance non reconnu. Rechargez la page et recommencez." }, 400);
+  }
+  if (mini) {
+    if (!(await remiseNoelActive())) {
+      return json({ ok: false, error: "formule",
+        message: "Le mini-shoot du dimanche n'est plus proposé. Rechargez la page pour voir les formules." }, 400);
+    }
+    if (!creneauMiniValide(String(body.date || ""), String(body.time || ""))) {
+      return json({ ok: false, error: "formule",
+        message: "Le mini-shoot se réserve un dimanche de décembre, sur un des créneaux proposés." }, 400);
+    }
+    if (body.coupon || body.giftOnly || body.surMesure) {
+      return json({ ok: false, error: "coupon",
+        message: "Le mini-shoot est déjà à prix de Noël : il ne se cumule pas avec un code ou un bon." }, 400);
+    }
+    body.exterieur = null;   // au studio seulement
   }
   /* Le pack deux seances : une formule par seance. Liste fermee, comme pour
      le type : une valeur inconnue ferait echouer le calcul du prix plus bas,
@@ -192,7 +218,7 @@ export default async (request) => {
   const email  = String(client.email || "").trim();
   const tel    = String(client.tel || "").trim();
 
-  if (!isValidSlot(date, time)) return json({ ok: false, error: "invalid_slot" }, 400);
+  if (mini ? !creneauMiniValide(date, time) : !isValidSlot(date, time)) return json({ ok: false, error: "invalid_slot" }, 400);
   if (!prenom || !email) return json({ ok: false, error: "missing_client" }, 400);
 
   /* Prix de la seance : recalcule ICI a partir de la formule choisie. Le
@@ -201,19 +227,24 @@ export default async (request) => {
 
      Une reservation avec un bon cadeau seul ne passe pas par le
      configurateur, sa formule vient du bon et non du navigateur. */
-  let total = 0, affiche = null;
+  let total = 0, affiche = null, remiseNoel = 0, packNoel = false;
   /* Un lien a prix convenu (reserver.html) n'envoie pas de formule : elle
      est dans le code, comme pour un bon cadeau. */
   if (!body.giftOnly && !body.surMesure) {
+    /* Le pack aux prix de Noel pendant l'offre (avec ses 5 photos imprimees). */
+    packNoel = body.section === "duo" && !!body.gammes && await remiseNoelActive();
     const calcule = prixSeance({
       section: body.section, gamme: body.gamme, gammes: body.gammes,
-      photos: body.photos, album: body.album, tirages: body.tirages
+      photos: body.photos, album: body.album, tirages: body.tirages, noel: packNoel
     });
     if (calcule === null) {
       return json({ ok: false, error: "formule",
         message: "Formule non reconnue. Rechargez la page et recommencez la réservation." }, 400);
     }
-    total = calcule;
+    /* Les -100 euros de Noel : seance unique seulement (le pack a ses
+       propres prix de Noel), appliques d'office pendant l'offre. */
+    if (body.section === "simple" && await remiseNoelActive()) remiseNoel = REMISE_NOEL.montant;
+    total = calcule - remiseNoel;
     const vu = Math.round(Number(body.totalAffiche));
     if (Number.isFinite(vu)) affiche = vu;
   } else if (!body.coupon) {
@@ -238,7 +269,7 @@ export default async (request) => {
   // 1) Verrou anti-doublon : on relit, on nettoie les verrous expires, on verifie le creneau.
   const data = await loadData(store);
   pruneLocks(data, now);
-  if (!isFree(data, date, time, now)) {
+  if (mini ? !miniLibre(data, date, time, now) : !isFree(data, date, time, now)) {
     // Un autre paiement est en cours ou le creneau est deja pris.
     await store.setJSON("data", data); // on persiste au moins le nettoyage des verrous expires
     return json({ ok: false, error: "slot_taken" }, 409);
@@ -277,6 +308,14 @@ export default async (request) => {
     couponKind = chk.coupon.kind === "cadeau" ? "cadeau"
                : chk.coupon.kind === "reservation" ? "reservation"
                : chk.coupon.kind === "surmesure" ? "surmesure" : "promo";
+    /* Pas de code promo par-dessus les prix de Noel : des partenaires
+       distribuent des codes de 100 euros, l'Essentielle tomberait a 90. Un
+       bon cadeau reste accepte, c'est un paiement deja fait. */
+    if ((remiseNoel || packNoel) && couponKind === "promo") {
+      await releaseLock();
+      return json({ ok: false, error: "coupon",
+        message: "Les prix de Noël ne se cumulent pas avec un code promo." }, 400);
+    }
 
     /* Lien a prix convenu : la seance, la formule, le montant final et
        l'acompte viennent du code, que Matt a cree dans le CRM. Le
@@ -349,6 +388,7 @@ export default async (request) => {
      En paiement integral, il n'y a plus d'acompte : on prend tout. Le solde
      du jour J tombe a zero. */
   const acompte = integral ? total
+    : mini ? total                                              // le mini-shoot se paie en entier (choix de Matt)
     : acompteImpose !== null ? Math.min(acompteImpose, total)   // fixe par Matt (lien a prix convenu)
     : Math.min(acompteFor(totalPlein), total);
 
@@ -483,6 +523,12 @@ export default async (request) => {
            elle, le CRM afficherait un total et Matt ne saurait pas combien
            de photos retoucher, ni pour laquelle des deux seances. */
         duo: paireDuo,
+        /* Les 100 euros de Noel, deja deduits du total, pour la fiche et
+           la facture. */
+        noel: remiseNoel ? String(remiseNoel) : "",
+        /* Le pack aux prix de Noel : facture, fiche et tache des 5 photos
+           imprimees offertes. */
+        noelPack: packNoel ? "1" : "",
         prenom, nom, email, tel
       }
     });

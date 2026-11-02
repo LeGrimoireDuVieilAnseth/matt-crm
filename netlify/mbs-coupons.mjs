@@ -165,6 +165,10 @@ export const GIFT_OFFRES = [
   { id: "essentielle",   nom: "Essentielle",   prix: 290, duo: false },
   { id: "confort",       nom: "Confort",       prix: 390, duo: false },
   { id: "prestige",      nom: "Prestige",      prix: 490, duo: false },
+  /* Le mini-shoot special Noel (02/11/2026) : il ne s'achete que pendant
+     l'offre (mbs-gift le verifie), mais le bon vaut 18 mois, en semaine sur
+     les creneaux habituels (choix de Matt). */
+  { id: "mini",          nom: "Mini-shoot spécial Noël", prix: 97, duo: false, noel: true },
   /* Les trois anciens packs a formule unique. Plus vendus, mais des bons
      les portent encore : "ancien" les garde valides et hors affichage. */
   { id: "duo-essentiel", nom: "Duo Essentiel", prix: 590, duo: true, ancien: true },
@@ -207,7 +211,9 @@ export function prettyGift(code) {
 export const STYLES_BON = [
   "creme", "blanc", "blanc-lin", "ivoire", "sable", "rose-poudre", "terracotta",
   "vert-sauge", "vert-anglais", "kaki", "kaki-clair", "bleu-canard", "bleu-orage",
-  "bleu-nuit", "sombre"
+  "bleu-nuit", "sombre",
+  /* Les habillages de Noel (02/11/2026), proposes pendant l'offre. */
+  "noel-rouge", "noel-sapin", "pain-epices", "noel-neige"
 ];
 export function styleValide(id) {
   const s = String(id || "").trim();

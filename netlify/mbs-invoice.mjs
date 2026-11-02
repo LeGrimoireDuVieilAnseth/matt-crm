@@ -3,7 +3,7 @@
 // externe : parfait en serverless) et fournit un numero de facture continu.
 import { getStore } from "@netlify/blobs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { TARIFS, PRIX_PHOTO_SUPP, PRIX_ALBUM, prixPaireDuo, typeLabelFr } from "./mbs-lib.mjs";
+import { TARIFS, PRIX_PHOTO_SUPP, PRIX_ALBUM, prixPaireDuo, typeLabelFr, OFFRE_MINI } from "./mbs-lib.mjs";
 import { prixTirages } from "./mbs-panier.mjs";
 import nodemailer from "nodemailer";
 
@@ -77,8 +77,16 @@ export function lignesSeance(md = {}){
        montant global cacherait la formule choisie pour chacune. */
     L.push({ libelle: "Séance grossesse, formule " + NOM_GAMME[paire[0]], montant: aD });
     L.push({ libelle: "Séance naissance, formule " + NOM_GAMME[paire[1]], montant: aN });
-    const p = prixPaireDuo(paire[0], paire[1]);
-    if (p && p.remise > 0) L.push({ libelle: "Remise pack 2 séances", montant: -p.remise });
+    const p = prixPaireDuo(paire[0], paire[1], { noel: md.noelPack === "1" });
+    if (p && p.noel) {
+      L.push({ libelle: "Prix de Noël (100 € de moins par séance)", montant: -p.remise });
+      L.push({ libelle: "5 photos imprimées offertes, livrées à domicile", montant: 0 });
+    } else if (p && p.remise > 0) L.push({ libelle: "Remise pack 2 séances", montant: -p.remise });
+  } else if (md.gamme === OFFRE_MINI.id) {
+    L.push({
+      libelle: libelleSeance(typeLabelFr(md.type)) + ", mini-shoot spécial Noël (45 min, 5 photos retouchées)",
+      montant: OFFRE_MINI.prix
+    });
   } else {
     const base = TARIFS.simple[String(md.gamme || "")];
     if (base) L.push({
@@ -112,6 +120,9 @@ export function lignesSeance(md = {}){
   if (frais > 0) L.push({
     libelle: "Déplacement" + (md.lieuExt ? ", " + md.lieuExt : ""), montant: frais
   });
+
+  const noel = Number(md.noel) || 0;
+  if (noel > 0) L.push({ libelle: "Prix de Noël (100 € de moins)", montant: -noel });
 
   const remise = Number(md.remise) || 0;
   if (remise > 0) L.push({

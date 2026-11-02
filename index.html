@@ -3439,8 +3439,8 @@ const GALC_API="/.netlify/functions/mbs-galerie-cliente";
 
 /* Doit rester egal a QUOTA dans netlify/mbs-galeries.mjs. Ne sert qu'a
    l'affichage : c'est le serveur qui decide de ce qui est compris. */
-const GAL_FORMULES=[["essentielle","Essentielle",5],["confort","Confort",15],["prestige","Prestige",0]];
-const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"],["duo","Grossesse + naissance"]];
+const GAL_FORMULES=[["essentielle","Essentielle",5],["confort","Confort",15],["prestige","Prestige",0],["mini","Mini-shoot",5]];
+const GAL_SEANCES=[["grossesse","Grossesse"],["naissance","Naissance"],["bebe","Bébé"],["famille","Famille"],["duo","Grossesse + naissance"]];
 /* Une galerie a deux seances (formule "duo") : une formule par seance, un
    seul total de retouches a repartir entre les deux. La naissance peut
    s'ajouter plus tard a la galerie de la grossesse. */
@@ -3865,9 +3865,10 @@ function devinerGalerie(c){
   } else {
     if(/naissance|nouveau/.test(t)) seance="naissance";
     else if(/b[ée]b[ée]/.test(t)) seance="bebe";
+    else if(/famille/.test(t)) seance="famille";
     else if(/grossesse/.test(t)) seance="grossesse";
-    const m=notes.match(/Formule (Essentielle|Confort|Prestige)/i);
-    if(m) formule=m[1].toLowerCase();
+    const m=notes.match(/Formule (Essentielle|Confort|Prestige|Mini-shoot)/i);
+    if(m) formule=/^mini/i.test(m[1])?"mini":m[1].toLowerCase();
   }
   return {seance,formule,formules};
 }
@@ -5470,7 +5471,7 @@ function clientDuBon(b){
   return nom?DB.clients.find(x=>x.brand==="mybabyshoot"&&String(x.name||"").toLowerCase()===nom):null;
 }
 
-const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",bebe:"Séance bébé",duo:"Grossesse + naissance"};
+const SEANCE_CADEAU={grossesse:"Séance grossesse",naissance:"Séance naissance",bebe:"Séance bébé",famille:"Séance famille",duo:"Grossesse + naissance"};
 
 function dessinerCadeaux(list){
   const box=document.getElementById("clientsList");
@@ -5578,7 +5579,7 @@ function openBonCadeau(brut){
    ============================================================ */
 function corrigerBonCadeau(brut){
   const b=(cadeauxCache||[]).find(x=>(x.brut||x.code)===brut); if(!b) return;
-  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["bebe","Séance bébé"],["duo","Grossesse + naissance"]];
+  const seances=[["grossesse","Séance grossesse"],["naissance","Séance naissance"],["bebe","Séance bébé"],["famille","Séance famille"],["duo","Grossesse + naissance"]];
   let h=`<h2>Corriger le bon ${esc(b.code)}</h2>
     <div class="hint" style="margin-bottom:14px">Le code reste <b>${esc(b.code)}</b> et le lien déjà envoyé continue de fonctionner :
     il affichera la version corrigée dès l'enregistrement.</div>

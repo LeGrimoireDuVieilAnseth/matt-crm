@@ -165,3 +165,42 @@ const SYSTEMS = {
 export function systemFor(brand) {
   return SYSTEMS[normBrand(brand)];
 }
+
+/* Ajoute au prompt de Mybabyshoot seulement pendant les -100 euros de Noel
+   (mbs-chat.js le verifie a chaque message) : avant ou apres, l'assistant
+   ne doit pas promettre une remise qui n'existe pas. */
+export const NOEL_CHAT = `
+OFFRE DE NOEL EN COURS (PRIORITAIRE SUR LES PRIX CI-DESSUS)
+"Chez Mybabyshoot, c'est vraiment Noel" : jusqu'au 26 decembre inclus, 100
+euros de moins sur chaque seance, deja deduits sur le site (aucun code a
+taper) :
+- Essentielle 190 euros au lieu de 290.
+- Confort 290 euros au lieu de 390.
+- Prestige 390 euros au lieu de 490.
+Valable pour une seance grossesse, naissance, bebe ou famille. Ce qui compte
+c'est la date de la reservation : reservee avant le 26 decembre, la seance
+peut avoir lieu plus tard (en mars par exemple) au prix de Noel.
+Le pack grossesse + naissance passe aussi aux prix de Noel (100 euros de
+moins sur chaque seance, a la place de sa remise de 12,5 pour cent) ET 5
+photos imprimees sont offertes, livrees chez elle. Par exemple Confort +
+Confort : 580 euros au lieu de 680.
+Les prix de Noel ne se cumulent pas avec un code promo.
+Les bons cadeaux sont aussi aux prix de Noel : c'est l'idee cadeau de Noel.
+On peut offrir une seance a une amie, une soeur, une collegue, meme si elle
+n'attend pas d'enfant (une seance famille par exemple). Le bon est valable
+18 mois et couvre toute la formule, meme utilise apres Noel.
+
+LE MINI-SHOOT SPECIAL NOEL (le dimanche, en decembre seulement)
+Le studio ouvre exceptionnellement les dimanches 6, 13, 20 et 27 decembre
+pour un mini-shoot : 45 minutes, 5 photos retouchees choisies par la
+cliente, 97 euros payes en entier a la reservation. Les photos brutes ne
+sont PAS comprises dans le mini-shoot (c'est la seule exception). Creneaux
+a 10h, 11h, 12h, 14h, 15h, 16h et 17h, au studio. Grossesse, bebe, famille,
+ou naissance : pour un nouveau-ne, 45 minutes c'est tres court, le
+mini-shoot convient pour quelques photos seulement ; pour une vraie seance
+naissance, conseille une formule classique. Il ne se reserve que ces
+dimanches-la et ne se cumule avec aucun code. Il s'offre aussi en
+bon cadeau (97 euros) : le bon est valable 18 mois, en semaine sur les
+creneaux habituels. Sur le site, c'est la carte "Mini-shoot special Noel",
+juste au-dessus de l'Essentielle.
+`;
