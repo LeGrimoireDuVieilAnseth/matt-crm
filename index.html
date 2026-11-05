@@ -143,6 +143,13 @@
   .stat .num{font-family:"Fraunces";font-size:30px;font-weight:500;line-height:1.05;margin-top:5px;letter-spacing:-.02em;}
   .stat .foot{font-size:12px;color:var(--ink-2);margin-top:4px;}
   .stat .num.euro{font-size:26px;}
+  /* le cadran des reservations du mois : toute la largeur, et on touche */
+  .stat.cadran-resa{grid-column:1/-1;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.15s;padding:12px 16px;}
+  .stat.cadran-resa:hover{border-color:var(--line-2);box-shadow:var(--shadow-lg);}
+  .stat.cadran-resa .num{margin-top:0;font-size:34px;min-width:30px;}
+  .stat.cadran-resa .txt{flex:1;min-width:0;}
+  .stat.cadran-resa .lab{font-size:13px;color:var(--ink);font-weight:600;}
+  .stat.cadran-resa .fl{color:var(--ink-4);font-size:24px;line-height:1;}
   /* galerie en grille */
   .galgrille{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:7px;}
   .galcell{position:relative;padding:0;border:2px solid transparent;border-radius:10px;
@@ -563,6 +570,40 @@
   .pill-row::-webkit-scrollbar{display:none;}
   .pill{flex:0 0 auto;padding:7px 13px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);font-size:13px;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap;transition:.15s;}
   .pill.on{background:var(--fill);color:var(--fill-ink);border-color:var(--ink);}
+  .pill-sep{flex:0 0 1px;background:var(--line-2);margin:5px 3px;}
+
+  /* ---------- agenda en calendrier ---------- */
+  .cal-tete{display:flex;align-items:center;gap:8px;margin:4px 2px 10px;}
+  .cal-tete h2{flex:1;font-size:21px;font-weight:600;}
+  .cal-tete h2::first-letter{text-transform:uppercase;}
+  .cal-nav{width:38px;height:38px;border-radius:11px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;}
+  .cal-nav svg{width:18px;height:18px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .cal-auj{height:38px;padding:0 12px;border-radius:11px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;cursor:pointer;}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;touch-action:pan-y;}
+  .cal-js{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);text-align:center;padding:8px 0 6px;border-bottom:1px solid var(--line);}
+  .cal-j{min-height:78px;padding:4px 3px 5px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);cursor:pointer;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .cal-j:nth-child(7n){border-right:none;}
+  .cal-j.der{border-bottom:none;}
+  .cal-j.hors{background:var(--surface-2);}
+  .cal-j.hors .n{color:var(--ink-4);}
+  .cal-j .n{font-size:12.5px;font-weight:600;color:var(--ink-2);width:23px;height:23px;display:grid;place-items:center;border-radius:50%;margin:0 auto 1px;flex:0 0 auto;}
+  .cal-j.auj .n{background:var(--fill);color:var(--fill-ink);}
+  .cal-j.choisi{box-shadow:inset 0 0 0 2px var(--ink);}
+  .cal-j.bloque{background-image:repeating-linear-gradient(135deg,transparent 0 6px,var(--surface-3) 6px 12px);}
+  .cal-c{display:block;width:100%;border:none;border-left:3px solid var(--ink-4);text-align:left;font:inherit;font-size:10.5px;font-weight:600;line-height:1.3;padding:2px 3px 2px 4px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--ink);background:var(--surface-3);}
+  .cal-c[data-b="mybabyshoot"]{border-left-color:var(--baby);background:var(--baby-soft);background:color-mix(in srgb,var(--baby) 20%,var(--surface));}
+  .cal-c[data-b="maison-lumiere"]{border-left-color:var(--lumiere);background:var(--lumiere-soft);background:color-mix(in srgb,var(--lumiere) 20%,var(--surface));}
+  .cal-c[data-b="matt-la-photo"]{border-left-color:var(--matt);background:var(--matt-soft);background:color-mix(in srgb,var(--matt) 18%,var(--surface));}
+  .cal-c.blk{border-left-color:var(--ink-3);color:var(--ink-2);font-weight:500;}
+  .cal-c .h{font-weight:500;color:var(--ink-2);margin-right:3px;}
+  .cal-plus{font-size:10.5px;font-weight:700;color:var(--ink-3);padding:0 4px;}
+  .cal-leg{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 4px 0;font-size:12px;color:var(--ink-2);}
+  .cal-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  @media(max-width:560px){ .cal-c .h{display:none;} .cal-j{min-height:70px;padding:3px 2px 4px;} .cal-c{font-size:10px;padding:2px 2px 2px 3px;} }
+
+  /* ---------- menu "+" range par familles ---------- */
+  .add-fam{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:14px 2px 0;}
+  .add-fam:first-child{margin-top:0;}
 
   /* payment bar */
   .pay-bar{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:9px;}
@@ -714,6 +755,7 @@
 
 <!-- ===================== VISITES ===================== -->
 <section id="visites" class="view">
+  <button class="backlink" onclick="openReglages()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Réglages</button>
   <div class="pill-row" id="visPills"></div>
   <div class="stat-grid" id="visStats"></div>
   <div class="section-title"><h2 id="visGraphTitre">Visiteurs jour par jour</h2></div>
@@ -794,7 +836,7 @@
 
 <!-- ===================== FICHE CLIENT ===================== -->
 <section id="fiche" class="view">
-  <button class="backlink" onclick="openClients()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Clients</button>
+  <button class="backlink" id="ficheRetour" onclick="openClients()"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> Clients</button>
   <div id="ficheBody"></div>
 </section>
 
@@ -816,8 +858,8 @@
   <button class="tab" data-view="chiffres" onclick="openChiffres()">
     <svg viewBox="0 0 24 24"><path d="M4 19h16M6 16V9m4 7V5m4 11v-5m4 5V8"/></svg><span>Chiffres</span>
   </button>
-  <button class="tab" data-view="visites" onclick="openVisites()">
-    <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span>Visites</span>
+  <button class="tab" data-view="agenda" onclick="openAgenda()">
+    <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/><path d="M8 13h2M14 13h2M8 17h2"/></svg><span>Agenda</span>
   </button>
   <button class="tab" data-view="paiements" onclick="openPaiements()">
     <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="14" r="1.3" fill="currentColor" stroke="none"/></svg><span>Paiements</span>
@@ -1115,7 +1157,7 @@ function setView(id){
   window.scrollTo(0,0);
 }
 function goHome(){ buildHome(); setView("home"); }
-function openClients(){ renderClients(); setView("clients"); }
+function openClients(){ ficheOrigine=null; renderClients(); setView("clients"); }
 function openAgenda(){ renderAgenda(); setView("agenda"); }
 function openPaiements(){ renderPaiements(); setView("paiements"); }
 function openChiffres(){ renderChiffres(); setView("chiffres"); }
@@ -2729,6 +2771,93 @@ function setFilter(b){
 /* ============================================================
    ACCUEIL - tableau de bord "Aujourd'hui"
    ============================================================ */
+/* ============================================================
+   RESERVATIONS DU MOIS (accueil, demande de Matt, 05/11/2026)
+   Ce qui a ete reserve ou achete depuis le 1er du mois : les seances
+   ENREGISTREES ce mois-ci (date de creation, pas date de la seance) et
+   les bons cadeaux vendus. Un pack grossesse + naissance paye en une
+   fois ne compte qu'une fois. Les seances annulees sortent du compte.
+   Suit la marque choisie en haut, comme les chiffres de l'accueil.
+   ============================================================ */
+function quandCree(x){
+  const v=x&&x.createdAt; if(!v) return null;
+  const d=new Date(/^\d+$/.test(String(v))?Number(v):v);
+  return isNaN(d)?null:d;
+}
+function resasDuMois(){
+  const ym=isoLocal(new Date()).slice(0,7);
+  const out=[], parSession={};
+  DB.seances.forEach(s=>{
+    if(!s||s.type==="Indispo"||s.type==="RDV telephonique"||s.status==="Annulee") return;
+    if(!passFilter(s.brand)) return;
+    const d=quandCree(s); if(!d||isoLocal(d).slice(0,7)!==ym) return;
+    if(s.stripeSession&&parSession[s.stripeSession]){ parSession[s.stripeSession].seances.push(s); return; }
+    const e={nature:"seance",quand:d.getTime(),jour:isoLocal(d),seances:[s],brand:s.brand,clientId:s.clientId};
+    if(s.stripeSession) parSession[s.stripeSession]=e;
+    out.push(e);
+  });
+  (DB.paiements||[]).forEach(p=>{
+    if(!p||!/^bon cadeau/i.test(p.label||"")||!passFilter(p.brand)) return;
+    if((p.date||"").slice(0,7)!==ym) return;
+    const d=parseDate(p.date); if(!d) return;
+    out.push({nature:"bon",quand:d.getTime()+12*3600e3,jour:p.date,paiement:p,brand:p.brand,clientId:p.clientId});
+  });
+  return out.sort((a,b)=>b.quand-a.quand);
+}
+function resaRow(e,enModale){
+  const c=e.clientId?clientById(e.clientId):null;
+  const ferme=enModale?"closeModal();":"";
+  let nom,detail,montant="",clic;
+  if(e.nature==="bon"){
+    const p=e.paiement;
+    nom=c?c.name:"Bon cadeau";
+    detail="Bon cadeau"+(p.label?" "+p.label.replace(/^bon cadeau\s*/i,""):"");
+    montant=euros(num(p.total));
+    clic=c?`openFiche('${c.id}')`:`openPayEdit('${p.id}')`;
+  }else{
+    const ss=e.seances.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+    const d0=parseDate(ss[0].date);
+    nom=c?c.name:"Sans client";
+    detail=ss.map(x=>acc(x.type)||"Séance").join(" + ")+(d0?" · le "+d0.getDate()+" "+MOIS[d0.getMonth()]:"");
+    const p=ss[0].stripeSession?(DB.paiements||[]).find(x=>x&&x.stripeSession===ss[0].stripeSession):null;
+    if(p) montant=euros(num(p.total));
+    clic=c?`openFiche('${c.id}')`:`openSeance('${ss[0].id}')`;
+  }
+  const avatar=e.nature==="bon"
+    ?'<svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>'
+    :esc(initials(nom));
+  return `<div class="row" data-b="${e.brand}" onclick="${ferme}${clic}">
+    <div class="avatar" data-b="${e.brand}">${avatar}</div>
+    <div class="row-main"><div class="t">${esc(nom)}</div><div class="s">${esc(detail)}</div></div>
+    <div class="row-end">${montant?`<span style="font-weight:700;font-size:14px">${montant}</span>`:""}<span style="font-size:12px;color:var(--ink-3);font-weight:600">${esc(relDay(e.jour))}</span></div>
+  </div>`;
+}
+function titreResasDuMois(){
+  const m=MOIS[new Date().getMonth()];
+  return "Réservations "+(/^[aeiouyéè]/i.test(m)?"d'":"de ")+m;
+}
+function compteResas(l){
+  const nbS=l.filter(e=>e.nature==="seance").length, nbB=l.length-nbS;
+  return [nbS?nbS+" séance"+(nbS>1?"s":""):"",nbB?nbB+" bon"+(nbB>1?"s":"")+" cadeau":""].filter(Boolean).join(" · ");
+}
+/* Un simple cadran, a la demande de Matt (05/11/2026) : le nombre du mois,
+   et on le touche pour voir les fiches de celles qui ont reserve. */
+function cadranResasDuMois(){
+  const l=resasDuMois();
+  return `<div class="stat cadran-resa" onclick="openResasDuMois()">
+    <div class="num">${l.length}</div>
+    <div class="txt"><div class="lab">${titreResasDuMois()}</div><div class="foot">${l.length?esc(compteResas(l)):"Rien encore ce mois-ci"}</div></div>
+    <span class="fl">&rsaquo;</span>
+  </div>`;
+}
+function openResasDuMois(){
+  const l=resasDuMois();
+  openModal(`<h2>${titreResasDuMois()}</h2>`
+    +(l.length
+      ?`<div style="font-size:13px;color:var(--ink-3);font-weight:500;margin:-6px 2px 14px">${esc(compteResas(l))}. Touche une ligne pour ouvrir la fiche.</div>`+l.map(e=>resaRow(e,true)).join("")
+      :`<div class="aide">Pas encore de réservation ni de bon cadeau ce mois-ci.</div>`));
+}
+
 function buildHome(){
   /* Interrupteur dans Reglages > Apparence, eteint par defaut. Tant qu'il
      l'est, tout ce qui suit se comporte exactement comme avant. */
@@ -2769,6 +2898,7 @@ function buildHome(){
 
   // stats
   h+=`<div class="stat-grid">
+    ${cadranResasDuMois()}
     <div class="stat"><div class="lab">Séances à venir</div><div class="num">${upcoming.length}</div><div class="foot">${todaySeances.length? todaySeances.length+" aujourd'hui":"rien aujourd'hui"}</div></div>
     <div class="stat"><div class="lab">En attente de paiement</div><div class="num euro">${euros(due)}</div><div class="foot">${pays.filter(p=>p.statut!=="Solde").length} dossier(s)</div></div>
     <div class="stat"><div class="lab">Encaisse ce mois</div><div class="num euro">${euros(caMois)}</div><div class="foot">${MOIS[now.getMonth()]}</div></div>
@@ -3015,6 +3145,7 @@ function buildFil(){
 
   let out='<div class="fil-tete"><div class="j">'+JOURS[now.getDay()]+" "+now.getDate()+" "+MOIS[now.getMonth()]
     +'</div><div class="r">'+esc(resume.join(" · "))+'</div></div>';
+  out+='<div class="stat-grid">'+cadranResasDuMois()+'</div>';
 
   if(retards.length){
     out+='<div class="fil-jour retard">En retard</div>';
@@ -3065,12 +3196,12 @@ function buildFil(){
 }
 
 /* ---------- fabrique de lignes reutilisables ---------- */
-function seanceRow(s,big){
+function seanceRow(s,big,clic){
   const c=clientById(s.clientId);
   const name=c?c.name:"Sans client";
   const time=s.time?s.time.replace(":","h"):"";
   const when=big?time:`${relDay(s.date)}${time?" \u00b7 "+time:""}`;
-  return `<div class="row" data-b="${s.brand}" onclick="openSeance('${s.id}')">
+  return `<div class="row" data-b="${s.brand}" onclick="${clic||`openSeance('${s.id}')`}">
     <div class="avatar" data-b="${s.brand}">${esc(initials(name))}</div>
     <div class="row-main">
       <div class="t">${esc(name)}</div>
@@ -3145,8 +3276,15 @@ function countdown(dateStr){
 /* Tri de la liste des clients. Retenu d'une fois sur l'autre : c'est une
    habitude de travail, pas un reglage qu'on vient rechercher. */
 function triClients(){
-  const t=(DB.reglages||{}).triClients||"seance";
-  return ["seance","reservation","nom"].includes(t) ? t : "seance";
+  /* 05/11/2026 : Matt veut ses clientes rangees par date de reservation, la
+     plus recente en haut, au lieu de l'ordre alphabetique. Pose une seule
+     fois : s'il choisit un autre tri ensuite, il est garde. */
+  DB.reglages=DB.reglages||{};
+  if(DB.reglages.triResaPose!==true){
+    DB.reglages.triClients="reservation"; DB.reglages.triClientsDesc=false; DB.reglages.triResaPose=true;
+  }
+  const t=DB.reglages.triClients||"reservation";
+  return ["seance","reservation","nom"].includes(t) ? t : "reservation";
 }
 function triClientsDesc(){ return !!(DB.reglages||{}).triClientsDesc; }
 function setTriClients(t){
@@ -3175,6 +3313,19 @@ function seanceRepere(id){
    Meme regle d'origine que la ligne "Reserve le" de la fiche. */
 function dateReservationISO(c){
   if(!c) return "";
+  /* Sa reservation la plus recente : le jour ou sa derniere seance a ete
+     enregistree (en ligne ou a la main), ou un bon cadeau achete. Une
+     cliente qui revient pour sa seance naissance remonte en haut. */
+  const jours=[];
+  seancesOfClient(c.id).forEach(s=>{
+    if(!s||s.type==="Indispo"||s.type==="RDV telephonique") return;
+    const d=quandCree(s); if(d) jours.push(isoLocal(d));
+  });
+  (DB.paiements||[]).forEach(p=>{
+    if(p&&p.clientId===c.id&&p.date&&/^bon cadeau/i.test(p.label||"")) jours.push(String(p.date).slice(0,10));
+  });
+  if(jours.length) return jours.sort().pop();
+  // sans seance datee (anciennes fiches) : la regle d'avant
   const p0=(DB.paiements||[]).filter(p=>p.clientId===c.id&&p.date)
     .sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0];
   if(p0&&p0.date) return String(p0.date).slice(0,10);
@@ -3264,8 +3415,8 @@ function renderClients(){
     return blob.includes(q);
   });
 
-  // tri : celui choisi dans la barre, quand le fil est actif
-  if(DB.reglages && DB.reglages.accueilFil){
+  // tri : celui choisi dans la barre (pour tout le monde depuis le 05/11/2026)
+  {
     const tri=triClients(), sens=triClientsDesc()?-1:1;
     list.sort((a,b)=>{
       const ka=cleTriClient(a,tri), kb=cleTriClient(b,tri);
@@ -3276,14 +3427,6 @@ function renderClients(){
       if(d) return d*sens;
       return (a.name||"").localeCompare(b.name||"","fr");
     });
-  } else if(FILTER==="maison-lumiere"){
-    list.sort((a,b)=>{
-      const ea=a.eventDate||"9999", eb=b.eventDate||"9999";
-      if(ea!==eb) return ea.localeCompare(eb);
-      return a.name.localeCompare(b.name,"fr");
-    });
-  } else {
-    list.sort((a,b)=>a.name.localeCompare(b.name,"fr"));
   }
 
   document.getElementById("clientCount").textContent=list.length+(list.length>1?" fiches":" fiche");
@@ -3296,7 +3439,10 @@ function renderClients(){
     </div>`;
     return;
   }
-  const filActif=!!(DB.reglages && DB.reglages.accueilFil);
+  /* La barre de tri et la date sur chaque ligne etaient reservees a
+     l'accueil "en fil" : elles valent pour tout le monde depuis le
+     05/11/2026 (Matt cherchait ses clientes dans l'ordre alphabetique). */
+  const filActif=true;
   let barre="";
   if(filActif){
     const t=triClients(), desc=triClientsDesc();
@@ -3320,8 +3466,11 @@ function renderClients(){
     /* Quand on trie sur une date, la ligne la montre : une liste rangee
        selon une date invisible a l'air d'etre en desordre. */
     if(filActif && triClients()==="reservation"){
-      const d=dateReservationISO(c);
-      sub = d ? "Réservé le "+fmtDate(d) : "Date de réservation inconnue";
+      const d=dateReservationISO(c), dd=parseDate(d);
+      // l'annee n'apparait que si ce n'est pas l'annee en cours
+      const MC=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+      sub = dd ? "Réservé le "+dd.getDate()+" "+MC[dd.getMonth()]+(dd.getFullYear()!==new Date().getFullYear()?" "+dd.getFullYear():"")
+               : "Date de réservation inconnue";
       end = "";
     } else if(filActif && triClients()==="seance"){
       const s=seanceRepere(c.id);
@@ -5853,6 +6002,7 @@ function ficheFil(c, seances, pays, totalDu){
 
 function openFiche(id){
   const c=clientById(id); if(!c) return;
+  majRetourFiche(id);
   const seances=seancesOfClient(id).sort((a,b)=>b.date.localeCompare(a.date));
   const pays=paysOfClient(id);
   const totalDu=pays.reduce((s,p)=>s+((num(p.total))-(p.statut==="Solde"?(num(p.total)):(num(p.acompte)))),0);
@@ -6560,7 +6710,9 @@ function openSeance(id){
       <button class="btn ghost" style="flex:1" onclick="openSeanceEdit('${id}')">Modifier la séance</button>
     </div>
     ${c&&c.tel?`<a class="btn ghost wide" style="margin-top:9px" href="sms:${esc(c.tel.replace(/\s/g,''))}">Envoyer un SMS</a>`:""}
-    <button class="btn danger wide" style="margin-top:14px" onclick="deleteSeance('${id}')">Supprimer la séance</button>`;
+    ${s.type!=="Indispo"&&s.status!=="Annulee"?`<button class="btn ghost wide" style="margin-top:14px;color:var(--danger)" onclick="confirmerAnnulation('${id}')">Annuler la séance (libère le créneau)</button>`:""}
+    ${s.type!=="Indispo"&&s.status==="Annulee"?`<button class="btn ghost wide" style="margin-top:14px" onclick="retablirSeance('${id}')">Rétablir la séance</button>`:""}
+    <button class="btn danger wide" style="margin-top:9px" onclick="deleteSeance('${id}')">Supprimer la séance</button>`;
   openModal(h);
 }
 
@@ -6597,8 +6749,10 @@ function saveMove(id){
 let agendaFilter="upcoming";
 function renderAgenda(){
   const pills=document.getElementById("agendaPills");
+  const modes=`<button class="pill ${agendaMode==="mois"?"on":""}" onclick="setAgendaMode('mois')">Calendrier</button><button class="pill ${agendaMode==="liste"?"on":""}" onclick="setAgendaMode('liste')">Liste</button>`;
+  if(agendaMode==="mois"){ pills.innerHTML=modes; renderCalendrier(); return; }
   const opts=[["upcoming","À venir"],["today","Aujourd'hui"],["week","7 jours"],["past","Passées"],["all","Tout"]];
-  pills.innerHTML=opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
+  pills.innerHTML=modes+'<span class="pill-sep"></span>'+opts.map(([k,l])=>`<button class="pill ${agendaFilter===k?"on":""}" onclick="setAgenda('${k}')">${l}</button>`).join("");
 
   // L'agenda montre TOUTES les marques : c'est le seul endroit ou Matt veut
   // voir son planning complet d'un coup d'oeil (les pastilles distinguent).
@@ -6634,7 +6788,261 @@ function renderAgenda(){
   box.innerHTML=h;
 }
 function setAgenda(k){ agendaFilter=k; renderAgenda(); }
-function addDays(s,n){ const d=parseDate(s); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+/* addDays passait par l'heure UTC : en France, minuit local tombe la veille
+   en UTC, si bien que "dans 1 jour" redonnait aujourd'hui ("7 jours"
+   n'en montrait que 6, "Demain" ne s'affichait jamais). */
+function addDays(s,n){ const d=parseDate(s); d.setDate(d.getDate()+n); return isoLocal(d); }
+function isoLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function jourLocal(){ return isoLocal(new Date()); }
+
+/* ============================================================
+   AGENDA EN CALENDRIER (demande de Matt, 05/11/2026)
+   Un vrai mois, les seances posees dans les cases, toutes marques.
+   Toucher une seance ouvre la fiche de la cliente ; toucher un jour
+   montre le detail du jour juste en dessous. La liste d'avant reste a
+   un geste ("Liste"). Les dates bloquees sont hachurees. Les seances
+   annulees ne prennent pas de place dans les cases (le creneau est
+   libre) mais restent visibles dans le detail du jour.
+   "var" et non "let" : openClients lit ficheOrigine et peut etre
+   appelee avant que le script n'arrive jusqu'ici.
+   ============================================================ */
+var AGENDA_MODE_STORE="studio_agenda_mode";
+var agendaMode="mois";
+try{ agendaMode=localStorage.getItem(AGENDA_MODE_STORE)==="liste"?"liste":"mois"; }catch(e){}
+var agendaMois="";      // "AAAA-MM" affiche
+var agendaJour="";      // "AAAA-MM-JJ" choisi
+var ficheOrigine=null;  // {id, vue} : la fiche ouverte depuis l'agenda y ramene
+
+function setAgendaMode(m){
+  agendaMode=m==="liste"?"liste":"mois";
+  try{ localStorage.setItem(AGENDA_MODE_STORE,agendaMode); }catch(e){}
+  renderAgenda();
+}
+function prenomDe(nom){ return String(nom||"").trim().split(/\s+/)[0]||""; }
+function blocsDuJour(d){
+  return DB.seances.filter(b=>b&&b.type==="Indispo"&&b.status!=="Annulee"&&
+    (b.dateEnd?(d>=b.date&&d<=b.dateEnd):d===b.date));
+}
+function renderCalendrier(){
+  const box=document.getElementById("agendaBody");
+  const auj=jourLocal();
+  if(!agendaMois) agendaMois=auj.slice(0,7);
+  const an=Number(agendaMois.slice(0,4)), mo=Number(agendaMois.slice(5,7));
+  const decal=(new Date(an,mo-1,1).getDay()+6)%7;      // la semaine commence le lundi
+  const nbJours=new Date(an,mo,0).getDate();
+  const nbCases=Math.ceil((decal+nbJours)/7)*7;
+  const jours=[];
+  for(let i=0;i<nbCases;i++) jours.push(isoLocal(new Date(an,mo-1,1-decal+i)));
+
+  const parJour={};
+  DB.seances.forEach(s=>{
+    if(!s||!s.date||s.type==="Indispo") return;
+    if(s.date<jours[0]||s.date>jours[jours.length-1]) return;
+    (parJour[s.date]=parJour[s.date]||[]).push(s);
+  });
+  Object.keys(parJour).forEach(k=>parJour[k].sort((a,b)=>(a.time||"").localeCompare(b.time||"")));
+  const actives=d=>(parJour[d]||[]).filter(s=>s.status!=="Annulee");
+
+  // le jour choisi : aujourd'hui dans le mois en cours, sinon le premier jour occupe
+  if(!agendaJour||agendaJour.slice(0,7)!==agendaMois){
+    agendaJour=auj.slice(0,7)===agendaMois?auj
+      :(jours.find(d=>d.slice(0,7)===agendaMois&&actives(d).length)||agendaMois+"-01");
+  }
+
+  let nbMois=0;
+  let h=`<div class="cal-tete">
+    <button class="cal-nav" onclick="agendaDecaler(-1)" aria-label="Mois précédent"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <h2>${MOIS[mo-1]} ${an}</h2>
+    ${agendaMois!==auj.slice(0,7)?`<button class="cal-auj" onclick="agendaAujourdhui()">Aujourd'hui</button>`:""}
+    <button class="cal-nav" onclick="agendaDecaler(1)" aria-label="Mois suivant"><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+  </div><div class="cal" id="calGrille">`;
+  ["lun","mar","mer","jeu","ven","sam","dim"].forEach(j=>h+=`<div class="cal-js">${j}</div>`);
+  jours.forEach((d,i)=>{
+    const dansMois=d.slice(0,7)===agendaMois;
+    const ss=actives(d);
+    if(dansMois) nbMois+=ss.length;
+    const blocs=blocsDuJour(d);
+    const cls=["cal-j"];
+    if(!dansMois) cls.push("hors");
+    if(d===auj) cls.push("auj");
+    if(d===agendaJour) cls.push("choisi");
+    if(blocs.some(b=>!b.time)) cls.push("bloque");
+    if(i>=nbCases-7) cls.push("der");
+    const puces=ss.map(s=>{
+      const c=s.clientId?clientById(s.clientId):null;
+      const nom=c?prenomDe(c.name):(acc(s.type)||"Séance");
+      const heure=s.time?s.time.replace(":","h"):"";
+      return `<button class="cal-c" data-b="${s.brand}" onclick="event.stopPropagation();ouvrirDepuisAgenda('${s.id}')" title="${esc((heure?heure+" ":"")+(c?c.name:nom))}">${heure?`<span class="h">${heure}</span>`:""}${esc(nom)}</button>`;
+    });
+    blocs.filter(b=>b.time).forEach(b=>puces.push(
+      `<button class="cal-c blk" onclick="event.stopPropagation();openBlockEdit('${b.id}')"><span class="h">${b.time.replace(":","h")}</span>bloqué</button>`));
+    const max=3;
+    let contenu=puces.slice(0,max).join("");
+    if(puces.length>max) contenu+=`<span class="cal-plus">+${puces.length-max}</span>`;
+    h+=`<div class="${cls.join(" ")}" onclick="agendaChoisir('${d}')"><span class="n">${Number(d.slice(8,10))}</span>${contenu}</div>`;
+  });
+  h+=`</div>
+  <div class="cal-leg">
+    <span><i style="background:var(--baby)"></i>Mybabyshoot</span>
+    <span><i style="background:var(--lumiere)"></i>Maison Lumière</span>
+    <span><i style="background:var(--matt)"></i>Matt la Photo</span>
+    <span><i style="background:repeating-linear-gradient(135deg,var(--surface) 0 3px,var(--ink-4) 3px 5px)"></i>Bloqué</span>
+    <span style="margin-left:auto;color:var(--ink-3)">${nbMois} séance${nbMois>1?"s":""} ce mois-ci</span>
+  </div>`;
+
+  // le detail du jour choisi
+  const dj=parJour[agendaJour]||[];
+  const bj=blocsDuJour(agendaJour);
+  const lab=agendaJour===auj?"Aujourd'hui":(agendaJour===addDays(auj,1)?"Demain":fmtDate(agendaJour));
+  h+=`<div class="grouplab">${lab}</div>`;
+  bj.forEach(b=>{
+    h+=`<div class="row" onclick="openBlockEdit('${b.id}')">
+      <div class="avatar" style="background:var(--ink-3)"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+      <div class="row-main"><div class="t">${b.time?"Créneau de "+b.time.replace(":","h")+" bloqué":"Journée bloquée"}</div><div class="s">${esc(b.notes||"Mybabyshoot : personne ne peut réserver")}</div></div>
+    </div>`;
+  });
+  dj.forEach(s=>h+=seanceRow(s,true,`ouvrirDepuisAgenda('${s.id}')`));
+  if(!dj.length&&!bj.length) h+=`<div class="aide" style="margin:0 2px 10px">Rien de prévu ce jour-là.</div>`;
+  h+=`<button class="btn ghost wide sm" style="margin-top:6px" onclick="nouvelleSeanceLe('${agendaJour}')">Ajouter une séance ce jour-là</button>`;
+  box.innerHTML=h;
+
+  // glisser vers la gauche ou la droite change de mois
+  const g=document.getElementById("calGrille");
+  if(g){
+    let x0=null,y0=null;
+    g.addEventListener("touchstart",e=>{ const t=e.touches[0]; x0=t.clientX; y0=t.clientY; },{passive:true});
+    g.addEventListener("touchend",e=>{
+      if(x0===null) return;
+      const t=e.changedTouches[0], dx=t.clientX-x0, dy=t.clientY-y0; x0=null;
+      if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5) agendaDecaler(dx<0?1:-1);
+    },{passive:true});
+  }
+}
+function agendaDecaler(n){
+  const an=Number(agendaMois.slice(0,4)), mo=Number(agendaMois.slice(5,7));
+  agendaMois=isoLocal(new Date(an,mo-1+n,1)).slice(0,7);
+  agendaJour="";
+  renderCalendrier();
+}
+function agendaAujourdhui(){ agendaMois=""; agendaJour=""; renderCalendrier(); }
+function agendaChoisir(d){
+  agendaJour=d;
+  if(d.slice(0,7)!==agendaMois) agendaMois=d.slice(0,7);
+  renderCalendrier();
+}
+/* Toucher une seance de l'agenda ouvre la fiche de la cliente : c'est la
+   que tout se trouve (seances, paiements, galerie). Sans cliente, la
+   seance elle-meme. */
+function ouvrirDepuisAgenda(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  if(!c){ openSeance(id); return; }
+  ficheOrigine={id:c.id,vue:"agenda"};
+  openFiche(c.id);
+}
+function majRetourFiche(id){
+  const b=document.getElementById("ficheRetour"); if(!b) return;
+  const agenda=!!(ficheOrigine&&ficheOrigine.id===id&&ficheOrigine.vue==="agenda");
+  if(!agenda) ficheOrigine=null;
+  b.innerHTML='<svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg> '+(agenda?"Agenda":"Clients");
+  b.onclick=agenda?openAgenda:openClients;
+}
+function nouvelleSeanceLe(d){
+  openSeanceEdit(null);
+  const i=document.getElementById("sDate");
+  if(i&&d){ i.value=d; ["input","change"].forEach(ev=>i.dispatchEvent(new Event(ev,{bubbles:true}))); }
+}
+
+/* ============================================================
+   ANNULER UNE SEANCE (demande de Matt, 05/11/2026)
+   Une cliente annule : la seance passe en "Annulee", ce qui libere le
+   creneau sur le site (la disponibilite en ligne ignore les seances
+   annulees). La fiche, l'historique et les paiements restent : avant,
+   il fallait supprimer la seance (plus de trace) ou la fiche (tout
+   perdu). Si un solde etait encore attendu, on peut cesser de le
+   reclamer, sinon il reviendrait dans "Soldes en retard".
+   ============================================================ */
+function seancesAnnulables(){
+  const t=todayStr();
+  return DB.seances.filter(s=>s&&s.type!=="Indispo"&&s.status!=="Annulee"&&s.status!=="Faite"&&s.date&&s.date>=t)
+    .sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+}
+function openAnnulerSeances(){
+  const l=seancesAnnulables();
+  let h=`<h2>Annuler une séance</h2>
+    <p style="font-size:13.5px;color:var(--ink-2);line-height:1.5;margin:0 0 14px">Choisis la séance. Son créneau redevient libre sur le site ; la fiche et les paiements sont gardés.</p>`;
+  if(!l.length) h+=`<div class="aide">Aucune séance à venir.</div>`;
+  else h+=l.map(s=>seanceRow(s,false,`confirmerAnnulation('${s.id}')`)).join("");
+  openModal(h);
+}
+function paiementDeSeance(s){
+  if(!s||!s.clientId) return null;
+  const pays=(DB.paiements||[]).filter(p=>p&&p.clientId===s.clientId);
+  return pays.find(p=>s.stripeSession&&p.stripeSession===s.stripeSession)
+      || pays.find(p=>p.dueDate&&p.dueDate===s.date&&p.statut!=="Solde")
+      || null;
+}
+function confirmerAnnulation(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const c=s.clientId?clientById(s.clientId):null;
+  const p=paiementDeSeance(s);
+  const reste=p?num(p.total)-num(p.acompte):0;
+  const partage=!!(p&&p.stripeSession&&DB.seances.some(x=>x.id!==s.id&&x.stripeSession===p.stripeSession&&x.status!=="Annulee"));
+  const avecBon=/bon cadeau/i.test(s.notes||"");
+  let h=`<h2>Annuler la séance ?</h2>
+    <div class="card" style="padding:12px 14px;margin-bottom:12px">
+      <div style="font-weight:600">${esc(c?c.name:"Sans client")}</div>
+      <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px">${esc(acc(s.type)||"Séance")} · ${fmtDate(s.date)}${s.time?" à "+s.time.replace(":","h"):""}</div>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-2);line-height:1.5;margin:0 0 12px">Le créneau redevient libre sur le site tout de suite. ${c?"La fiche de "+esc(prenomDe(c.name))+" reste":"La séance reste visible"}, marquée « Annulée », avec son historique et ses paiements.</p>`;
+  if(p&&partage){
+    h+=`<p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin:0 0 12px">Le paiement couvre aussi l'autre séance du pack : il n'est pas modifié. <a style="cursor:pointer;text-decoration:underline" onclick="openPayEdit('${p.id}')">Voir le paiement</a></p>`;
+  }else if(p&&p.statut!=="Solde"&&reste>0){
+    h+=`<label style="display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.45;margin:0 0 12px;cursor:pointer">
+      <input type="checkbox" id="anSolde" checked style="width:auto;margin-top:2px">
+      <span><b>Ne plus attendre le solde de ${euros(reste)}</b><br><span style="color:var(--ink-2)">Le paiement garde ce qui a déjà été réglé (${euros(num(p.acompte))}). Si tu rembourses, fais-le sur Stripe puis corrige le paiement.</span></span>
+    </label>`;
+  }else if(p&&p.statut==="Solde"&&num(p.total)>0){
+    h+=`<p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin:0 0 12px">Elle avait déjà tout réglé (${euros(num(p.total))}). Si tu la rembourses, fais-le sur Stripe puis corrige le paiement. <a style="cursor:pointer;text-decoration:underline" onclick="openPayEdit('${p.id}')">Voir le paiement</a></p>`;
+  }
+  if(avecBon){
+    h+=`<p style="font-size:13px;color:var(--warn);line-height:1.5;margin:0 0 12px">Cette séance a été réservée avec un bon cadeau : le bon reste utilisé. Pour lui laisser une autre date, mieux vaut déplacer la séance.</p>`;
+  }
+  h+=`<button class="btn danger wide" style="border-color:var(--danger)" onclick="annulerSeance('${id}')">Annuler la séance</button>`;
+  if(s.brand==="mybabyshoot") h+=`<button class="btn ghost wide" style="margin-top:9px" onclick="openMove('${id}')">Elle veut juste changer de date : déplacer</button>`;
+  h+=`<button class="btn ghost wide" style="margin-top:9px" onclick="closeModal()">Garder la séance</button>`;
+  openModal(h);
+}
+function annulerSeance(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  const coche=document.getElementById("anSolde");
+  const abandonSolde=!!(coche&&coche.checked);
+  const jour=new Date().toLocaleDateString("fr-FR");
+  const p=paiementDeSeance(s);
+  s.status="Annulee"; s.annuleeLe=todayStr();
+  s.notes="Annulée le "+jour+"."+(s.notes?" "+s.notes:"");
+  if(abandonSolde&&p&&p.statut!=="Solde"){
+    const avant=num(p.total), regle=num(p.acompte);
+    p.total=typeof p.total==="number"?regle:String(regle);
+    p.statut="Solde";
+    p.notes=(p.notes?p.notes+"\n":"")+"Séance annulée le "+jour+" : solde de "+(avant-regle)+" € abandonné (total initial "+avant+" €).";
+  }
+  saveDB(); closeModal();
+  if(vueCourante==="agenda") renderAgenda();
+  else if(s.clientId&&clientById(s.clientId)) openFiche(s.clientId);
+  else goHome();
+  toast("Séance annulée : le créneau est libre");
+}
+function retablirSeance(id){
+  const s=DB.seances.find(x=>x.id===id); if(!s) return;
+  if(s.brand==="mybabyshoot"&&mbsSlotBusy(id,s.date,s.time)){ toast("Ce créneau a été repris entre-temps : déplace la séance."); return; }
+  s.status="A venir";
+  s.notes="Rétablie le "+new Date().toLocaleDateString("fr-FR")+"."+(s.notes?" "+s.notes:"");
+  saveDB();
+  if(vueCourante==="agenda") renderAgenda(); else if(vueCourante==="fiche"&&s.clientId) openFiche(s.clientId);
+  openSeance(id);
+  toast(/solde de .* abandonné/.test((paiementDeSeance(s)||{}).notes||"")?"Séance rétablie. Pense à remettre le solde dans le paiement.":"Séance rétablie");
+}
 
 /* ============================================================
    PAIEMENTS
@@ -7018,18 +7426,38 @@ function deleteTask(id){
 /* ============================================================
    MENU AJOUT (FAB)
    ============================================================ */
+/* Range par familles a la demande de Matt (05/11/2026) : le menu
+   s'allongeait. Annuler une seance y a sa place, a cote de Bloquer. */
 function openAddMenu(){
+  const ic={
+    seance:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>',
+    annuler:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M10 13l4 4M14 13l-4 4"/></svg>',
+    bloquer:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>',
+    client:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>',
+    rappel:'<svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>',
+    paiement:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>',
+    lien:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/><path d="M10 15l2 2 4-4"/></svg>',
+    code:'<svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>',
+    bon:'<svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+    photos:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>'
+  };
+  const b=(f,i,t)=>`<button class="btn ghost wide" style="justify-content:flex-start;padding:14px 15px" onclick="closeModal();${f}">${ic[i]}${t}</button>`;
   openModal(`<h2>Ajouter</h2>
-    <div style="display:flex;flex-direction:column;gap:9px">
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openClientEdit(null)"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.7-3.2 3-5 5.5-5s4.8 1.8 5.5 5"/></svg>Nouveau client</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openSeanceEdit(null)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/></svg>Nouvelle séance</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openPayEdit(null)"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg>Nouveau paiement</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openTaskEdit(null)"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Nouveau rappel</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openBlocksList()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4M9 14l2 2 4-4"/></svg>Bloquer un créneau (Mybabyshoot)</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerCodeResa()"><svg viewBox="0 0 24 24"><path d="M3 9a2 2 0 0 0 0 6v3h18v-3a2 2 0 0 1 0-6V6H3z"/><path d="M13 6v12" stroke-dasharray="2 2"/></svg>Générer un code de réservation</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();creerBonManuel()"><svg viewBox="0 0 24 24"><path d="M20 12v8H4v-8"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>Créer un bon cadeau</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openLienResa()"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/><path d="M10 15l2 2 4-4"/></svg>Créer un lien de réservation</button>
-      <button class="btn ghost wide" style="justify-content:flex-start;padding:15px" onclick="closeModal();openAllegerPhotos()"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Alléger des photos pour SwissTransfer</button>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="add-fam">Séances</div>
+      ${b("openSeanceEdit(null)","seance","Nouvelle séance")}
+      ${b("openAnnulerSeances()","annuler","Annuler une séance")}
+      ${b("openBlocksList()","bloquer","Bloquer un créneau (Mybabyshoot)")}
+      <div class="add-fam">Clientes</div>
+      ${b("openClientEdit(null)","client","Nouveau client")}
+      ${b("openTaskEdit(null)","rappel","Nouveau rappel")}
+      <div class="add-fam">Ventes et paiements</div>
+      ${b("openPayEdit(null)","paiement","Nouveau paiement")}
+      ${b("openLienResa()","lien","Créer un lien de réservation")}
+      ${b("creerCodeResa()","code","Générer un code de réservation")}
+      ${b("creerBonManuel()","bon","Créer un bon cadeau")}
+      <div class="add-fam">Outils</div>
+      ${b("openAllegerPhotos()","photos","Alléger des photos pour SwissTransfer")}
     </div>`);
 }
 
@@ -7294,6 +7722,11 @@ function renderReglages(){
   box.innerHTML=`
     <div id="regMenu" class="reg-menu">
       <div class="reg-fam">Mes sites</div>
+        <button class="reg-ligne" onclick="openVisites()">
+          <span class="ic"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></span>
+          <span class="tx"><b>Visites du site</b><span>Combien de visiteurs, d'où ils viennent, sur quoi ils cliquent</span></span>
+          <span class="fl">&rsaquo;</span>
+        </button>
         <button class="reg-ligne" onclick="setRegOnglet('galerie')">
           <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3z"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.4"/></svg></span>
           <span class="tx"><b>Galerie du site</b><span>L'ordre des photos sur mybabyshoot.fr</span></span>
