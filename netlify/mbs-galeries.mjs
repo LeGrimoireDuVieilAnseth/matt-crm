@@ -15,7 +15,7 @@
 
    CE QUI EST STOCKE : pour chaque photo, une vignette (~25 Ko) et un apercu
    (~110 Ko), fabriques dans le navigateur de Matt au moment de preparer la
-   galerie. Jamais l'original. Le tout est efface trois mois apres la
+   galerie. Jamais l'original. Le tout est efface six mois apres la
    creation (mbs-galeries-nettoyage).
 
    POURQUOI SI LEGER : chez Netlify, la bande passante coute 20 credits par
@@ -101,7 +101,15 @@ export function seancesDe(g, ids) {
   return SEANCES_DUO.filter(k => s.has(k));
 }
 
-export const DUREE_MOIS = 3;
+/* Six mois depuis le 05/11/2026 (trois avant) : Matt trouvait trois mois
+   trop court pour ses clientes. */
+export const DUREE_MOIS = 6;
+/* La fin de vie d'une galerie creee a cette date. */
+export function finDeVie(createdAt, mois = DUREE_MOIS) {
+  const d = new Date(createdAt);
+  d.setMonth(d.getMonth() + mois);
+  return d.getTime();
+}
 export const PHOTOS_MAX_GALERIE = 800;
 /* Au-dela, un fichier n'est pas un apercu : on refuse plutot que de
    stocker par erreur une photo en pleine qualite. */
@@ -173,8 +181,6 @@ export async function creerGalerie(store, { clientId, prenom, nom, email, formul
   }
   if (!jeton) return { erreur: "jeton" };
 
-  const exp = new Date(now);
-  exp.setMonth(exp.getMonth() + DUREE_MOIS);
   const g = {
     jeton, clientId: propre(clientId, 40),
     /* La marque : le site qui sert la page, le nom sur la facture et les mails. */
@@ -188,7 +194,7 @@ export async function creerGalerie(store, { clientId, prenom, nom, email, formul
     recues: [],          // les photos dont la vignette ET l'apercu sont arrives
     statut: "preparation",
     coeurs: [], notes: {}, selection: null,
-    createdAt: now, expiresAt: exp.getTime(), vueAt: 0, envoyeeAt: 0,
+    createdAt: now, expiresAt: finDeVie(now), vueAt: 0, envoyeeAt: 0,
   };
   if (duo) {
     g.formules = fs;

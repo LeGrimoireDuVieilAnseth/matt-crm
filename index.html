@@ -3578,7 +3578,7 @@ function renderResaList(){
    LES PHOTOS SONT ALLEGEES DANS CE NAVIGATEUR : seules une vignette
    (~20 Ko) et un apercu (~100 Ko) partent en ligne, jamais l'original.
    La pleine qualite passe par le lien WeTransfer ou SwissTransfer que
-   Matt colle a la main. Tout est efface trois mois apres.
+   Matt colle a la main. Tout est efface six mois apres (trois jusqu'au 05/11/2026).
 
    Serveur : netlify/functions/mbs-galerie-admin.js (cle du CRM) ;
    les miniatures sont servies par mbs-galerie-cliente.js (public).
@@ -3844,7 +3844,7 @@ function dessinerGaleries(list){
 
   const aide=`<div style="font-size:13px;color:var(--ink-3);line-height:1.5;margin:0 0 12px">
       Une galerie se crée avec <b>Créer une galerie</b>, juste au-dessus, ou depuis la fiche de la cliente.
-      Elle reste en ligne 3 mois, puis ses aperçus sont effacés. Tes photos originales ne sont jamais envoyées.</div>`;
+      Elle reste en ligne 6 mois, puis ses aperçus sont effacés. Tes photos originales ne sont jamais envoyées.</div>`;
   if(!l.length){
     box.innerHTML=aide+`<div class="empty">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
@@ -4064,7 +4064,7 @@ function openPreparerGalerie(clientId,ajout){
   openModal(`<h2>Préparer la galerie</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">
       Pour <b>${esc(c.name)}</b>${matt?` · <span class="badge matt">Matt la photo</span>`:""}. Tes photos sont allégées ici, sur cet appareil : seuls des aperçus
-      légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 3 mois.</div>
+      légers partent en ligne, jamais la pleine qualité. La galerie reste en ligne 6 mois.</div>
     <div class="field"><label>Séance</label>
       <select id="gpSeance" onchange="majFormulesGal()">${matt?opt(GAL_SEANCES_MATT,d.seance||"shooting"):opt(GAL_SEANCES,d.seance||"grossesse")}</select>
       <div id="gpSeanceNote" style="font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.5"></div></div>
@@ -4753,7 +4753,7 @@ function galeriePrete(clientId,adresse,nb,p){
       +(j.range?" Son premier choix est gardé tel quel.":"")
       +(reste!=null?" Elle choisit maintenant avec <b>"+reste+" retouche"+(reste>1?"s":"")+" comprise"+(reste>1?"s":"")+"</b>.":"")
       +" Pense à la prévenir : le lien ne change pas."
-    : nb+" photos"+(c?" pour <b>"+esc(c.name)+"</b>":"")+". Elle reste en ligne 3 mois.";
+    : nb+" photos"+(c?" pour <b>"+esc(c.name)+"</b>":"")+". Elle reste en ligne 6 mois.";
   openModal(`<h2>${titre}</h2>
     <div style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-bottom:14px">${sous}</div>
     <div class="card" style="padding:13px 15px;font-size:13px;word-break:break-all;margin-bottom:12px">
