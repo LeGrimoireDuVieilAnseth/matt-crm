@@ -14,7 +14,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a1a1c'/><circle cx='16' cy='16' r='7.5' fill='none' stroke='%23f0f0ee' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%23e8834a'/><rect x='21' y='9' width='4' height='3' rx='1' fill='%23f0f0ee'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;450;500;600;700&family=Unbounded:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#f3f3f1;
@@ -685,6 +685,189 @@
   .itin:hover{background:var(--line-2);}
   .itin svg{width:14px;height:14px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
   .lock .btn svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .tab-logo{display:none;}
+
+  /* =====================================================================
+     THEME GALPI (demande de Matt, 10/11/2026) : la direction artistique de
+     l'application Galpi (9 - Revelo/app/public/index.html), appliquee a
+     Studio. Fond nuit et lueurs orange, cartes en verre, degrade "feu",
+     titres et chiffres en Unbounded, pastilles rondes ; sur ordinateur, le
+     menu passe a gauche comme dans Galpi. Tout est sous
+     html[data-theme="galpi"] : les autres themes ne bougent pas.
+     Les couleurs des marques restent (rose, or, orange) : elles disent a
+     qui est la seance.
+     ===================================================================== */
+  html[data-theme="galpi"]{
+    --feu:#FF5A2E;--feu2:#FF8A3D;--feu-rgb:255,90,46;
+    --feu-grad:linear-gradient(100deg,#FF5A2E,#FF8A3D);
+    --bg:#060A13;--surface:rgba(255,255,255,.055);--surface-2:rgba(255,255,255,.035);--surface-3:rgba(255,255,255,.1);
+    --ink:#FFFFFF;--ink-2:#C9D3E0;--ink-3:#9AA8BC;--ink-4:#5E6B80;
+    --line:rgba(255,255,255,.11);--line-2:rgba(255,255,255,.17);
+    --accent:#FF5A2E;--fill:#FF5A2E;--fill-ink:#FFFFFF;--logo-bg:rgba(255,255,255,.08);
+    --danger:#FF8A8A;--danger-soft:rgba(255,90,90,.13);
+    --ok:#5BE59B;--ok-soft:rgba(43,212,125,.13);
+    --warn:#FFC874;--warn-soft:rgba(255,181,71,.13);
+    --baby-soft:rgba(215,138,162,.17);--lumiere-soft:rgba(176,141,87,.2);--matt-soft:rgba(255,117,24,.16);
+    --topbar-bg:rgba(6,10,19,.72);--tabbar-bg:rgba(8,13,24,.9);
+    --shadow:none;--shadow-lg:0 18px 40px -22px rgba(0,0,0,.8);
+    --r:20px;--r-sm:18px;--card:rgba(255,255,255,.055);
+    color-scheme:dark;
+  }
+  /* les lueurs, comme sur l'accueil de Galpi */
+  html[data-theme="galpi"] body::before,html[data-theme="galpi"] body::after{content:"";position:fixed;border-radius:50%;
+    filter:blur(90px);pointer-events:none;z-index:-1}
+  html[data-theme="galpi"] body::before{width:360px;height:360px;background:var(--feu);opacity:.17;top:-170px;right:-140px}
+  html[data-theme="galpi"] body::after{width:300px;height:300px;background:#3D5BFF;opacity:.07;bottom:-120px;left:-120px}
+  html[data-theme="galpi"] ::selection{background:rgba(var(--feu-rgb),.35);color:#fff}
+  html[data-theme="galpi"] h1,html[data-theme="galpi"] h2,html[data-theme="galpi"] h3{font-family:Unbounded,Inter,sans-serif;font-weight:800;letter-spacing:-.025em}
+
+  /* en-tete */
+  html[data-theme="galpi"] .topbar{border-bottom-color:transparent}
+  html[data-theme="galpi"] .topbar h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  html[data-theme="galpi"] .brand-mark{border-radius:50%;background:var(--feu-grad);box-shadow:0 0 18px rgba(var(--feu-rgb),.45)}
+  html[data-theme="galpi"] .brand-mark circle[fill]{fill:#060A13}
+  html[data-theme="galpi"] .icon-btn{border-radius:50%;width:40px;height:40px;background:var(--surface);border-color:var(--line)}
+  html[data-theme="galpi"] .icon-btn.dot::after{background:var(--feu);border-color:var(--bg)}
+  html[data-theme="galpi"] #homeBody h1{font-size:26px!important;font-weight:800!important}
+  html[data-theme="galpi"] .eyebrow{color:var(--ink-3)}
+
+  /* cartes et lignes en verre */
+  html[data-theme="galpi"] .card,html[data-theme="galpi"] .stat,html[data-theme="galpi"] .row,
+  html[data-theme="galpi"] .reg-ligne,html[data-theme="galpi"] .relation,html[data-theme="galpi"] .lp-row,
+  html[data-theme="galpi"] .graphbox,html[data-theme="galpi"] .moisbox,html[data-theme="galpi"] .cal{
+    background:var(--surface);border-color:var(--line);box-shadow:none}
+  html[data-theme="galpi"] .card{border-radius:22px}
+  html[data-theme="galpi"] .row{border-radius:20px;padding:12px 14px}
+  html[data-theme="galpi"] .row:hover,html[data-theme="galpi"] .reg-ligne:hover{background:rgba(255,255,255,.085);transform:none;box-shadow:none}
+  html[data-theme="galpi"] .row::before{top:14px;bottom:14px}
+  html[data-theme="galpi"] .reg-ligne{border-radius:18px;padding:14px 15px}
+  html[data-theme="galpi"] .reg-ligne .ic{border-radius:50%;background:rgba(var(--feu-rgb),.12)}
+  html[data-theme="galpi"] .reg-ligne .ic svg{stroke:#FFB08F}
+  html[data-theme="galpi"] .reg-ligne .fl{color:var(--ink-3);font-size:22px}
+  html[data-theme="galpi"] .stat .num{font-family:Unbounded,Inter,sans-serif;font-weight:900;letter-spacing:-.02em}
+  html[data-theme="galpi"] .stat .num.euro{font-size:23px}
+  html[data-theme="galpi"] .stat .lab{color:var(--ink-3)}
+  /* le cadran du mois, "chaud" comme dans Galpi */
+  html[data-theme="galpi"] .stat.cadran-resa{background:linear-gradient(135deg,rgba(var(--feu-rgb),.24),rgba(var(--feu-rgb),.06));border-color:rgba(var(--feu-rgb),.45)}
+  html[data-theme="galpi"] .stat.cadran-resa .num{font-size:32px}
+  html[data-theme="galpi"] .stat.cadran-resa .fl{color:#FFB08F}
+
+  /* les ronds d'initiales : un degrade, aux couleurs de la marque */
+  html[data-theme="galpi"] .avatar{border-radius:50%;font-family:Unbounded,Inter,sans-serif;font-weight:800;font-size:14px;letter-spacing:0;
+    background:linear-gradient(135deg,#7D8AA0,#56627A)}
+  html[data-theme="galpi"] .avatar[data-b="mybabyshoot"]{background:linear-gradient(135deg,#F2A7C0,#C9708F)}
+  html[data-theme="galpi"] .avatar[data-b="maison-lumiere"]{background:linear-gradient(135deg,#E0BC7E,#A87F45)}
+  html[data-theme="galpi"] .avatar[data-b="matt-la-photo"]{background:var(--feu-grad)}
+  html[data-theme="galpi"] .sheet-head .avatar{font-size:19px}
+  html[data-theme="galpi"] .sheet-head h2{font-size:22px}
+
+  /* titres de section */
+  /* Unbounded est large : les titres de section restent a 16 px, meme
+     ceux qui ont leur taille ecrite dans la page (fiche client). */
+  html[data-theme="galpi"] .section-title h2{font-size:16px!important}
+  /* les listes de choix (menu "+", etc.) : des cartes arrondies, pas des pastilles */
+  html[data-theme="galpi"] .btn.wide[style*="flex-start"]{border-radius:18px}
+  html[data-theme="galpi"] .grouplab,html[data-theme="galpi"] .reg-fam,html[data-theme="galpi"] .add-fam{letter-spacing:.12em;color:var(--ink-3)}
+  html[data-theme="galpi"] .empty .t{font-family:Unbounded,Inter,sans-serif;font-weight:800;font-size:16px;color:var(--ink)}
+
+  /* boutons : la pastille "feu" pour l'action, le verre pour le reste */
+  html[data-theme="galpi"] .btn{border-radius:999px;border:0;background:var(--feu-grad);color:#fff;font-weight:700;
+    box-shadow:0 12px 30px -16px rgba(var(--feu-rgb),.9)}
+  html[data-theme="galpi"] .btn:hover{background:var(--feu-grad);filter:brightness(1.07)}
+  html[data-theme="galpi"] .btn.ghost{background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--ink);box-shadow:none}
+  html[data-theme="galpi"] .btn.ghost:hover{background:rgba(255,255,255,.13);filter:none}
+  html[data-theme="galpi"] .btn.danger{background:transparent;border:1px solid rgba(255,90,90,.35);color:var(--danger);box-shadow:none}
+  html[data-theme="galpi"] .btn.danger:hover{background:var(--danger-soft);filter:none}
+  html[data-theme="galpi"] .btn.sm{border-radius:999px}
+  html[data-theme="galpi"] .fab{border-radius:50%;background:var(--feu-grad);color:#fff;box-shadow:0 14px 34px -10px rgba(var(--feu-rgb),.85)}
+  html[data-theme="galpi"] .fab-chat{border-radius:50%;background:rgba(14,20,34,.85);border-color:var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+  /* pastilles, filtres, segments : la selection prend la teinte feu */
+  html[data-theme="galpi"] .pill,html[data-theme="galpi"] .bchip,html[data-theme="galpi"] .seg button,
+  html[data-theme="galpi"] .subtabs button,html[data-theme="galpi"] .tri-b,html[data-theme="galpi"] .tri-sens,
+  html[data-theme="galpi"] .cal-nav,html[data-theme="galpi"] .cal-auj,html[data-theme="galpi"] .theme-btn{
+    background:var(--surface);border-color:var(--line);color:var(--ink-2)}
+  html[data-theme="galpi"] .subtabs button,html[data-theme="galpi"] .seg button{border-radius:999px}
+  html[data-theme="galpi"] .cal-nav{border-radius:50%}
+  html[data-theme="galpi"] .cal-auj{border-radius:999px}
+  html[data-theme="galpi"] .pill.on,html[data-theme="galpi"] .bchip.on,html[data-theme="galpi"] .seg button.on,
+  html[data-theme="galpi"] .subtabs button.on,html[data-theme="galpi"] .tri-b.on,html[data-theme="galpi"] .theme-btn.on{
+    background:rgba(var(--feu-rgb),.15);border-color:rgba(var(--feu-rgb),.55);color:#FFB08F}
+  html[data-theme="galpi"] .seg.brands button[data-b].on{color:#fff}
+
+  /* champs */
+  html[data-theme="galpi"] .field input,html[data-theme="galpi"] .field select,html[data-theme="galpi"] .field textarea,
+  html[data-theme="galpi"] .search input,html[data-theme="galpi"] .lock-card input,html[data-theme="galpi"] .crm-chat-bar textarea{
+    background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:14px;color:var(--ink)}
+  html[data-theme="galpi"] .field input:focus,html[data-theme="galpi"] .field select:focus,html[data-theme="galpi"] .field textarea:focus,
+  html[data-theme="galpi"] .search input:focus,html[data-theme="galpi"] .lock-card input:focus{border-color:var(--feu);box-shadow:0 0 0 3px rgba(var(--feu-rgb),.18)}
+  html[data-theme="galpi"] .field label{color:#DCE4EE}
+  html[data-theme="galpi"] input::placeholder,html[data-theme="galpi"] textarea::placeholder{color:#7A879A}
+
+  /* etiquettes de statut, lisibles sur le fond nuit */
+  html[data-theme="galpi"] .badge{font-weight:700}
+  html[data-theme="galpi"] .badge.neutral{background:rgba(255,255,255,.1);color:var(--ink-2)}
+  html[data-theme="galpi"] .badge.info{background:rgba(120,160,255,.15);color:#AFC6FF}
+  html[data-theme="galpi"] .badge.baby{background:var(--baby-soft);color:#F5B3C8}
+  html[data-theme="galpi"] .badge.lumiere{background:var(--lumiere-soft);color:#E9C98F}
+  html[data-theme="galpi"] .badge.matt{background:var(--matt-soft);color:#FFB08F}
+
+  /* fenetres, bulle de message */
+  html[data-theme="galpi"] .modal-bg{background:rgba(2,4,9,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  html[data-theme="galpi"] .modal{background:#0C1322;border:1px solid var(--line);border-bottom:0;border-radius:26px 26px 0 0}
+  html[data-theme="galpi"] .modal h2{font-size:19px}
+  html[data-theme="galpi"] .toast{background:#fff;color:#0B1322;border-radius:999px;font-weight:600}
+
+  /* agenda */
+  html[data-theme="galpi"] .cal-js{border-bottom-color:var(--line)}
+  html[data-theme="galpi"] .cal-j{border-color:var(--line)}
+  html[data-theme="galpi"] .cal-j.hors{background:rgba(0,0,0,.18)}
+  html[data-theme="galpi"] .cal-j.auj .n{background:var(--feu-grad);color:#fff;box-shadow:0 0 12px rgba(var(--feu-rgb),.55)}
+  html[data-theme="galpi"] .cal-j.choisi{box-shadow:inset 0 0 0 2px var(--feu)}
+  html[data-theme="galpi"] .cal-tete h2{font-size:19px}
+  html[data-theme="galpi"] .pay-bar > div{background:linear-gradient(90deg,#2BD47D,#5BE59B)}
+
+  /* barre du bas */
+  html[data-theme="galpi"] .tabbar{border-top-color:var(--line)}
+  html[data-theme="galpi"] .tab{color:var(--ink-3)}
+  html[data-theme="galpi"] .tab span{font-weight:700;font-size:10.5px}
+  html[data-theme="galpi"] .tab.on{color:#fff}
+  html[data-theme="galpi"] .tab.on::before{background:var(--feu-grad);width:22px;box-shadow:0 0 12px rgba(var(--feu-rgb),.7)}
+  html[data-theme="galpi"] .tab-dot{background:var(--feu);border-color:#080D18}
+
+  /* ecran de verrouillage */
+  html[data-theme="galpi"] .lock{background:var(--bg)}
+  html[data-theme="galpi"] .lock-logo{border-radius:50%;background:var(--feu-grad);box-shadow:0 0 30px rgba(var(--feu-rgb),.5)}
+  html[data-theme="galpi"] .lock-logo circle[fill]{fill:#060A13}
+
+  /* ---------- sur ordinateur : le menu a gauche, comme Galpi ---------- */
+  @media (min-width:960px){
+    html[data-theme="galpi"] body{padding-bottom:0;padding-left:252px}
+    html[data-theme="galpi"] .tabbar{top:0;right:auto;width:252px;height:auto;flex-direction:column;gap:2px;
+      padding:26px 16px 18px;border-top:0;border-right:1px solid var(--line);overflow-y:auto}
+    html[data-theme="galpi"] .tab-logo{display:block;font-family:Unbounded,Inter,sans-serif;font-weight:900;font-size:22px;
+      letter-spacing:.02em;color:#fff;padding:0 12px;margin:0 0 24px}
+    html[data-theme="galpi"] .tab-logo i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--feu);
+      box-shadow:0 0 12px var(--feu);margin-left:4px}
+    html[data-theme="galpi"] .tab{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;padding:11px 12px;
+      border-radius:12px;color:var(--ink-2)}
+    html[data-theme="galpi"] .tab svg{width:20px;height:20px}
+    html[data-theme="galpi"] .tab span{font-size:14.5px;font-weight:600}
+    html[data-theme="galpi"] .tab:hover{background:var(--surface)}
+    html[data-theme="galpi"] .tab.on{background:rgba(255,255,255,.1);color:#fff}
+    html[data-theme="galpi"] .tab.on::before{display:none}
+    html[data-theme="galpi"] .tab-dot{position:static;margin-left:auto}
+    html[data-theme="galpi"] .brand-mark{display:none}
+    html[data-theme="galpi"] .topbar-inner,html[data-theme="galpi"] .view{max-width:880px}
+    html[data-theme="galpi"] .topbar{padding-left:32px;padding-right:32px}
+    html[data-theme="galpi"] .topbar h1{font-size:18px}
+    html[data-theme="galpi"] .stat-grid{grid-template-columns:repeat(4,1fr);gap:12px}
+    html[data-theme="galpi"] .fab{bottom:28px;right:28px}
+    html[data-theme="galpi"] .fab-chat{bottom:calc(28px + 56px + 12px);right:32px}
+    html[data-theme="galpi"] .toast{bottom:30px;left:calc(50% + 126px)}
+    html[data-theme="galpi"] .crm-chat-bar{bottom:8px}
+    html[data-theme="galpi"] .modal-bg{padding-left:252px}
+  }
 </style>
 </head>
 <body>
@@ -849,6 +1032,7 @@
 
 <!-- ===================== TABBAR ===================== -->
 <nav class="tabbar" id="tabbar">
+  <div class="tab-logo">Studio<i></i></div>
   <button class="tab" data-view="home" onclick="goHome()">
     <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Accueil</span>
   </button>
@@ -963,10 +1147,22 @@ const TYPES = {
 
 /* ---------- storage ---------- */
 const KEY = "studio_matt_v1";
-const THEMES=[{id:'clair',nom:'Clair',sw:'#f3f3f1'},{id:'creme',nom:'Crème',sw:'#faf4ea'},{id:'rose',nom:'Rosé',sw:'#fdf3f5'},{id:'ocean',nom:'Océan',sw:'#dcecef'},{id:'sauge',nom:'Sauge',sw:'#dfe9da'},{id:'lavande',nom:'Lavande',sw:'#e7ddf5'},{id:'sombre',nom:'Sombre',sw:'#2a2b2f'}];
+const THEMES=[{id:'galpi',nom:'Galpi',sw:'linear-gradient(135deg,#FF5A2E,#FF8A3D 45%,#060A13 46%)'},{id:'clair',nom:'Clair',sw:'#f3f3f1'},{id:'creme',nom:'Crème',sw:'#faf4ea'},{id:'rose',nom:'Rosé',sw:'#fdf3f5'},{id:'ocean',nom:'Océan',sw:'#dcecef'},{id:'sauge',nom:'Sauge',sw:'#dfe9da'},{id:'lavande',nom:'Lavande',sw:'#e7ddf5'},{id:'sombre',nom:'Sombre',sw:'#2a2b2f'}];
 function renderThemeRow(){ const row=document.getElementById("themeRow"); if(!row) return; const cur=document.documentElement.getAttribute("data-theme")||"clair"; row.innerHTML=THEMES.map(t=>'<button type="button" class="theme-btn'+(t.id===cur?' on':'')+'" onclick="applyTheme(\''+t.id+'\')"><span class="theme-sw" style="background:'+t.sw+'"></span>'+t.nom+'</button>').join(""); }
-function applyTheme(id){ document.documentElement.setAttribute("data-theme",id); try{localStorage.setItem("studio_theme",id);}catch(e){} renderThemeRow(); }
-try{ document.documentElement.setAttribute("data-theme", localStorage.getItem("studio_theme")||"clair"); }catch(e){}
+/* La couleur de la barre du telephone (et de la fenetre de l'appli
+   installee) suit le theme : nuit pour Galpi et Sombre. */
+function couleurBarre(id){
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m) m.setAttribute("content",id==="galpi"?"#060A13":id==="sombre"?"#1e1f22":"#1a1a1c");
+}
+function applyTheme(id){ document.documentElement.setAttribute("data-theme",id); couleurBarre(id); try{localStorage.setItem("studio_theme",id);}catch(e){} renderThemeRow(); }
+try{
+  /* 10/11/2026 : Matt passe Studio aux couleurs de Galpi. Pose une seule
+     fois sur chaque appareil ; ensuite, son choix dans Reglages >
+     Apparence est garde (il peut revenir a l'ancien theme). */
+  if(!localStorage.getItem("studio_theme_galpi")){ localStorage.setItem("studio_theme","galpi"); localStorage.setItem("studio_theme_galpi","1"); }
+  const t=localStorage.getItem("studio_theme")||"galpi"; document.documentElement.setAttribute("data-theme",t); couleurBarre(t);
+}catch(e){}
 const ENDPOINT = "/.netlify/functions/store-crm";
 const CLOUD = (location.protocol==="http:"||location.protocol==="https:");
 let applying=false, pushTimer=null;
