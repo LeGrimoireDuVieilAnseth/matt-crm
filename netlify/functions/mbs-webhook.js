@@ -387,7 +387,11 @@ async function traiterResaMlp(session, md) {
     data.clients.push(client);
   } else {
     client.tel = client.tel || tel; client.email = client.email || email;
-    if (!["Seance faite", "Livre", "Archive"].includes(client.status)) client.status = "Confirme";
+    /* Une ancienne cliente archivee qui reserve de nouveau revient dans la liste. */
+    if (!["Seance faite", "Livre"].includes(client.status)) client.status = "Confirme";
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    client.majServeur = now;
   }
 
   const nomDe = (s) => (data.clients.find(c => c.id === s.clientId) || {}).name || "une autre cliente";
@@ -523,7 +527,7 @@ async function traiterAbandonMlp(session, md) {
     + ", " + (md.total || "?") + " €) mais paiement non finalisé.";
   const dup = data.clients.find(c => c.brand === BRAND_MLP &&
     ((email && c.email && c.email.toLowerCase() === email.toLowerCase()) || (tel && c.tel && c.tel.replace(/\s/g, "") === tel.replace(/\s/g, ""))));
-  if (dup) { dup.notes = (dup.notes ? dup.notes + "\n" : "") + ligne; dup.abandonSession = session.id; dup.fromSite = true; }
+  if (dup) { dup.notes = (dup.notes ? dup.notes + "\n" : "") + ligne; dup.abandonSession = session.id; dup.fromSite = true; dup.majServeur = now; }
   else data.clients.push({ id: uid(), brand: BRAND_MLP, name: qui, status: "Prospect", type: "Shooting", tel, email, insta: "",
     source: "Réservation abandonnée, site Matt la Photo", notes: ligne, fromSite: true, abandonSession: session.id, createdAt: now });
   data.t = now;
@@ -583,17 +587,23 @@ async function traiterBonCadeau(session, md) {
     + (md.pour ? " pour " + md.pour : "") + ". Valable jusqu'au " + frDateShort(coupon.expiresAt) + ".";
   if (!client) {
     client = {
-      id: uid(), brand: BRAND, name, status: "Prospect", type: "Bon cadeau",
+      id: uid(), brand: BRAND, name, status: "Client", type: "Bon cadeau",
       tel, email, insta: "", source: "Bon cadeau", notes: ligne,
       fromSite: true, createdAt: now
     };
     data.clients.push(client);
   } else {
-    // deja fiche : on garde son statut (il n'a pas reserve, seulement offert)
-    // mais on recupere les coordonnees qui manquaient encore
+    // deja fiche : on recupere les coordonnees qui manquaient encore.
+    /* 10/11/2026 (Matt) : quelqu'un qui achete un bon cadeau n'est plus un
+       prospect, c'est une cliente. Une fiche deja plus avancee (seance
+       reservee, faite, livree) garde son statut. */
     client.tel   = client.tel   || tel;
     client.email = client.email || email;
     client.notes = (client.notes ? client.notes + "\n" : "") + ligne;
+    if (!client.status || ["Prospect", "Devis envoye", "Archive"].includes(client.status)) client.status = "Client";
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    client.majServeur = now;
   }
 
   // Facture du bon (PDF) : meme numerotation continue que les autres factures.
@@ -697,6 +707,7 @@ async function traiterAbandon(session, md) {
     dup.notes = (dup.notes ? dup.notes + "\n" : "") + ligne;
     dup.abandonSession = session.id;
     dup.fromSite = true;
+    dup.majServeur = now;
   } else {
     data.clients.push({
       id: uid(), brand: BRAND, name: nomComplet, status: "Prospect",
@@ -876,8 +887,12 @@ export default async (request) => {
     client.tel = client.tel || tel;
     client.email = client.email || email;
     /* Elle vient de payer : ce n'est plus un prospect a relancer. On ne
-       redescend jamais une fiche deja plus avancee. */
-    if (!["Seance faite", "Livre", "Archive"].includes(client.status)) client.status = "Confirme";
+       redescend jamais une fiche deja plus avancee. Une ancienne cliente
+       archivee qui reserve de nouveau revient dans la liste (10/11/2026). */
+    if (!["Seance faite", "Livre"].includes(client.status)) client.status = "Confirme";
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    client.majServeur = now;
   }
 
   // Seance (apparait dans l'agenda du CRM).

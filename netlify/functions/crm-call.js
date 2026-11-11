@@ -71,6 +71,9 @@ export default async (request) => {
     client.eventDate = client.eventDate || mariage;
     client.fromSite  = true;
     if (!client.createdAt) client.createdAt = now;
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    client.majServeur = now;
   } else {
     client = {
       id: rid(now),

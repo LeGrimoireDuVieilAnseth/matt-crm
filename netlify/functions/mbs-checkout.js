@@ -53,7 +53,7 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
   );
   if (!client) {
     client = {
-      id: uid(), brand: BRAND, name, status: "Client", type: typeLbl,
+      id: uid(), brand: BRAND, name, status: "Confirme", type: typeLbl,
       tel, email, insta: "", source: "Bon cadeau",
       notes: "", fromSite: true, createdAt: now
     };
@@ -61,7 +61,14 @@ async function confirmerSansPaiement({ store, lockId, now, md }) {
   } else {
     client.tel = client.tel || tel;
     client.email = client.email || email;
-    client.status = "Client";
+    /* 10/11/2026 : une seance reservee avec un bon cadeau ou un code est une
+       reservation confirmee, comme une reservation payee. On ne redescend
+       pas une fiche plus avancee (seance faite, livree) ; une fiche archivee
+       (ancienne cliente) revient dans la liste. */
+    if (!["Seance faite", "Livre"].includes(client.status)) client.status = "Confirme";
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    client.majServeur = now;
   }
 
   /* Un code de RESERVATION n'est pas un bon cadeau : la seance a deja ete

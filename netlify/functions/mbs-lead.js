@@ -51,6 +51,9 @@ export default async (request) => {
     dup.email = dup.email || email;
     if (!dup.createdAt) dup.createdAt = now;
     dup.fromSite = true;
+    /* majServeur : le site a change cette fiche. Studio, ouvert ailleurs, sait
+       alors qu'il doit reprendre ce changement au lieu de l'ecraser. */
+    dup.majServeur = now;
   } else {
     data.clients.push({
       id: now.toString(36) + Math.random().toString(36).slice(2, 7),

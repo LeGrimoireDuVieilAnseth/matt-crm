@@ -249,6 +249,8 @@
   .badge.warn{background:var(--warn-soft);color:var(--warn);}
   .badge.danger{background:var(--danger-soft);color:var(--danger);}
   .badge.info{background:#eaf0f6;color:#3a5a80;}
+  .badge.prospect{background:#fdeee3;color:#c2410c;}
+  html[data-theme="sombre"] .badge.prospect{background:rgba(255,138,61,.16);color:#FFB08F;}
   .badge.baby{background:var(--baby-soft);color:#b04d6e;}
   .badge.lumiere{background:var(--lumiere-soft);color:#8a6a30;}
   .badge.matt{background:var(--matt-soft);color:#b85208;}
@@ -715,7 +717,7 @@
     --ok:#5BE59B;--ok-soft:rgba(43,212,125,.13);
     --warn:#FFC874;--warn-soft:rgba(255,181,71,.13);
     --baby-soft:rgba(215,138,162,.17);--lumiere-soft:rgba(176,141,87,.2);--matt-soft:rgba(255,117,24,.16);
-    --b-info:#AFC6FF;--b-baby:#F5B3C8;--b-lum:#E9C98F;--b-matt:#FFB08F;
+    --b-info:#AFC6FF;--b-baby:#F5B3C8;--b-lum:#E9C98F;--b-matt:#FFB08F;--b-prospect:#FFB27A;
     --topbar-bg:var(--g-topbar,rgba(6,10,19,.72));--tabbar-bg:var(--g-tabbar,rgba(8,13,24,.9));
     --modal:var(--g-modal,#0C1322);--voile:rgba(2,4,9,.6);--hors:rgba(0,0,0,.18);--fab-chat:color-mix(in srgb,var(--modal) 88%,transparent);
     --toast-bg:#FFFFFF;--toast-ink:#0B1322;--lueur:.17;
@@ -734,7 +736,7 @@
     --danger:#B42318;--danger-soft:rgba(180,35,24,.09);
     --ok:#13804A;--ok-soft:rgba(19,128,74,.1);
     --warn:#9A6110;--warn-soft:rgba(154,97,16,.1);
-    --b-info:#2E55B8;--b-baby:#A4456A;--b-lum:#86602A;--b-matt:#C2410C;
+    --b-info:#2E55B8;--b-baby:#A4456A;--b-lum:#86602A;--b-matt:#C2410C;--b-prospect:#C2410C;
     --voile:rgba(20,24,35,.35);--hors:rgba(20,24,35,.035);--fab-chat:rgba(255,255,255,.92);
     --toast-bg:#141823;--toast-ink:#FFFFFF;--lueur:.13;
     --shadow-lg:0 18px 40px -22px rgba(20,24,35,.35);
@@ -840,6 +842,7 @@
   html[data-theme="galpi"] .badge{font-weight:700}
   html[data-theme="galpi"] .badge.neutral{background:var(--surface-3);color:var(--ink-2)}
   html[data-theme="galpi"] .badge.info{background:rgba(120,160,255,.15);color:var(--b-info)}
+  html[data-theme="galpi"] .badge.prospect{background:rgba(255,138,61,.16);color:var(--b-prospect)}
   html[data-theme="galpi"] .badge.baby{background:var(--baby-soft);color:var(--b-baby)}
   html[data-theme="galpi"] .badge.lumiere{background:var(--lumiere-soft);color:var(--b-lum)}
   html[data-theme="galpi"] .badge.matt{background:var(--matt-soft);color:var(--b-matt)}
@@ -1177,9 +1180,14 @@ const BRANDS = {
    perso et collabs marques). */
 const BRAND_ORDER = ["mybabyshoot","maison-lumiere","matt-la-photo"];
 
-const CLIENT_STATUS = ["Prospect","Devis envoye","Confirme","Seance faite","Livre","Archive"];
+/* "Client" (10/11/2026) : le statut existait deja (seance creee pour une
+   nouvelle cliente, bon cadeau achete) mais manquait a la liste : il
+   s'affichait en gris, et modifier la fiche la repassait en Prospect sans
+   prevenir (le choix du statut tombait sur le premier de la liste).
+   Couleurs voulues par Matt : Prospect orange, Client vert, Confirme bleu. */
+const CLIENT_STATUS = ["Prospect","Devis envoye","Client","Confirme","Seance faite","Livre","Archive"];
 const STATUS_STYLE = {
-  "Prospect":"info","Devis envoye":"warn","Confirme":"ok","Seance faite":"neutral","Livre":"ok","Archive":"neutral"
+  "Prospect":"prospect","Devis envoye":"warn","Client":"ok","Confirme":"info","Seance faite":"neutral","Livre":"ok","Archive":"neutral"
 };
 const SEANCE_STATUS = ["A venir","Confirmee","Faite","Annulee"];
 /* Creneaux proposes a la reservation sur mybabyshoot.fr. */
@@ -3332,7 +3340,7 @@ function buildHome(){
 
   // prochains mariages (Maison Lumiere) : seulement clients confirmes, pas les prospects
   if(passFilter("maison-lumiere")){
-    const signes=["Confirme","Seance faite","Livre"];
+    const signes=["Client","Confirme","Seance faite","Livre"];
     const mariages=DB.clients
       .filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=todayStr()&&signes.includes(c.status))
       .sort((a,b)=>a.eventDate.localeCompare(b.eventDate)).slice(0,4);
@@ -3393,7 +3401,7 @@ function buildFil(){
   /* Les mariages sont determines d'abord : ils servent ensuite a ecarter la
      seance qui decrit le meme evenement. Un mariage et sa seance tombent le
      meme jour, le fil les affichait tous les deux. */
-  const signes=["Confirme","Seance faite","Livre"];
+  const signes=["Client","Confirme","Seance faite","Livre"];
   const mariages = passFilter("maison-lumiere")
     ? DB.clients.filter(c=>c.brand==="maison-lumiere"&&c.eventDate&&c.eventDate>=auj&&signes.includes(c.status))
     : [];
@@ -8961,15 +8969,70 @@ function mergeCloud(cloud){
   }
   const del=new Set(DB.deleted||[]);
   ["clients","seances","paiements","taches","idees"].forEach(k=>{ DB[k]=(DB[k]||[]).filter(x=>x&&!del.has(x.id)); });
-  let added=0;
+  let added=0, majs=0, nouveaux=0;
   ["clients","seances","paiements","taches","idees"].forEach(k=>{
     if(!Array.isArray(cloud[k])) return;
-    const localIds=new Set((DB[k]||[]).map(x=>x&&x.id));
+    const locaux=new Map((DB[k]||[]).map(x=>[x&&x.id,x]));
     cloud[k].forEach(item=>{
-      if(item&&item.id&&!localIds.has(item.id)&&!del.has(item.id)){ DB[k].push(item); added++; }
+      if(!item||!item.id||del.has(item.id)) return;
+      const loc=locaux.get(item.id);
+      if(!loc){ DB[k].push(item); added++; if(k==="clients") nouveaux++; return; }
+      /* 10/11/2026 : une fiche que le SITE a changee (paiement, bon cadeau,
+         nouvelle demande) depuis que cet appareil l'a vue. Avant, seules les
+         nouvelles fiches etaient reprises : le changement etait ignore puis
+         ecrase au prochain envoi, et une cliente qui venait de payer
+         retombait en "Prospect". */
+      if(k==="clients" && num(item.majServeur)>num(loc.majServeur)){ reprendreFicheServeur(loc,item); majs++; }
     });
   });
+  mergeCloud.majs=majs; mergeCloud.nouveaux=nouveaux;
   return added;
+}
+/* Rang d'un statut, pour ne prendre celui du serveur que s'il fait AVANCER
+   la fiche : le serveur ne fait jamais reculer un statut (il passe une
+   fiche payee en Client ou Confirme, et ramene une ancienne cliente
+   archivee qui reserve). Ce que Matt vient de changer ici n'est donc pas
+   ecrase par une copie plus ancienne. */
+const RANG_STATUT={"Archive":-1,"Prospect":0,"Devis envoye":1,"Client":2,"Confirme":3,"Seance faite":4,"Livre":5};
+function rangStatut(s){ return (s in RANG_STATUT)?RANG_STATUT[s]:0; }
+function reprendreFicheServeur(loc,srv){
+  if(srv.status && rangStatut(srv.status)>rangStatut(loc.status)) loc.status=srv.status;
+  // les lignes que le site a ajoutees aux notes, sans perdre ce que Matt a ecrit ici
+  if(srv.notes && srv.notes!==loc.notes){
+    const deja=new Set(String(loc.notes||"").split("\n").map(l=>l.trim()));
+    const neuves=String(srv.notes).split("\n").filter(l=>l.trim()&&!deja.has(l.trim()));
+    if(neuves.length) loc.notes=(loc.notes?loc.notes+"\n":"")+neuves.join("\n");
+  }
+  // ce qui manquait encore ici (telephone, email, date du mariage...)
+  Object.keys(srv).forEach(f=>{
+    if(f==="status"||f==="notes") return;
+    const v=loc[f];
+    if((v==null||v==="") && srv[f]!=null && srv[f]!=="") loc[f]=srv[f];
+  });
+  if(num(srv.devisCount)>num(loc.devisCount)) loc.devisCount=srv.devisCount;
+  loc.majServeur=srv.majServeur;
+}
+
+/* 10/11/2026 (Matt) : "a partir du moment ou ils ont achete et que c'est
+   reserve, ce ne sont plus des prospects". Les fiches restees en Prospect
+   (ou Devis envoye) alors qu'un paiement est bien arrive sont corrigees une
+   fois sur chaque appareil : Confirme si une seance est prevue, Client sinon
+   (un bon cadeau achete). Elles venaient du defaut de synchro corrige
+   ci-dessus et des bons cadeaux, poses autrefois en Prospect. */
+function corrigerStatutsPayes(){
+  const DRAPEAU="studio_statuts_payes_v1";
+  try{ if(localStorage.getItem(DRAPEAU)) return 0; }catch(e){ return 0; }
+  let n=0;
+  DB.clients.forEach(c=>{
+    if(!c||!["Prospect","Devis envoye"].includes(c.status)) return;
+    const paye=DB.paiements.some(p=>p&&p.clientId===c.id&&(p.statut==="Solde"||p.statut==="Acompte recu")&&encaisseOf(p)>0);
+    if(!paye) return;
+    const seance=DB.seances.some(s=>s&&s.clientId===c.id&&s.status!=="Annulee"&&s.type!=="Indispo");
+    c.status=seance?"Confirme":"Client"; n++;
+  });
+  try{ localStorage.setItem(DRAPEAU,"1"); }catch(e){}
+  if(n){ saveDB(); repaintActive(); toast(n+(n>1?" fiches qui avaient payé sont passées":" fiche qui avait payé est passée")+" en Client ou Confirmé"); }
+  return n;
 }
 
 /* --- cloud (fonction Netlify + Blobs, comme le Grimoire) --- */
@@ -9025,6 +9088,7 @@ async function cloudPull(){
       applyData(d);
       repaintActive();
       setSyncMsg("À jour.");
+      try{ corrigerStatutsPayes(); }catch(e){}
     }
   }catch(e){}
 }
@@ -9038,7 +9102,7 @@ async function pullMerge(){
     if(!res.ok) return 0;
     const cloud=await res.json();
     const added=mergeCloud(cloud||{});
-    if(added){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
+    if(added||mergeCloud.majs){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
     return added;
   }catch(e){ return 0; }
 }
@@ -9053,7 +9117,7 @@ function cloudPush(){
       if(res.ok){
         const cloud=await res.json();
         const added=mergeCloud(cloud||{});
-        if(added){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
+        if(added||mergeCloud.majs){ try{ localStorage.setItem(KEY,JSON.stringify(DB)); }catch(e){} repaintActive(); }
       }
     }catch(e){}
     fetch(ENDPOINT,{method:"PUT",headers:apiHeaders(true),body:JSON.stringify(currentData())}).catch(()=>{});
@@ -9346,8 +9410,15 @@ document.addEventListener("visibilitychange",()=>{ if(!document.hidden && authed
 window.addEventListener("focus",()=>{ if(authed) pullMerge(); });
 setInterval(async ()=>{
   if(!CLOUD||applying||document.hidden||!authed) return;
-  const added=await pullMerge();
-  if(added) toast(added+" nouveau"+(added>1?"x":"")+" prospect"+(added>1?"s":""));
+  mergeCloud.nouveaux=0; mergeCloud.majs=0;
+  await pullMerge();
+  /* Ce qui arrive du site : des fiches nouvelles (demande, reservation, bon
+     cadeau) ou une fiche existante mise a jour (elle vient de payer). Avant,
+     tout etait annonce comme "prospect", meme une seance ou un paiement. */
+  const nv=mergeCloud.nouveaux||0, mj=mergeCloud.majs||0;
+  mergeCloud.nouveaux=0; mergeCloud.majs=0;
+  if(nv) toast(nv+(nv>1?" nouvelles fiches":" nouvelle fiche")+" du site");
+  else if(mj) toast(mj>1?mj+" fiches mises à jour par le site":"Une fiche mise à jour par le site");
 },30000);
 function syncNow(){ if(!CLOUD){ setSyncMsg("Disponible seulement sur ton site en ligne."); return; } setSyncMsg("Récupération..."); cloudPull(); }
 
@@ -9563,6 +9634,7 @@ if(CLOUD){
 } else {
   // fichier local, pas de cloud : pas de verrou
   authed=true;
+  try{ corrigerStatutsPayes(); }catch(e){}
 }
 
 /* Mise a jour : peu apres l'ouverture, a chaque retour sur l'appli, et quand
