@@ -7827,6 +7827,35 @@ function openAddMenu(){
    du serveur.
    ============================================================ */
 const SITE_MBS="https://www.mybabyshoot.fr";
+/* NOEL 2026 (12/11/2026, demande de Matt) : quand Noel est allume, le site
+   et le serveur comptent les prix de Noel ; la fenetre doit annoncer les
+   memes, acompte compris. Memes regles que js/app.js (REMISE_NOEL) et
+   mbs-lib.mjs : 100 euros de moins par seance, le pack aux prix de Noel A
+   LA PLACE de sa remise, avec 5 photos imprimees offertes. L'offre suit
+   l'interrupteur de Noel (mbs-theme) et s'arrete d'elle-meme le 27
+   decembre a 0 h, heure de Paris, comme sur le site. */
+const REMISE_NOEL_CRM={ montant:100, fin:Date.UTC(2026,11,26,23,0,0) };
+let lrNoel=false;
+const noelLienResa=()=>lrNoel && Date.now()<REMISE_NOEL_CRM.fin;
+async function chargerNoelLienResa(){
+  if(!CLOUD || Date.now()>=REMISE_NOEL_CRM.fin) return;
+  try{
+    const r=await fetch(THEME_API,{cache:"no-store"});
+    const j=await r.json();
+    const avant=lrNoel;
+    lrNoel=!!(j && j.theme==="noel");
+    // le message n'est reecrit que si Matt ne l'a pas encore retouche
+    if(lrNoel!==avant && document.getElementById("lrSeance")) majLienResa();
+  }catch(e){}
+}
+/* Le prix que la cliente paiera par ce lien : la grille, ou le prix de Noel. */
+function prixLienResa(){
+  const c=choixLienResa(), grille=prixGrilleLienResa();
+  if(!noelLienResa()) return grille;
+  return c.seance==="duo"
+    ? formuleParCle(c.gammes.grossesse).prix+formuleParCle(c.gammes.naissance).prix-2*REMISE_NOEL_CRM.montant
+    : grille-REMISE_NOEL_CRM.montant;
+}
 function openLienResa(){
   const opt=(id,choisi)=>["essentielle","confort","prestige"].map(k=>{
     const f=formuleParCle(k);
@@ -7871,6 +7900,7 @@ function openLienResa(){
       <a class="btn ghost sm" style="flex:1" id="lrVoir" href="#" target="_blank" rel="noopener">Voir la page</a></div>`);
   lrSurMesure=null;
   majLienResa(true);
+  chargerNoelLienResa();
 }
 /* ---------- le prix sur mesure ---------- */
 let lrSurMesure=null;   // { lien, sig } : le dernier lien cree, et ce qu'il porte
@@ -7893,7 +7923,7 @@ function basculerPrixResa(){
   const on=document.getElementById("lrPrix").checked;
   document.getElementById("lrPrixBloc").style.display=on?"":"none";
   if(on && !document.getElementById("lrTotal").value){
-    const p=prixGrilleLienResa();
+    const p=prixLienResa();   // pendant Noel, on part du prix de Noel
     document.getElementById("lrTotal").value=p;
     document.getElementById("lrAcompte").value=p>=590?190:90;
   }
@@ -7944,6 +7974,17 @@ function majLienResa(premier){
     quoi="votre séance "+mot+" (formule "+formuleParCle(f).nom+")";
     titre="Séance "+mot+", formule "+formuleParCle(f).nom;
   }
+  /* Pendant Noel, les prix de Noel, et l'acompte calcule dessus, comme le
+     serveur. Les listes de formules annoncent aussi le prix de Noel. */
+  const noel=noelLienResa(), grille=prix;
+  if(noel) prix=prixLienResa();
+  ["lrFormule","lrDuoG","lrDuoN"].forEach(id=>{
+    const s=document.getElementById(id);
+    if(s) Array.from(s.options).forEach(o=>{
+      const f=formuleParCle(o.value);
+      o.textContent=f.nom+" ("+(noel?(f.prix-REMISE_NOEL_CRM.montant)+" €, prix de Noël":f.prix+" €")+")";
+    });
+  });
   /* Meme regle que le site et le serveur (acompteFor) : 190 euros des 590. */
   let acompte=prix>=590?190:90;
   /* Le prix sur mesure : le lien vient du serveur (creerLienSurMesure),
@@ -7957,11 +7998,23 @@ function majLienResa(premier){
     const sig=signatureLienResa();
     pret=!!(lrSurMesure && lrSurMesure.sig===sig);
     lien=pret?lrSurMesure.lien:"[le lien apparaît dès que tu as créé le lien à ce prix]";
-    sousTitre=(total<prix?"<s>"+prix+" €</s> ":"")+"<b>"+total+" €</b>, acompte en ligne de "+ac+" €, solde de "+Math.max(0,total-ac)+" € le jour de la séance.";
+    /* Le prix barre est la grille : c'est ce que sa page a elle affiche
+       (reserver.html, montants gardes dans le code). */
+    sousTitre=(total<grille?"<s>"+grille+" €</s> ":"")+"<b>"+total+" €</b>, acompte en ligne de "+ac+" €, solde de "+Math.max(0,total-ac)+" € le jour de la séance.";
+    /* Un prix convenu ne prend pas les 100 euros de Noel en plus : au-dessus
+       du prix de Noel, le lien simple lui couterait moins cher. */
+    if(noel && total>prix) sousTitre+=`<div style="font-size:12px;color:var(--danger);margin-top:6px">Pendant Noël, le lien simple est déjà à ${prix} € : un prix convenu plus haut lui coûterait plus cher.</div>`;
     quoi+=", au tarif convenu de "+total+" €";
     acompte=ac;
     const cr=document.getElementById("lrCreer");
     if(cr){ cr.textContent=pret?"Lien créé ✓":"Créer le lien à ce prix"; cr.disabled=pret; }
+  } else if(noel){
+    /* Le prix barre, comme sur le site : pour le pack, les deux seances
+       prises separement (le site ecrit "au lieu de"). */
+    const barre=duo ? prix+2*REMISE_NOEL_CRM.montant : grille;
+    sousTitre="<s>"+barre+" €</s> <b>"+prix+" €</b> (prix de Noël), acompte en ligne de "+acompte+" €, solde le jour de la séance."
+      +(duo?"<br>+ 5 photos imprimées offertes.":"");
+    quoi+=", au prix de Noël de "+prix+" €"+(duo?" avec 5 photos imprimées offertes":"");
   } else sousTitre=prix+" €, acompte en ligne de "+acompte+" €, solde le jour de la séance.";
   document.getElementById("lrResume").innerHTML=`<b>${esc(titre)}</b><br>${sousTitre}
     <div style="font-size:12px;color:var(--ink-3);margin-top:6px;word-break:break-all">${esc(lien)}</div>`;
